@@ -235,16 +235,46 @@ export async function submitFinalQuiz(enrollmentId: string, answers: Record<stri
   return { ...(await reconcile(enrollmentId)), quiz: { scorePct, correct, total, passed, threshold } };
 }
 
-/** Human evaluator records the Bloc 4 rubric score (gates the certificate). */
-export async function recordRubricEvaluation(enrollmentId: string, scorePct: number, notes?: string) {
+export type RubricEvaluationInput = {
+  /** Per-criterion points (preferred): the platform computes the weighted total. */
+  criteria?: { label?: string; index?: number; points: number }[];
+  /** Legacy single total (still accepted). */
+  scorePct?: number;
+  notes?: string;
+};
+
+/**
+ * Human evaluator records the Bloc 4 rubric score (gates the certificate).
+ * The evaluator scores EACH criterion (Pilier 6.3): each is clamped to its
+ * weight and the weighted total (= sum, rubric totals 100) is computed by the
+ * platform. A single `scorePct` is still accepted for compatibility.
+ */
+export async function recordRubricEvaluation(enrollmentId: string, input: RubricEvaluationInput) {
   const ctx = await loadContext(enrollmentId);
   const block = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
   if (block?.type !== "CERTIFICATION") throw new EngineError(409, "no_block", "Bloc 4 absent");
   assertUnlocked(ctx, block.index);
-  const threshold = block.payload.rubric.threshold;
-  await upsertCompletion(enrollmentId, block.index, "RUBRIC_EVALUATION", "rubric", scorePct, { notes: notes ?? null });
+  const rubric = block.payload.rubric;
+  const threshold = rubric.threshold;
+
+  let scorePct: number;
+  let breakdown: { label: string; weightPoints: number; points: number }[] | null = null;
+  if (input.criteria?.length) {
+    breakdown = rubric.criteria.map((rc, i) => {
+      const given = input.criteria!.find((c) => c.index === i || c.label?.trim().toLowerCase() === rc.label.trim().toLowerCase());
+      const points = Math.max(0, Math.min(rc.weightPoints, Math.round(given?.points ?? 0)));
+      return { label: rc.label, weightPoints: rc.weightPoints, points };
+    });
+    scorePct = breakdown.reduce((a, b) => a + b.points, 0); // weighted total (rubric = 100)
+  } else if (input.scorePct != null) {
+    scorePct = Math.max(0, Math.min(100, Math.round(input.scorePct)));
+  } else {
+    throw new EngineError(422, "missing_score", "Fournir criteria[] (par critère) ou scorePct");
+  }
+
+  await upsertCompletion(enrollmentId, block.index, "RUBRIC_EVALUATION", "rubric", scorePct, { notes: input.notes ?? null, criteria: breakdown });
   await emitXapi(ctx, scorePct >= threshold ? "passed" : "failed", [`blocks/${block.index}`, "items/rubric"], "Évaluation grille", quizResult(scorePct, scorePct, 100, threshold));
-  return reconcile(enrollmentId);
+  return { ...(await reconcile(enrollmentId)), evaluation: { scorePct, threshold, passed: scorePct >= threshold, breakdown } };
 }
 
 // --- reconciliation: recompute progress + issue badges ----------------------

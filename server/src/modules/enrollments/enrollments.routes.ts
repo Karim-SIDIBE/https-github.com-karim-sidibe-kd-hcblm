@@ -129,13 +129,18 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     try { return { data: await submitFinalQuiz(id, a) }; } catch (err) { return handle(reply, err); }
   });
 
-  // Human rubric evaluation — evaluator/admin only (NOT the learner)
+  // Human rubric evaluation — evaluator/admin only (NOT the learner).
+  // Per-criterion scoring (preferred); a single scorePct is still accepted.
   app.post("/enrollments/:id/evaluation", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { scorePct, notes } = z.object({ scorePct: z.number().int().min(0).max(100), notes: z.string().optional() }).parse(req.body);
+    const body = z.object({
+      criteria: z.array(z.object({ label: z.string().optional(), index: z.number().int().min(0).optional(), points: z.number().int().min(0) })).optional(),
+      scorePct: z.number().int().min(0).max(100).optional(),
+      notes: z.string().optional(),
+    }).parse(req.body);
     try {
-      const data = await recordRubricEvaluation(id, scorePct, notes);
-      await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct } });
+      const data = await recordRubricEvaluation(id, body);
+      await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct } });
       return { data };
     } catch (err) { return handle(reply, err); }
   });
