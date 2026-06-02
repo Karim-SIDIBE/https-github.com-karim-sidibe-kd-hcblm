@@ -1,0 +1,413 @@
+// KD-HCBLM v2.0 — Prisma schema
+// ---------------------------------------------------------------------------
+// Two faces of the platform (see handoff README):
+//   A. AUTHORING  — a Course has many versioned CourseVersions. Each version
+//      stores the full authored content as a validated JSONB document whose
+//      shape is the Zod "content model" (src/domain/content-model.ts). This is
+//      the single contract shared by the authoring form, the publish-time
+//      validation engine, and the learner renderer.
+//   B. RUNTIME    — learners enrol in a published CourseVersion; their progress,
+//      badges and submissions are normalized relational rows (fleshed out in a
+//      later step; stubbed here so the model is coherent end-to-end).
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ===========================================================================
+// Enums
+// ===========================================================================
+
+/// Platform roles. Beyond the original handoff set, modern-LMS roles are added:
+/// SUPER_ADMIN (platform owner), REVIEWER (content approval gate) and INSTRUCTOR
+/// (delivery / cohort management).
+enum Role {
+  LEARNER
+  LEARNING_DESIGNER
+  REVIEWER
+  INSTRUCTOR
+  EVALUATOR
+  COURSE_ADMIN
+  SUPER_ADMIN
+  ENTERPRISE_CLIENT
+  EMPLOYER
+}
+
+/// Certification levels. Levels differ only by thresholds + content depth.
+enum CourseLevel {
+  L1
+  L2
+  L3
+}
+
+/// Lifecycle of a single authored version (draft → review → published).
+enum CourseStatus {
+  DRAFT
+  IN_REVIEW
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Enrolment lifecycle.
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  CERTIFIED
+  WITHDRAWN
+}
+
+/// Progressive block badges (one per block) + the final certificate.
+enum BadgeType {
+  ENTRY // Bloc 0
+  COMPREHENSION // Bloc 1
+  PRACTICE // Bloc 2
+  ANCHORING // Bloc 3
+  CERTIFICATE // Bloc 4
+}
+
+/// Discrete completable items inside a course (engine progress tracking).
+enum ItemType {
+  PROFILE // Bloc 0 — time-management profile chosen
+  TRIGGER_QUIZ // Bloc 0 — non-scored trigger quiz
+  PEER // Bloc 0 — progress peer designated
+  MICRO_SESSION // a video + exercise micro-session
+  DIAGNOSTIC_QUIZ // Bloc 1 — scored diagnostic
+  CASE_STUDY // Bloc 1 — Nadia
+  GUIDED_SCENARIOS // Bloc 2 — guided situations
+  INTER_BLOCK_QUIZ // Bloc 2 — non-scored consolidation quiz
+  FIELD_APPLICATION // Bloc 2 — field application (gates Bloc 3)
+  SELF_ASSESSMENT // Bloc 3 — 6-criteria self assessment
+  ACTION_PLAN // Bloc 3 — 30-day plan
+  FINAL_QUIZ // Bloc 3 — scored final quiz (gates Bloc 4)
+  PROJECT // Bloc 4 — certifying project submission
+  JOURNAL_ENTRY // Bloc 4 — one of the 6 micro-entries
+  RUBRIC_EVALUATION // Bloc 4 — human evaluator score
+}
+
+// ===========================================================================
+// Identity
+// ===========================================================================
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  role      Role     @default(LEARNER)
+  /// Argon2id hash for first-party password auth (null = SSO-only / no password).
+  passwordHash String?
+  /// Brute-force lockout (OWASP): failed-attempt counter + temporary lock.
+  failedLoginCount Int       @default(0)
+  lockedUntil      DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authoredCourses  Course[]        @relation("CourseAuthor")
+  reviewedVersions CourseVersion[] @relation("VersionReviewer")
+  enrollments      Enrollment[]
+  refreshTokens    RefreshToken[]
+
+  @@index([role])
+}
+
+/// Rotating refresh tokens with reuse detection (OAuth 2.0 Security BCP, RFC 9700).
+/// Only the SHA-256 of the opaque token is stored. A whole `familyId` is revoked
+/// when a previously-rotated (revoked) token is presented again.
+model RefreshToken {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  familyId     String // rotation family
+  tokenHash    String    @unique // sha256(opaque token)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  replacedById String? // next token in the rotation chain
+  createdAt    DateTime  @default(now())
+
+  @@index([userId])
+  @@index([familyId])
+}
+
+/// Append-only audit trail for security-sensitive events.
+model AuditLog {
+  id         String   @id @default(cuid())
+  actorId    String? // principal id (null for anonymous / system)
+  action     String // e.g. "auth.login.success", "course.publish"
+  targetType String?
+  targetId   String?
+  ip         String?
+  meta       Json?
+  at         DateTime @default(now())
+
+  @@index([action])
+  @@index([actorId])
+  @@index([at])
+}
+
+// ===========================================================================
+// A. Authoring — Course + versioned content document
+// ===========================================================================
+
+model Course {
+  id        String   @id @default(cuid())
+  /// Stable human-readable identifier, e.g. "gestion-du-temps-n1".
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  authorId String?
+  author   User?   @relation("CourseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+
+  versions    CourseVersion[]
+  enrollments Enrollment[]
+
+  @@index([authorId])
+}
+
+model CourseVersion {
+  id       String @id @default(cuid())
+  courseId String
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  /// Monotonic version number within a course (1, 2, 3 …).
+  version Int
+  status  CourseStatus @default(DRAFT)
+
+  // --- denormalized headline fields (mirrors of content.*, kept for querying) ---
+  title         String
+  level         CourseLevel
+  language      String      @default("fr")
+  domainCode    String // e.g. "D4"
+  domainLabel   String // e.g. "Productivité & organisation"
+  passThreshold Int // Bloc 3 final-quiz threshold: 70 | 75 | 80
+
+  /// The full authored content document — conforms to the Zod content model.
+  /// This is the payload the authoring tool produces and the learner UI renders.
+  content Json
+
+  // --- review workflow (draft → in_review → published) ---
+  submittedAt  DateTime?
+  reviewedAt   DateTime?
+  reviewedById String?
+  reviewedBy   User?     @relation("VersionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewNotes  String?
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  enrollments  Enrollment[]
+  searchChunks SearchChunk[]
+
+  @@unique([courseId, version])
+  @@index([status])
+}
+
+/// Embedded content chunks for semantic search (one set per course version).
+/// Vectors stored as JSON float arrays; cosine ranking is computed in-process
+/// (swap for pgvector at scale).
+model SearchChunk {
+  id              String        @id @default(cuid())
+  courseVersionId String
+  courseVersion   CourseVersion @relation(fields: [courseVersionId], references: [id], onDelete: Cascade)
+  blockIndex      Int?
+  path            String // locator, e.g. "blocks[1].diagnostic.q3"
+  text            String
+  embedding       Json // number[]
+  model           String
+  createdAt       DateTime      @default(now())
+
+  @@index([courseVersionId])
+}
+
+// ===========================================================================
+// B. Runtime — learner enrolment + badges (stubs; expanded in a later step)
+// ===========================================================================
+
+model Enrollment {
+  id              String           @id @default(cuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  courseVersionId String
+  courseVersion   CourseVersion    @relation(fields: [courseVersionId], references: [id])
+  status          EnrollmentStatus @default(ACTIVE)
+
+  /// The Moment d'Ancrage (PAM) text — captured once at Bloc 0, then injected
+  /// everywhere ({{moment_ancrage}}). Stored at enrolment scope for fast reuse.
+  momentAncrage String?
+
+  /// Progress peer (Pilier 6.3) — notified at each badge.
+  peerName  String?
+  peerEmail String?
+
+  /// Enterprise enrolment → J+14 inactivity signals go to the admin (Pilier 6.4).
+  isEnterprise Boolean @default(false)
+
+  // --- auto-resume (Pilier 6.2): exact position the learner last touched ---
+  lastBlockIndex Int?
+  lastItemKey    String?
+  lastSeenAt     DateTime?
+
+  startedAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  badges         Badge[]
+  completions    ItemCompletion[]
+  reEngagements  ReEngagementMessage[]
+  xapi           XapiStatement[]
+  notifications  Notification[]
+  aiAssessments  AiAssessment[]
+
+  @@unique([userId, courseId])
+  @@index([status])
+}
+
+/// One row per completed content item for an enrolment.
+model ItemCompletion {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  blockIndex   Int
+  itemType     ItemType
+  /// Stable key within the block: micro-session id ("1.1"), "diagnostic",
+  /// "final", "J+3", "project", "scenarios", … (singletons use a fixed key).
+  itemKey      String
+  /// Score for scored items (diagnostic, final quiz, rubric evaluation).
+  scorePct     Int?
+  /// Raw payload (answers, profile choice, submission text…).
+  data         Json?
+  completedAt  DateTime   @default(now())
+
+  @@unique([enrollmentId, blockIndex, itemKey])
+  @@index([enrollmentId])
+}
+
+model Badge {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  type         BadgeType
+  /// Personalized message anchored in the learner's Moment d'Ancrage.
+  message      String?
+  /// Whether the progress peer has been notified (Pilier 6.3).
+  peerNotified Boolean    @default(false)
+  issuedAt     DateTime   @default(now())
+
+  @@unique([enrollmentId, type])
+}
+
+/// Proactive re-engagement of inactive learners (Pilier 6.4).
+enum ReEngagementStage {
+  J3 // 3 days inactive
+  J7 // 7 days inactive — message anchored in the Moment d'Ancrage
+  J14 // 14 days inactive — admin signal for enterprise enrolments
+}
+
+enum NotifChannel {
+  LEARNER
+  ADMIN
+}
+
+model ReEngagementMessage {
+  id           String            @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment        @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  stage        ReEngagementStage
+  channel      NotifChannel      @default(LEARNER)
+  body         String
+  sentAt       DateTime          @default(now())
+
+  @@index([enrollmentId, stage])
+}
+
+/// xAPI statements emitted to the LRS (Pilier — analytics / interoperability).
+model XapiStatement {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  verb         String // verb IRI
+  objectId     String // activity IRI
+  statement    Json // the full xAPI statement
+  forwarded    Boolean    @default(false)
+  forwardedAt  DateTime?
+  forwardError String?
+  storedAt     DateTime   @default(now())
+
+  @@index([enrollmentId])
+  @@index([forwarded])
+}
+
+enum NotificationChannel {
+  CONSOLE
+  EMAIL
+  WEBHOOK
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum RecipientKind {
+  LEARNER
+  PEER
+  ADMIN
+}
+
+/// AI grading-assistant output (advisory; never auto-applied to certification).
+enum AiAssessmentKind {
+  FORMATIVE // learner-facing feedback on an open submission
+  RUBRIC_SUGGESTION // evaluator-facing per-criterion score suggestion (Bloc 4)
+}
+
+model AiAssessment {
+  id             String           @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment       @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  blockIndex     Int
+  itemKey        String
+  kind           AiAssessmentKind
+  feedback       String // overall text / summary
+  /// For RUBRIC_SUGGESTION: [{label, weightPoints, suggested, comment}].
+  criteria       Json?
+  /// For RUBRIC_SUGGESTION: provisional total /100 (advisory only).
+  suggestedScore Int?
+  aiGenerated    Boolean          @default(false)
+  provider       String?
+  createdAt      DateTime         @default(now())
+
+  @@index([enrollmentId])
+}
+
+/// Outbound notification (peer congratulations, re-engagement nudges, admin signals).
+/// Enqueued by the engine, delivered by the dispatcher job.
+model Notification {
+  id            String              @id @default(cuid())
+  enrollmentId  String?
+  enrollment    Enrollment?         @relation(fields: [enrollmentId], references: [id], onDelete: SetNull)
+  recipientKind RecipientKind
+  recipient     String // email or identifier
+  channel       NotificationChannel @default(CONSOLE)
+  subject       String?
+  body          String
+  /// True when the body was produced by the AI provider (vs. template fallback).
+  aiGenerated   Boolean             @default(false)
+  /// Name of the AI / delivery provider used.
+  provider      String?
+  status        NotificationStatus  @default(PENDING)
+  error         String?
+  attempts      Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  sentAt        DateTime?
+
+  @@index([status])
+  @@index([enrollmentId])
+}
