@@ -230,6 +230,14 @@ Courses carry an optional `organizationId` (null = shared catalogue). `GET /cour
 returns the shared catalogue + the caller's org courses; a private course is
 hidden (404) from non-members. SUPER_ADMIN is cross-tenant.
 
+**SCIM 2.0** (automatic user provisioning, per organization)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/organizations/:id/scim/token` | Provision the org's SCIM bearer token |
+| `*` | `/scim/v2/Users[/:id]` | RFC 7644 user provisioning (token-auth) |
+| GET | `/scim/v2/ServiceProviderConfig` | Discovery |
+
 **Authentication**
 
 | Method | Path | Purpose |
@@ -399,7 +407,12 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   ADMIN/MEMBER). Courses are optionally org-scoped; the catalogue is isolated per
   tenant (shared global content + the caller's org content; private courses
   hidden from non-members), with cross-tenant SUPER_ADMIN. Tenant selected via
-  the `x-org-id` header, validated against membership. (SCIM next.)
+  the `x-org-id` header, validated against membership.
+- **SCIM 2.0 (done)** — automatic, per-organization user provisioning (RFC
+  7643/7644): an IdP authenticates with the org's bearer token and pushes Users
+  to `/scim/v2/Users` (create/filter/get/replace/patch/delete); we map them to
+  platform users + org memberships, deprovision on `active:false`/DELETE, and
+  isolate strictly per tenant. ServiceProviderConfig discovery included.
 - **Interoperability — export / migration (done)** — export any published course
   to a standard, portable package: **SCORM 1.2** (universal), **cmi5** (xAPI) or
   **Common Cartridge 1.3** (Canvas/Moodle/Blackboard/D2L). Content is rendered to

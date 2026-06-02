@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   OrgError, addMember, createOrganization, getOrganization, listMembers, listOrganizations, removeMember,
 } from "./organizations.service.js";
+import { provisionToken } from "../scim/scim.service.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { resolveTenant, isOrgAdmin } from "../../lib/tenant.js";
@@ -55,5 +56,13 @@ export async function organizationRoutes(app: FastifyInstance) {
     const { id, userId } = z.object({ id: z.string(), userId: z.string() }).parse(req.params);
     if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
     try { return { data: await removeMember(id, userId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Provision a SCIM bearer token for the org (returned once).
+  app.post("/organizations/:id/scim/token", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    await getOrganization(id);
+    return { data: await provisionToken(id) };
   });
 }

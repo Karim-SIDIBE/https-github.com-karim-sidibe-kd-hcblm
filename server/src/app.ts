@@ -13,6 +13,7 @@ import { samlRoutes } from "./modules/auth/saml.routes.js";
 import { ltiRoutes } from "./modules/lti/lti.routes.js";
 import { userRoutes } from "./modules/users/users.routes.js";
 import { organizationRoutes } from "./modules/organizations/organizations.routes.js";
+import { scimRoutes } from "./modules/scim/scim.routes.js";
 import { enrollmentRoutes } from "./modules/enrollments/enrollments.routes.js";
 import { offlineRoutes } from "./modules/offline/offline.routes.js";
 import { feedbackRoutes } from "./modules/feedback/feedback.routes.js";
@@ -48,6 +49,16 @@ export async function buildApp(): Promise<FastifyInstance> {
     try { done(null, Object.fromEntries(new URLSearchParams(body as string))); }
     catch (e) { done(e as Error); }
   });
+  // Tolerate empty JSON bodies (no-body POSTs like /publish, /scim/token).
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+    try { done(null, body && (body as string).length ? JSON.parse(body as string) : {}); }
+    catch (e) { (e as { statusCode?: number }).statusCode = 400; done(e as Error); }
+  });
+  // SCIM clients send application/scim+json — parse it as JSON.
+  app.addContentTypeParser("application/scim+json", { parseAs: "string" }, (_req, body, done) => {
+    try { done(null, body && (body as string).length ? JSON.parse(body as string) : {}); }
+    catch (e) { done(e as Error); }
+  });
 
   // Uniform validation-error shape for Zod failures raised inside handlers.
   app.setErrorHandler((err, _req, reply) => {
@@ -70,6 +81,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await courseRoutes(api);
       await userRoutes(api);
       await organizationRoutes(api);
+      await scimRoutes(api);
       await enrollmentRoutes(api);
       await offlineRoutes(api);
       await feedbackRoutes(api);
