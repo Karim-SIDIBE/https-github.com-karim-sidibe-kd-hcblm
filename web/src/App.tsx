@@ -6,14 +6,15 @@ import { Login } from "./ui/Login";
 import { Course } from "./ui/Course";
 import { Enrollments } from "./ui/Enrollments";
 import { SessionScreen } from "./ui/Session";
+import { Onboarding } from "./ui/Onboarding";
 
 function Screen() {
   const route = useRoute();
   switch (route.name) {
     case "course": return <Course eid={route.eid} />;
     case "session": return <SessionScreen eid={route.eid} block={route.block} item={route.item} />;
-    // onboarding / block screens land in later phases; fall back to the dashboard.
-    case "onboarding":
+    case "onboarding": return <Onboarding eid={route.eid} />;
+    // block detail screen lands in a later phase; fall back to the dashboard.
     case "block": return <Course eid={route.eid} />;
     default: return <Enrollments />;
   }

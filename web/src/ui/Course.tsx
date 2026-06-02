@@ -127,7 +127,7 @@ export function Course({ eid }: { eid: string }) {
                       {isDone ? "✅" : "🎬"} {m.id} — {m.title}
                       <span className="muted"> · {formatDuration(m.video?.durationSec ?? 0)}</span>
                     </button>
-                    {!locked && !isDone && <button className="secondary" onClick={() => markDone(b.index, m.id)}>Terminé</button>}
+                    {!locked && !isDone && b.index !== 0 && <button className="secondary" onClick={() => markDone(b.index, m.id)}>Terminé</button>}
                   </div>
                 );
               })}
