@@ -235,6 +235,64 @@ model ForumPost {
   @@index([threadId])
 }
 
+/// Imported interoperable content packages (SCORM 1.2 / 2004, cmi5).
+enum ImportType {
+  SCORM12
+  SCORM2004
+  CMI5
+}
+
+model ImportedPackage {
+  id           String              @id @default(cuid())
+  type         ImportType
+  title        String
+  storagePrefix String // object-key prefix where the package files live
+  launchHref   String // entry file relative to the prefix
+  structure    Json? // parsed manifest structure (items / AUs)
+  createdById  String?
+  createdAt    DateTime            @default(now())
+
+  registrations ScormRegistration[]
+  inbound       InboundStatement[]
+
+  @@index([type])
+}
+
+/// Per-learner runtime tracking for an imported package (SCORM data model / cmi5 state).
+model ScormRegistration {
+  id               String          @id @default(cuid())
+  packageId        String
+  package          ImportedPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  userId           String
+  completion       String? // completed | incomplete | not attempted
+  success          String? // passed | failed | unknown
+  scoreScaled      Float?
+  scoreRaw         Int?
+  location         String?
+  suspendData      String?
+  totalTimeSeconds Int?
+  cmi              Json? // raw SCORM cmi tree
+  authToken        String? // cmi5 inbound auth token
+  updatedAt        DateTime        @updatedAt
+  createdAt        DateTime        @default(now())
+
+  @@unique([packageId, userId])
+  @@index([userId])
+}
+
+/// xAPI statements received from imported cmi5/xAPI content (inbound LRS).
+model InboundStatement {
+  id        String           @id @default(cuid())
+  packageId String?
+  package   ImportedPackage? @relation(fields: [packageId], references: [id], onDelete: SetNull)
+  userId    String?
+  verb      String
+  statement Json
+  storedAt  DateTime         @default(now())
+
+  @@index([packageId])
+}
+
 /// Media pipeline — uploaded assets transcoded into an adaptive rendition ladder
 /// (low-bandwidth + offline-downloadable variants).
 enum MediaKind {

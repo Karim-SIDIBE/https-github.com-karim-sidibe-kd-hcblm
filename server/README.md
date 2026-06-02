@@ -153,6 +153,17 @@ Admins may publish directly.
 | PATCH/DELETE | `/posts/:id` | Edit / soft-delete (author or moderator) |
 | POST | `/threads/:id/flags` | Lock / pin (moderator) |
 
+**Interoperability — content import** (SCORM 1.2/2004, cmi5)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/imports` | Upload a SCORM/cmi5 ZIP → parsed + extracted package (`media:manage`) |
+| GET | `/imports/:id` | Package metadata |
+| POST | `/imports/:id/launch` | Per-learner launch descriptor (SCORM runtime / cmi5 URL) |
+| POST | `/imports/:id/tracking` | SCORM RTE commit (cmi data model) |
+| GET | `/content/imports/:id/*` | Serve extracted package files (range-aware) |
+| GET | `/imports/:id/cmi5-fetch` · POST `/xapi/statements` | cmi5 auth + inbound xAPI LRS |
+
 **Verifiable credentials** (Open Badges 2.0 + 3.0; public verification)
 
 | Method | Path | Purpose |
@@ -353,6 +364,11 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   streaming/download for seeking + offline, external-provider registration, and
   `video.mediaId` binding so the **offline bundle** ships downloadable renditions.
 
+- **Interoperability — import (done)** — **SCORM 1.2/2004 + cmi5** package import
+  (unzip → parse manifest → extract to storage → register), per-learner launch
+  descriptors, **SCORM RTE tracking** (cmi data model persisted on Commit), and
+  **cmi5** launch (endpoint/fetch/registration/actor params) reporting to an
+  **inbound xAPI LRS** endpoint. (LTI 1.3 next.)
 - **Analytics & reporting (done)** — reporting over the existing runtime data (no
   new tables): learner **transcript**, course **aggregates + block-completion
   funnel**, platform **overview** KPIs, **cohort** progress, with **CSV export**.
