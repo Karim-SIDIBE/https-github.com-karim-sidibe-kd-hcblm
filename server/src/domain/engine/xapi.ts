@@ -14,6 +14,8 @@ export const VERBS = {
   passed: { id: "http://adlnet.gov/expapi/verbs/passed", display: "passed" },
   failed: { id: "http://adlnet.gov/expapi/verbs/failed", display: "failed" },
   earned: { id: "https://w3id.org/xapi/openbadges/verbs/earned", display: "earned" },
+  registered: { id: "http://adlnet.gov/expapi/verbs/registered", display: "registered" },
+  attended: { id: "http://adlnet.gov/expapi/verbs/attended", display: "attended" },
 } as const;
 
 export type VerbKey = keyof typeof VERBS;

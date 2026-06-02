@@ -25,6 +25,17 @@ const EnvSchema = z.object({
   LRS_KEY: z.string().optional(),
   LRS_SECRET: z.string().optional(),
 
+  // --- blended live sessions (Zoom / Microsoft Teams). Optional: manual links. ---
+  MEETING_PROVIDER: z.enum(["zoom", "teams", "manual"]).default("manual"),
+  ZOOM_ACCOUNT_ID: z.string().optional(),
+  ZOOM_CLIENT_ID: z.string().optional(),
+  ZOOM_CLIENT_SECRET: z.string().optional(),
+  ZOOM_HOST_USER_ID: z.string().default("me"),
+  TEAMS_TENANT_ID: z.string().optional(),
+  TEAMS_CLIENT_ID: z.string().optional(),
+  TEAMS_CLIENT_SECRET: z.string().optional(),
+  TEAMS_HOST_USER_ID: z.string().optional(),
+
   // --- authentication (first-party JWT, OAuth 2.1 / OIDC) ---
   AUTH_ISSUER: z.string().default("https://api.declick.kompetences.net"),
   AUTH_AUDIENCE: z.string().default("declick-api"),
@@ -50,6 +61,13 @@ const EnvSchema = z.object({
   OIDC_JWKS_URI: z.string().url().optional(),
   OIDC_AUDIENCE: z.string().optional(),
   OIDC_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+
+  // --- SAML 2.0 SSO (enterprise IdP via SAML). Optional. ---
+  SAML_ENTRY_POINT: z.string().url().optional(), // IdP SSO URL
+  SAML_ISSUER: z.string().default("declick-api"), // our SP entityID
+  SAML_CALLBACK_URL: z.string().url().optional(), // our ACS URL
+  SAML_IDP_CERT: z.string().optional(), // IdP signing certificate (PEM/base64)
+  SAML_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -69,3 +87,6 @@ export const authDevHeader = env.AUTH_DEV_HEADER ?? env.NODE_ENV !== "production
 
 /** External IdP fully configured? */
 export const oidcEnabled = Boolean(env.OIDC_ISSUER && env.OIDC_JWKS_URI && env.OIDC_AUDIENCE);
+
+/** SAML 2.0 SSO fully configured? */
+export const samlEnabled = Boolean(env.SAML_ENTRY_POINT && env.SAML_CALLBACK_URL && env.SAML_IDP_CERT);

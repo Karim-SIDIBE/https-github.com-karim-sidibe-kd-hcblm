@@ -107,10 +107,15 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  authoredCourses  Course[]        @relation("CourseAuthor")
-  reviewedVersions CourseVersion[] @relation("VersionReviewer")
+  authoredCourses  Course[]              @relation("CourseAuthor")
+  reviewedVersions CourseVersion[]       @relation("VersionReviewer")
   enrollments      Enrollment[]
   refreshTokens    RefreshToken[]
+  hostedSessions   LiveSession[]         @relation("SessionHost")
+  sessionRegistrations SessionRegistration[]
+  cohortMemberships CohortMembership[]
+  authoredThreads  ForumThread[]         @relation("ThreadAuthor")
+  authoredPosts    ForumPost[]           @relation("PostAuthor")
 
   @@index([role])
 }
@@ -163,10 +168,125 @@ model Course {
   authorId String?
   author   User?   @relation("CourseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
-  versions    CourseVersion[]
-  enrollments Enrollment[]
+  versions     CourseVersion[]
+  enrollments  Enrollment[]
+  liveSessions LiveSession[]
+  cohorts      Cohort[]
 
   @@index([authorId])
+}
+
+/// A cohort — a group of learners, optionally tied to a course. Forums are
+/// scoped per cohort ("forum de pratique optionnel par cohorte", Pilier 6.3).
+model Cohort {
+  id          String   @id @default(cuid())
+  name        String
+  courseId    String?
+  course      Course?  @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  memberships CohortMembership[]
+  threads     ForumThread[]
+
+  @@index([courseId])
+}
+
+model CohortMembership {
+  id        String   @id @default(cuid())
+  cohortId  String
+  cohort    Cohort   @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([cohortId, userId])
+  @@index([userId])
+}
+
+model ForumThread {
+  id        String      @id @default(cuid())
+  cohortId  String
+  cohort    Cohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?       @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  title     String
+  locked    Boolean     @default(false)
+  pinned    Boolean     @default(false)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  posts ForumPost[]
+
+  @@index([cohortId])
+}
+
+model ForumPost {
+  id        String      @id @default(cuid())
+  threadId  String
+  thread    ForumThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  authorId  String?
+  author    User?       @relation("PostAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  body      String
+  editedAt  DateTime?
+  deletedAt DateTime? // soft delete for moderation
+  createdAt DateTime    @default(now())
+
+  @@index([threadId])
+}
+
+/// Blended / instructor-led live sessions (Zoom, Teams, or a manual link).
+enum MeetingProvider {
+  ZOOM
+  TEAMS
+  MANUAL
+}
+
+enum SessionStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+model LiveSession {
+  id                String          @id @default(cuid())
+  /// Optional association with a course (blended learning).
+  courseId          String?
+  course            Course?         @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  title             String
+  description       String?
+  provider          MeetingProvider @default(MANUAL)
+  startsAt          DateTime
+  durationMin       Int
+  timezone          String          @default("UTC")
+  joinUrl           String?
+  externalMeetingId String? // the provider's meeting id
+  hostUserId        String?
+  host              User?           @relation("SessionHost", fields: [hostUserId], references: [id], onDelete: SetNull)
+  capacity          Int?
+  status            SessionStatus   @default(SCHEDULED)
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  registrations SessionRegistration[]
+
+  @@index([courseId])
+  @@index([startsAt])
+}
+
+model SessionRegistration {
+  id                String      @id @default(cuid())
+  sessionId         String
+  session           LiveSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId            String
+  user              User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  registeredAt      DateTime    @default(now())
+  attended          Boolean     @default(false)
+  attendanceMinutes Int?
+
+  @@unique([sessionId, userId])
+  @@index([userId])
 }
 
 model CourseVersion {

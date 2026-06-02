@@ -118,6 +118,35 @@ Admins may publish directly.
 | POST | `/courses/draft` | AI-assisted draft of a new course from a brief → validated DRAFT |
 | POST | `/search` | Semantic search over published content |
 | POST | `/versions/:id/index` | (Re)build the search index for a version |
+
+**Blended live sessions** (`session:manage` to host)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/sessions` | Create a session (Zoom/Teams meeting or manual link) |
+| GET | `/sessions` · `/sessions/:id` | List / detail (`?upcoming=true`, `?courseId=`) |
+| POST | `/sessions/:id/register` | Learner registers (self or staff-on-behalf) |
+| GET | `/sessions/:id/registrations` | Roster (host) |
+| POST | `/sessions/:id/attendance` | Mark attendance → xAPI `attended` for enrolled learners |
+| POST | `/sessions/:id/cancel` | Cancel |
+
+**Cohort forums** (members read/post; `forum:moderate` to manage/moderate)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/cohorts` · `/cohorts/:id/members` | Create cohort / add member |
+| GET | `/cohorts` · `/cohorts/:id/threads` | List cohorts (scoped) / threads |
+| POST | `/cohorts/:id/threads` · `/threads/:id/posts` | New thread / reply |
+| PATCH/DELETE | `/posts/:id` | Edit / soft-delete (author or moderator) |
+| POST | `/threads/:id/flags` | Lock / pin (moderator) |
+
+**SAML 2.0 SSO** (active only when `SAML_*` is configured)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/auth/saml/metadata` | SP metadata XML for the IdP |
+| GET | `/auth/saml/login` | SP-initiated login → redirect to IdP |
+| POST | `/auth/saml/acs` | Assertion Consumer Service → issues first-party tokens |
 | GET | `/audit` | Security audit trail — filters `action`/`actorId`/`limit` (admin) |
 
 **Authoring workflow**
@@ -265,8 +294,17 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   review, user create, evaluation), queryable at `/audit` (admin-only). Verified
   end-to-end across three key configurations + lockout + rate limit + audit RBAC.
 
-## Next steps
+- **Consolidation (done)** — 37 `node:test` unit tests (validation, engine,
+  RBAC, embeddings, JWT, scaffold, meetings, SAML mapping), `CLAUDE.md`, and a
+  first commit on `feat/kd-hcblm-backend`.
+- **Blended, forums & SAML (done)** — **live sessions** (Zoom/Teams provider with
+  a manual fallback; registration + attendance → xAPI `attended`); **cohort
+  forums** (membership-scoped threads/posts, author edit, moderator lock/pin +
+  soft-delete); **SAML 2.0** SP connector (metadata, AuthnRequest redirect, ACS
+  → first-party tokens, JIT optional) alongside OIDC. RBAC adds `session:manage`
+  and `forum:moderate`.
 
-- **Consolidation:** automated tests (`node --test` harness is wired), CLAUDE.md,
-  first commit.
-- Optional: KMS-backed signer (swap the `privateKey` source in `keys.ts`).
+## Possible next steps
+
+- KMS-backed signer; SCIM provisioning; notifications on forum replies;
+  ICS/calendar feeds for sessions; pgvector for search at scale.

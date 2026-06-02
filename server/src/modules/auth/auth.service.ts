@@ -72,6 +72,24 @@ export async function login(email: string, password: string, ip?: string) {
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
+/**
+ * Federated login (SAML/OIDC): map a verified external identity to a local user
+ * (JIT-provision a LEARNER when allowed) and issue first-party tokens.
+ */
+export async function federatedLogin(params: { email: string; name?: string | null; jit: boolean; via: string; ip?: string }) {
+  let user = await prisma.user.findUnique({ where: { email: params.email } });
+  if (!user) {
+    if (!params.jit) {
+      await audit({ action: "auth.federated.denied", ip: params.ip, meta: { email: params.email, via: params.via, reason: "no_account" } });
+      throw new AuthError("no_account", "Aucun compte pour cette identité fédérée");
+    }
+    user = await prisma.user.create({ data: { email: params.email, name: params.name || params.email, role: "LEARNER" } });
+    await audit({ actorId: user.id, action: "auth.federated.provisioned", ip: params.ip, meta: { email: params.email, via: params.via } });
+  }
+  await audit({ actorId: user.id, action: "auth.federated.success", ip: params.ip, meta: { via: params.via } });
+  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+}
+
 /** Rotate a refresh token; detect reuse of an already-rotated token. */
 export async function refresh(presented: string, ip?: string) {
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(presented) } });
