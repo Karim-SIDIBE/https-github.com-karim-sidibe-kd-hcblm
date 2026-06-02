@@ -15,6 +15,7 @@ import { enrollmentRoutes } from "./modules/enrollments/enrollments.routes.js";
 import { offlineRoutes } from "./modules/offline/offline.routes.js";
 import { feedbackRoutes } from "./modules/feedback/feedback.routes.js";
 import { searchRoutes } from "./modules/search/search.routes.js";
+import { tutorRoutes } from "./modules/tutor/tutor.routes.js";
 import { sessionRoutes } from "./modules/sessions/sessions.routes.js";
 import { forumRoutes } from "./modules/forum/forum.routes.js";
 import { mediaRoutes } from "./modules/media/media.routes.js";
@@ -66,6 +67,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await offlineRoutes(api);
       await feedbackRoutes(api);
       await searchRoutes(api);
+      await tutorRoutes(api);
       await sessionRoutes(api);
       await forumRoutes(api);
       await mediaRoutes(api);

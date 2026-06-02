@@ -20,8 +20,21 @@ export function embeddingsProvider(): "voyage" | "openai" | "local" {
 // --- deterministic local embedder -------------------------------------------
 
 const ACCENTS = /[̀-ͯ]/g;
-function tokenize(text: string): string[] {
-  return text.normalize("NFD").replace(ACCENTS, "").toLowerCase().match(/[a-z0-9]+/g) ?? [];
+// Common FR/EN stopwords — dropped so generic words don't create spurious
+// similarity (important for the offline guardrail + retrieval quality).
+const STOPWORDS = new Set(
+  ("le la les un une des de du au aux a et ou ni mais donc or car que qui quoi dont ou quel quelle quels quelles " +
+   "ce cet cette ces mon ma mes ton ta tes son sa ses notre nos votre vos leur leurs " +
+   "je tu il elle on nous vous ils elles me te se y en " +
+   "est es suis sommes etes sont etais etait etre ete sera seront ai as avons avez ont avait " +
+   "ne pas plus moins tres bien tout tous toute toutes meme aussi alors comme si sinon " +
+   "dans pour par sur sous avec sans vers chez entre apres avant pendant depuis jusque " +
+   "comment pourquoi quand ou combien quel cela ceci ca " +
+   "the a an of to and or is are was were be been in on for with at by from this that these those it as not").split(/\s+/),
+);
+export function tokenize(text: string): string[] {
+  return (text.normalize("NFD").replace(ACCENTS, "").toLowerCase().match(/[a-z0-9]+/g) ?? [])
+    .filter((t) => t.length >= 2 && !STOPWORDS.has(t));
 }
 function hashToken(t: string): number {
   let h = 2166136261;

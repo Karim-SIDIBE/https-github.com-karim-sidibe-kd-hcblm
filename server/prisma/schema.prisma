@@ -444,9 +444,42 @@ model Enrollment {
   aiAssessments  AiAssessment[]
   syncOperations SyncOperation[]
   credentials    Credential[]
+  tutorSessions  TutorSession[]
 
   @@unique([userId, courseId])
   @@index([status])
+}
+
+/// Grounded AI tutor (RAG over the course content). One conversation thread.
+model TutorSession {
+  id           String         @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  title        String?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  messages     TutorMessage[]
+
+  @@index([enrollmentId])
+}
+
+enum TutorRole {
+  USER
+  ASSISTANT
+}
+
+model TutorMessage {
+  id        String       @id @default(cuid())
+  sessionId String
+  session   TutorSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      TutorRole
+  content   String
+  /// For assistant turns: the retrieved citations [{blockIndex, path, snippet}].
+  citations Json?
+  grounded  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+
+  @@index([sessionId])
 }
 
 /// Idempotency ledger for offline-first sync: one row per applied client action,

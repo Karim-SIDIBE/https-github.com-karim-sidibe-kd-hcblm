@@ -120,6 +120,8 @@ Admins may publish directly.
 | POST | `/courses/draft` | AI-assisted draft of a new course from a brief → validated DRAFT |
 | POST | `/search` | Semantic search over published content |
 | POST | `/versions/:id/index` | (Re)build the search index for a version |
+| POST | `/enrollments/:id/tutor/ask` | **Grounded AI tutor** (RAG) — answer from course content + citations |
+| GET | `/enrollments/:id/tutor/sessions[/:sid]` | Tutor conversation history |
 
 **Media pipeline** (`media:manage` to upload; low-bandwidth + offline)
 
@@ -341,6 +343,12 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   streaming/download for seeking + offline, external-provider registration, and
   `video.mediaId` binding so the **offline bundle** ships downloadable renditions.
 
+- **AI tutor / RAG (done)** — a grounded conversational tutor: retrieves the most
+  relevant course passages (semantic search), answers with Claude (citations +
+  Moment-d'Ancrage personalization) or an extractive fallback offline, persists
+  multi-turn sessions, and applies a **lexical grounding guardrail** (off-topic
+  questions are declined, not hallucinated). The local embedder also gained
+  stopword filtering (better retrieval + reliable guardrail).
 - **Verifiable credentials (done)** — on badge issuance the platform mints an
   **Open Badges 2.0** hosted assertion (privacy-preserving salted-hash recipient)
   and an **Open Badges 3.0** Verifiable Credential signed as a **VC-JWT (ES256,
@@ -350,6 +358,5 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
 ## Possible next steps
 
 - Front-end **PWA** (service worker + local cache) consuming the bundle/sync API
-  — the client half of offline-first; AI **captions** (ASR); **AI tutor (RAG)**
-  over the embeddings; **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy;
-  SCIM.
+  — the client half of offline-first; AI **captions** (ASR);
+  **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy; SCIM.
