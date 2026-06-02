@@ -10,6 +10,7 @@ import { healthRoutes } from "./modules/health/health.routes.js";
 import { courseRoutes } from "./modules/courses/courses.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { samlRoutes } from "./modules/auth/saml.routes.js";
+import { ltiRoutes } from "./modules/lti/lti.routes.js";
 import { userRoutes } from "./modules/users/users.routes.js";
 import { enrollmentRoutes } from "./modules/enrollments/enrollments.routes.js";
 import { offlineRoutes } from "./modules/offline/offline.routes.js";
@@ -63,6 +64,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await healthRoutes(api);
       await authRoutes(api);
       await samlRoutes(api);
+      await ltiRoutes(api);
       await courseRoutes(api);
       await userRoutes(api);
       await enrollmentRoutes(api);

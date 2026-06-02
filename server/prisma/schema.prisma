@@ -235,6 +235,35 @@ model ForumPost {
   @@index([threadId])
 }
 
+/// A registered LTI 1.3 Platform (an LMS that launches into us, the Tool).
+model LtiPlatform {
+  id           String     @id @default(cuid())
+  name         String?
+  issuer       String
+  clientId     String
+  deploymentId String?
+  authLoginUrl String // platform OIDC auth endpoint
+  jwksUrl      String // platform public keys
+  tokenUrl     String? // platform OAuth token endpoint (AGS/NRPS)
+  createdById  String?
+  createdAt    DateTime   @default(now())
+  nonces       LtiNonce[]
+
+  @@unique([issuer, clientId])
+}
+
+/// Short-lived state/nonce bridging the LTI OIDC login → launch.
+model LtiNonce {
+  id            String      @id @default(cuid())
+  state         String      @unique
+  nonce         String
+  platformId    String
+  platform      LtiPlatform @relation(fields: [platformId], references: [id], onDelete: Cascade)
+  targetLinkUri String?
+  createdAt     DateTime    @default(now())
+  expiresAt     DateTime
+}
+
 /// Imported interoperable content packages (SCORM 1.2 / 2004, cmi5).
 enum ImportType {
   SCORM12

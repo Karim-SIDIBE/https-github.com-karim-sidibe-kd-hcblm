@@ -164,6 +164,15 @@ Admins may publish directly.
 | GET | `/content/imports/:id/*` | Serve extracted package files (range-aware) |
 | GET | `/imports/:id/cmi5-fetch` · POST `/xapi/statements` | cmi5 auth + inbound xAPI LRS |
 
+**Interoperability — LTI 1.3 Tool** (an LMS launches a K-LMS resource)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST/GET | `/lti/platforms` | Register / list platforms (`lti:manage`) |
+| GET/POST | `/lti/login` | OIDC third-party login initiation → redirect to platform |
+| POST | `/lti/launch` | Validate the platform `id_token` → first-party session |
+| GET | `/lti/jwks` · `/lti/config` | Tool keys + configuration |
+
 **Verifiable credentials** (Open Badges 2.0 + 3.0; public verification)
 
 | Method | Path | Purpose |
@@ -368,7 +377,12 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   (unzip → parse manifest → extract to storage → register), per-learner launch
   descriptors, **SCORM RTE tracking** (cmi data model persisted on Commit), and
   **cmi5** launch (endpoint/fetch/registration/actor params) reporting to an
-  **inbound xAPI LRS** endpoint. (LTI 1.3 next.)
+  **inbound xAPI LRS** endpoint.
+- **Interoperability — LTI 1.3 Tool (done)** — K-LMS as an LTI 1.3 Tool: platform
+  registration, OIDC third-party **login initiation**, and **launch** (the
+  platform `id_token` is verified against its JWKS, LTI claims validated, the
+  user JIT-mapped and issued a first-party session). Single-use nonce; reuses the
+  existing JWKS/JWT stack. (We are the Tool; AGS/NRPS/Deep-Linking are future.)
 - **Analytics & reporting (done)** — reporting over the existing runtime data (no
   new tables): learner **transcript**, course **aggregates + block-completion
   funnel**, platform **overview** KPIs, **cohort** progress, with **CSV export**.

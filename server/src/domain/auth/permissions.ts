@@ -26,13 +26,14 @@ export type Permission =
   | "session:manage" // create / host live sessions, mark attendance
   | "forum:moderate" // manage cohorts/memberships, moderate forum threads/posts
   | "media:manage" // upload / manage media assets
-  | "credential:revoke"; // revoke issued verifiable credentials
+  | "credential:revoke" // revoke issued verifiable credentials
+  | "lti:manage"; // register / manage LTI platforms
 
 const ALL: Permission[] = [
   "course:create", "course:read", "course:update", "course:submit_review",
   "course:review", "course:publish", "course:archive",
   "enrollment:create", "enrollment:read_any", "evaluation:grade",
-  "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke",
+  "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -40,7 +41,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   COURSE_ADMIN: [
     "course:create", "course:read", "course:update", "course:submit_review",
     "course:review", "course:publish", "course:archive",
-    "enrollment:create", "enrollment:read_any", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke",
+    "enrollment:create", "enrollment:read_any", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage",
   ],
   LEARNING_DESIGNER: ["course:create", "course:read", "course:update", "course:submit_review", "media:manage"],
   REVIEWER: ["course:read", "course:review", "course:publish"],
