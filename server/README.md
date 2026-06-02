@@ -165,6 +165,16 @@ Admins may publish directly.
 | GET | `/enrollments/:id/credentials` | Learner's credentials (owner) |
 | POST | `/credentials/:id/revoke` | Revoke (`credential:revoke`) |
 
+**Analytics & reporting** (`analytics:read`; transcript is owner-scoped)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/enrollments/:id/transcript` | Learner record (progress, scores, badges, credentials, attendance) |
+| GET | `/analytics/overview` | Platform KPIs |
+| GET | `/analytics/courses/:id` | Course aggregates + block-completion funnel |
+| GET | `/analytics/courses/:id/learners` | Per-learner rows (`?format=csv`) |
+| GET | `/analytics/cohorts/:id` | Cohort progress (`?format=csv`) |
+
 **SAML 2.0 SSO** (active only when `SAML_*` is configured)
 
 | Method | Path | Purpose |
@@ -343,6 +353,10 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   streaming/download for seeking + offline, external-provider registration, and
   `video.mediaId` binding so the **offline bundle** ships downloadable renditions.
 
+- **Analytics & reporting (done)** — reporting over the existing runtime data (no
+  new tables): learner **transcript**, course **aggregates + block-completion
+  funnel**, platform **overview** KPIs, **cohort** progress, with **CSV export**.
+  Gated by `analytics:read`; transcripts are owner-scoped.
 - **AI tutor / RAG (done)** — a grounded conversational tutor: retrieves the most
   relevant course passages (semantic search), answers with Claude (citations +
   Moment-d'Ancrage personalization) or an extractive fallback offline, persists
@@ -359,4 +373,4 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
 
 - Front-end **PWA** (service worker + local cache) consuming the bundle/sync API
   — the client half of offline-first; AI **captions** (ASR);
-  **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy; SCIM.
+  SCORM/cmi5 + LTI; multi-tenancy; SCIM.

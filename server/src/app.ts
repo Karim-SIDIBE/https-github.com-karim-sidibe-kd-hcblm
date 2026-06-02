@@ -20,6 +20,7 @@ import { sessionRoutes } from "./modules/sessions/sessions.routes.js";
 import { forumRoutes } from "./modules/forum/forum.routes.js";
 import { mediaRoutes } from "./modules/media/media.routes.js";
 import { credentialRoutes } from "./modules/credentials/credentials.routes.js";
+import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 
@@ -72,6 +73,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await forumRoutes(api);
       await mediaRoutes(api);
       await credentialRoutes(api);
+      await analyticsRoutes(api);
       await auditRoutes(api);
       await jobRoutes(api);
     },
