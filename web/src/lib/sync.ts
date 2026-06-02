@@ -37,6 +37,13 @@ export function createEngine(store: OfflineStore, api: SyncApi) {
       return action;
     },
 
+    /** Record an action then attempt an immediate flush (offline-safe). The flush
+     *  result carries the recomputed progress/resume/badges when online. */
+    async commit(enrollmentId: string, type: string, payload?: Record<string, unknown>) {
+      await this.record(enrollmentId, type, payload);
+      return this.flush(enrollmentId);
+    },
+
     /** Replay queued actions; drop applied/deduped, keep failed for retry. */
     async flush(enrollmentId: string) {
       const actions = await store.pending(enrollmentId);

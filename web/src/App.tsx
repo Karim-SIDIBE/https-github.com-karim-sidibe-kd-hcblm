@@ -1,18 +1,56 @@
-import { useState } from "react";
-import { isLoggedIn, logout } from "./lib/app";
+import { useEffect, useState } from "react";
+import { engine, isLoggedIn, logout } from "./lib/app";
+import { startAutoSync, type SyncState } from "./lib/autosync";
+import { useRoute } from "./lib/router";
 import { Login } from "./ui/Login";
 import { Course } from "./ui/Course";
+import { Enrollments } from "./ui/Enrollments";
+
+function Screen() {
+  const route = useRoute();
+  switch (route.name) {
+    case "course": return <Course eid={route.eid} />;
+    // onboarding / block / session screens land in later phases; fall back for now.
+    case "onboarding":
+    case "block":
+    case "session": return <Course eid={route.eid} />;
+    default: return <Enrollments />;
+  }
+}
+
+function ConnectivityBanner({ sync }: { sync: SyncState }) {
+  const [online, setOnline] = useState(navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false);
+    window.addEventListener("online", on); window.addEventListener("offline", off);
+    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
+  }, []);
+  if (!online) return <div className="banner offline">⚠️ Hors-ligne — votre progression est enregistrée et se synchronisera automatiquement.</div>;
+  if (sync === "syncing") return <div className="banner syncing">⟳ Synchronisation…</div>;
+  return null;
+}
 
 export function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
+  const [sync, setSync] = useState<SyncState>("idle");
+
+  useEffect(() => {
+    if (!authed) return;
+    return startAutoSync(engine, (s) => setSync(s));
+  }, [authed]);
+
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
+
   return (
-    <div className="app">
-      <header className="row" style={{ justifyContent: "space-between" }}>
+    <>
+      <div className="appbar">
         <strong>Kompetences Declick</strong>
-        <button onClick={() => { logout(); setAuthed(false); }}>Déconnexion</button>
-      </header>
-      <Course />
-    </div>
+        <button className="ghost" onClick={() => { logout(); setAuthed(false); }}>Déconnexion</button>
+      </div>
+      <main className="app">
+        <ConnectivityBanner sync={sync} />
+        <Screen />
+      </main>
+    </>
   );
 }

@@ -4,6 +4,17 @@
 export type Tokens = { access?: string; refresh?: string };
 export type TokenBox = { get(): Tokens; set(t: Tokens): void };
 
+export type EnrollmentSummary = {
+  id: string;
+  status: string;
+  course: { slug: string; title: string; level: string };
+  blocksTotal: number;
+  blocksCompleted: number;
+  progressPercent: number;
+  lastSeenAt: string | null;
+  startedAt: string;
+};
+
 export function createApi(baseUrl: string, tokens: TokenBox) {
   async function refresh(): Promise<boolean> {
     const r = tokens.get().refresh;
@@ -39,10 +50,17 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return j.user as { id: string; name: string; email: string; role: string };
     },
     async me() { return (await (await raw("GET", "/auth/me")).json()).data; },
-    async listEnrollments() {
-      // no dedicated list endpoint yet; the app stores the active enrolment id.
-      return [];
+    async get<T = any>(path: string): Promise<T> { return (await (await raw("GET", path)).json()).data as T; },
+    async listEnrollments(): Promise<EnrollmentSummary[]> {
+      const res = await raw("GET", "/enrollments");
+      if (!res.ok) return [];
+      return ((await res.json()).data ?? []) as EnrollmentSummary[];
     },
+    resume(enrollmentId: string) { return this.get(`/enrollments/${enrollmentId}/resume`); },
+    block(enrollmentId: string, index: number) { return this.get(`/enrollments/${enrollmentId}/blocks/${index}`); },
+    project(enrollmentId: string) { return this.get(`/enrollments/${enrollmentId}/project`); },
+    notifications(enrollmentId: string) { return this.get(`/enrollments/${enrollmentId}/notifications`); },
+    mediaPlayback(mediaId: string) { return this.get(`/media/${mediaId}/playback`); },
     async getOfflineBundle(enrollmentId: string, etag?: string) {
       const res = await raw("GET", `/enrollments/${enrollmentId}/offline-bundle`, etag ? { headers: { "if-none-match": `"${etag}"` } } : {});
       if (res.status === 304) return { status: 304 as const };
