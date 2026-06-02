@@ -151,6 +151,18 @@ Admins may publish directly.
 | PATCH/DELETE | `/posts/:id` | Edit / soft-delete (author or moderator) |
 | POST | `/threads/:id/flags` | Lock / pin (moderator) |
 
+**Verifiable credentials** (Open Badges 2.0 + 3.0; public verification)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/credentials/issuer` · `/credentials/badge-class/...` | Issuer / BadgeClass JSON-LD |
+| GET | `/credentials/:id` | OB 2.0 hosted assertion (public; reflects revocation) |
+| GET | `/credentials/:id/vc` | OB 3.0 Verifiable Credential, signed VC-JWT (public) |
+| GET/POST | `/credentials/:id/verify` · `/credentials/verify` | Verify signature + issuer + revocation (public) |
+| GET | `/credentials/:id/certificate.pdf` | Certificate PDF with verification QR |
+| GET | `/enrollments/:id/credentials` | Learner's credentials (owner) |
+| POST | `/credentials/:id/revoke` | Revoke (`credential:revoke`) |
+
 **SAML 2.0 SSO** (active only when `SAML_*` is configured)
 
 | Method | Path | Purpose |
@@ -329,9 +341,15 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   streaming/download for seeking + offline, external-provider registration, and
   `video.mediaId` binding so the **offline bundle** ships downloadable renditions.
 
+- **Verifiable credentials (done)** — on badge issuance the platform mints an
+  **Open Badges 2.0** hosted assertion (privacy-preserving salted-hash recipient)
+  and an **Open Badges 3.0** Verifiable Credential signed as a **VC-JWT (ES256,
+  verifiable via the platform JWKS)**. Public verification (signature + issuer +
+  revocation), **certificate PDF** with a verification QR, and admin revocation.
+
 ## Possible next steps
 
 - Front-end **PWA** (service worker + local cache) consuming the bundle/sync API
-  — the client half of offline-first; AI **captions** (ASR); verifiable
-  **Open Badges + certificate PDFs**; **AI tutor (RAG)** over the embeddings;
-  **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy; SCIM.
+  — the client half of offline-first; AI **captions** (ASR); **AI tutor (RAG)**
+  over the embeddings; **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy;
+  SCIM.

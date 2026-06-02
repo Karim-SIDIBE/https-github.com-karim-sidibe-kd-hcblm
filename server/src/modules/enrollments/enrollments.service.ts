@@ -14,6 +14,7 @@ import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../dom
 import { computeResume } from "../../domain/engine/resume.js";
 import { activityId, buildStatement, quizResult, type VerbKey } from "../../domain/engine/xapi.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
+import { issueCredential } from "../credentials/credentials.service.js";
 
 export class EngineError extends Error {
   constructor(public statusCode: number, public code: string, message: string) {
@@ -257,9 +258,18 @@ export async function reconcile(enrollmentId: string) {
     const type = badgeTypeForBlock(block.type);
     if (existingBadgeTypes.has(type)) continue;
     const message = badgeMessage(type, block.badge.label, enrollment.momentAncrage);
-    await prisma.badge.create({
+    const badge = await prisma.badge.create({
       data: { enrollmentId, type, message, peerNotified: Boolean(enrollment.peerEmail) },
     });
+    // Mint a verifiable credential (OB 2.0 + signed OB 3.0). Non-fatal.
+    try {
+      await issueCredential({
+        badgeId: badge.id, enrollmentId, recipientEmail: enrollment.user.email, recipientName: enrollment.user.name,
+        courseSlug: enrollment.course.slug, badgeType: type, content, block,
+      });
+    } catch (e) {
+      console.error(`[credential] issuance failed for badge ${badge.id}:`, e instanceof Error ? e.message : e);
+    }
     // Peer notification (Pilier 6.3) — enqueued for delivery by the dispatcher.
     if (enrollment.peerEmail) {
       await enqueueNotification({

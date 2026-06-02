@@ -443,6 +443,7 @@ model Enrollment {
   notifications  Notification[]
   aiAssessments  AiAssessment[]
   syncOperations SyncOperation[]
+  credentials    Credential[]
 
   @@unique([userId, courseId])
   @@index([status])
@@ -485,17 +486,39 @@ model ItemCompletion {
 }
 
 model Badge {
-  id           String     @id @default(cuid())
+  id           String      @id @default(cuid())
   enrollmentId String
-  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment  @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   type         BadgeType
   /// Personalized message anchored in the learner's Moment d'Ancrage.
   message      String?
   /// Whether the progress peer has been notified (Pilier 6.3).
-  peerNotified Boolean    @default(false)
-  issuedAt     DateTime   @default(now())
+  peerNotified Boolean     @default(false)
+  issuedAt     DateTime    @default(now())
+  credential   Credential?
 
   @@unique([enrollmentId, type])
+}
+
+/// Verifiable credential for an issued badge: Open Badges 2.0 hosted assertion
+/// (JSON-LD) + Open Badges 3.0 Verifiable Credential signed as a VC-JWT (ES256,
+/// verifiable via the platform JWKS). Recipient identity is salted-hashed.
+model Credential {
+  id               String     @id @default(cuid())
+  badgeId          String     @unique
+  badge            Badge      @relation(fields: [badgeId], references: [id], onDelete: Cascade)
+  enrollmentId     String
+  enrollment       Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  achievementType  String
+  recipientSalt    String
+  recipientHash    String // sha256(email + salt)
+  assertion        Json // OB 2.0 hosted assertion
+  vcJwt            String // OB 3.0 VC-JWT
+  issuedAt         DateTime   @default(now())
+  revokedAt        DateTime?
+  revocationReason String?
+
+  @@index([enrollmentId])
 }
 
 /// Proactive re-engagement of inactive learners (Pilier 6.4).

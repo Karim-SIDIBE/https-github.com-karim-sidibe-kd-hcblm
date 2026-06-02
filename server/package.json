@@ -32,11 +32,15 @@
     "@prisma/client": "^5.22.0",
     "fastify": "^4.28.1",
     "jose": "^5.10.0",
+    "pdfkit": "^0.15.2",
     "pino-pretty": "^11.3.0",
+    "qrcode": "^1.5.4",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^22.19.19",
+    "@types/pdfkit": "^0.17.6",
+    "@types/qrcode": "^1.5.6",
     "prisma": "^5.22.0",
     "tsx": "^4.19.2",
     "typescript": "^5.6.3"

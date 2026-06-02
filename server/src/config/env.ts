@@ -41,6 +41,11 @@ const EnvSchema = z.object({
   TEAMS_CLIENT_SECRET: z.string().optional(),
   TEAMS_HOST_USER_ID: z.string().optional(),
 
+  // --- public base + verifiable credentials (Open Badges 2.0 / 3.0) ---
+  PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
+  CREDENTIAL_ISSUER_NAME: z.string().default("Kompetences Declick"),
+  CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
+
   // --- authentication (first-party JWT, OAuth 2.1 / OIDC) ---
   AUTH_ISSUER: z.string().default("https://api.declick.kompetences.net"),
   AUTH_AUDIENCE: z.string().default("declick-api"),
