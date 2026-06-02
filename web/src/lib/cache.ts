@@ -13,8 +13,11 @@ export type ProgressSnapshot = {
 };
 export type ResumeSnapshot = { blockIndex: number; itemKey: string; positionSec: number; durationSec: number | null } | null;
 
+export type PositionSnapshot = { positionSec: number; durationSec: number | null };
+
 const pKey = (eid: string) => `klms_progress_${eid}`;
 const rKey = (eid: string) => `klms_resume_${eid}`;
+const posKey = (eid: string, block: number, item: string) => `klms_pos_${eid}_${block}_${item}`;
 
 function read<T>(key: string): T | null {
   try { const v = localStorage.getItem(key); return v ? (JSON.parse(v) as T) : null; } catch { return null; }
@@ -27,3 +30,5 @@ export const getCachedProgress = (eid: string) => read<ProgressSnapshot>(pKey(ei
 export const setCachedProgress = (eid: string, p: ProgressSnapshot) => write(pKey(eid), p);
 export const getCachedResume = (eid: string) => read<ResumeSnapshot>(rKey(eid));
 export const setCachedResume = (eid: string, r: ResumeSnapshot) => write(rKey(eid), r);
+export const getCachedPosition = (eid: string, block: number, item: string) => read<PositionSnapshot>(posKey(eid, block, item));
+export const setCachedPosition = (eid: string, block: number, item: string, v: PositionSnapshot) => write(posKey(eid, block, item), v);
