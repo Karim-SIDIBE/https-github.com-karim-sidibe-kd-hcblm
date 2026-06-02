@@ -183,3 +183,37 @@ export function scoreQuiz(
   const scorePct = total === 0 ? 0 : Math.round((correct / total) * 100);
   return { scorePct, correct, total };
 }
+
+export type SubAreaScore = { subArea: string; correct: number; total: number; pct: number };
+
+/**
+ * Positioning-diagnostic profile (Pilier 2): overall score + a per-sub-area
+ * breakdown + the TWO WEAKEST sub-areas framed as learning priorities (surfaced
+ * at Bloc 2 entry). A breakdown by sub-area is the point of the diagnostic — not
+ * a single percentage.
+ */
+export function diagnosticProfile(
+  questions: { id: string; correctKey: string; subArea?: string }[],
+  answers: Record<string, string>,
+) {
+  const byArea = new Map<string, { correct: number; total: number }>();
+  let correct = 0;
+  for (const q of questions) {
+    const ok = answers[q.id] === q.correctKey;
+    if (ok) correct++;
+    const area = q.subArea?.trim() || "général";
+    const e = byArea.get(area) ?? { correct: 0, total: 0 };
+    e.total++; if (ok) e.correct++;
+    byArea.set(area, e);
+  }
+  const total = questions.length;
+  const subAreaScores: SubAreaScore[] = [...byArea.entries()].map(([subArea, s]) => ({
+    subArea, correct: s.correct, total: s.total, pct: Math.round((s.correct / s.total) * 100),
+  }));
+  const priorities = subAreaScores
+    .slice()
+    .sort((a, b) => a.pct - b.pct || a.subArea.localeCompare(b.subArea))
+    .slice(0, 2)
+    .map((s) => ({ subArea: s.subArea, pct: s.pct }));
+  return { correct, total, scorePct: total === 0 ? 0 : Math.round((correct / total) * 100), subAreaScores, priorities };
+}

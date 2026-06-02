@@ -8,7 +8,7 @@
 import { Prisma, type ItemType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
-import { computeProgress, scoreQuiz, type CompletionRecord } from "../../domain/engine/progress.js";
+import { computeProgress, scoreQuiz, diagnosticProfile, type CompletionRecord } from "../../domain/engine/progress.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
@@ -203,16 +203,20 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
   if (block?.type !== "COMPREHENSION") throw new EngineError(409, "no_block", "Bloc 1 absent");
   assertUnlocked(ctx, block.index);
   const qs = block.payload.diagnosticQuiz.questions;
-  const { scorePct, correct, total } = scoreQuiz(qs, answers);
+  const { scorePct, correct, total, subAreaScores, priorities } = diagnosticProfile(qs, answers);
   const band = block.payload.diagnosticQuiz.profiles.find(
     (p) => correct >= p.scoreRange[0] && correct <= p.scoreRange[1],
   );
+  // Competency entry profile: 2 weakest sub-areas framed as priorities (Pilier 2).
   await upsertCompletion(enrollmentId, block.index, "DIAGNOSTIC_QUIZ", "diagnostic", scorePct, {
-    answers, correct, total, profile: band?.name ?? null,
+    answers, correct, total, profile: band?.name ?? null, subAreaScores, priorities,
   });
   await touch(enrollmentId, block.index, "diagnostic");
   await emitXapi(ctx, "completed", [`blocks/${block.index}`, "items/diagnostic"], "Quiz diagnostique", quizResult(scorePct, correct, total));
-  return { ...(await reconcile(enrollmentId)), quiz: { scorePct, correct, total, profile: band?.name ?? null } };
+  return {
+    ...(await reconcile(enrollmentId)),
+    quiz: { scorePct, correct, total, profile: band?.name ?? null, subAreaScores, priorities },
+  };
 }
 
 /** Final quiz (Bloc 3) — scored; gates Bloc 4 via the pass threshold. */
@@ -354,7 +358,16 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
 
   // Inject the Moment d'Ancrage everywhere in the block before rendering.
   const rendered = injectMomentAncrage(block, enrollment.momentAncrage);
-  return { state: bp.state, block: rendered };
+
+  // Bloc 2 (PRACTICE) surfaces the learner's diagnostic priorities (2 weakest
+  // sub-areas) as priority prompts at entry (Pilier 2).
+  let diagnosticPriorities: unknown = undefined;
+  if (block.type === "PRACTICE") {
+    const diag = enrollment.completions.find((c) => c.blockIndex === 1 && c.itemKey === "diagnostic");
+    const data = diag?.data as { priorities?: unknown } | null;
+    if (data?.priorities) diagnosticPriorities = data.priorities;
+  }
+  return { state: bp.state, block: rendered, ...(diagnosticPriorities ? { diagnosticPriorities } : {}) };
 }
 
 export async function getEnrollment(enrollmentId: string) {
