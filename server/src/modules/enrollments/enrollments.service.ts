@@ -541,6 +541,15 @@ export async function savePosition(enrollmentId: string, blockIndex: number, ite
   return getResume(enrollmentId);
 }
 
+/** Saved in-video offset for a specific session (cross-device resume-seek). */
+export async function getPosition(enrollmentId: string, blockIndex: number, itemKey: string) {
+  await loadContext(enrollmentId); // validates existence
+  const pos = await prisma.mediaPosition.findUnique({
+    where: { enrollmentId_blockIndex_itemKey: { enrollmentId, blockIndex, itemKey } },
+  });
+  return { positionSec: pos?.positionSec ?? 0, durationSec: pos?.durationSec ?? null };
+}
+
 export async function getResume(enrollmentId: string) {
   const { enrollment, content } = await loadContext(enrollmentId);
   const target = computeResume(

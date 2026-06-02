@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
-  getProjectSubmission, getResume, listEnrollmentsForUser, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
@@ -76,6 +76,15 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       positionSec: z.number().int().min(0).optional(), durationSec: z.number().int().positive().optional(),
     }).parse(req.body);
     try { return { data: await savePosition(id, blockIndex, itemKey, positionSec, durationSec) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Saved in-video offset for a specific session (resume-seek across devices)
+  app.get("/enrollments/:id/position", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { blockIndex, itemKey } = z.object({
+      blockIndex: z.coerce.number().int().min(0), itemKey: z.string().min(1),
+    }).parse(req.query);
+    try { return { data: await getPosition(id, blockIndex, itemKey) }; } catch (err) { return handle(reply, err); }
   });
 
   // xAPI statements for this enrolment
