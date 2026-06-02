@@ -270,6 +270,30 @@ the local cluster on port **5433**.
 
 ## Status
 
+### Spec coverage — KD-HCBLM v2.0 technical specification (complete)
+
+Audited against `KDHCBLM_v2_Platform_Technical_Specification.docx`. All
+NON-NEGOTIABLE / CRITICAL and REQUIRED backend items are closed and verified
+end-to-end against the live server:
+
+- **Auto-resume ±5s** within video (`MediaPosition`, cross-device) — §4.2.
+- **Positioning diagnostic** with sub-area breakdown + two weakest priorities — §2.
+- **Automated journal triggers** J+1/+3/+5/+7/+10/+14, PAM-injected, activity-independent — §5.1.
+- **Per-criterion rubric scoring** (each clamped to weight, weighted total auto-computed) — §6.3.
+- **Block 4 lifecycle**: `ProjectSubmission` (submission → evaluator assignment →
+  rubric result → feedback → pass/fail → revision status) with the **5-business-day
+  SLA admin alert** (`POST /jobs/project-sla/run`) — §6.3 / AC#14.
+- **Granular xAPI**: per-question (`answered` — selected/correct/time-on-question/
+  feedback-viewed), video-progress (`progressed`), exercise time-on-task — §5.2/§8.1/AC#11.
+- **Mobile messaging + push** channels (SMS/WhatsApp/PUSH), peer & learner phone,
+  multichannel re-engagement — §7.1/§7.2.
+- **Outbound event webhooks** (HMAC-signed: badge / block / project / Day+14 /
+  certificate / exercise) with a durable queue (`POST /jobs/webhooks/flush`) — §8.2.
+- **LRS query API** (`GET /lrs/statements` by learner/course/date/verb) — §8.1.
+- **Completion forecasting** + date-range analytics filters; **raw PAM export** — §7.3/§6.1.
+- **SCORM 2004 export** (alongside 1.2 / cmi5 / Common Cartridge) — §8.1.
+- **OpenAPI 3.1** doc + Redoc viewer (`/openapi.json`, `/docs`) — §8.3.
+
 - **Step 1 (done)** — Foundations: data model, the content contract, the publish
   gate, and the authoring course API — verified end-to-end against Postgres
   (create → validate → publish, with negative probes on the PAM thread, rubric
