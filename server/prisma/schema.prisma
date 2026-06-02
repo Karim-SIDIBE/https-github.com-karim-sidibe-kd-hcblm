@@ -111,6 +111,7 @@ model User {
   reviewedVersions CourseVersion[]       @relation("VersionReviewer")
   enrollments      Enrollment[]
   refreshTokens    RefreshToken[]
+  orgMemberships   OrganizationMembership[]
   hostedSessions   LiveSession[]         @relation("SessionHost")
   sessionRegistrations SessionRegistration[]
   cohortMemberships CohortMembership[]
@@ -158,10 +159,48 @@ model AuditLog {
 // A. Authoring — Course + versioned content document
 // ===========================================================================
 
+/// A tenant (organization / workspace). Org-scoped resources are isolated to it;
+/// resources with no organization are the shared platform catalog.
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  /// SCIM provisioning bearer-token hash (set when SCIM is enabled for the org).
+  scimTokenHash String?
+  createdAt DateTime @default(now())
+
+  memberships OrganizationMembership[]
+  courses     Course[]
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model OrganizationMembership {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orgRole        OrgRole      @default(MEMBER)
+  /// External id when provisioned via SCIM.
+  scimExternalId String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
 model Course {
   id        String   @id @default(cuid())
   /// Stable human-readable identifier, e.g. "gestion-du-temps-n1".
   slug      String   @unique
+  /// Owning tenant; null = shared platform catalog.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

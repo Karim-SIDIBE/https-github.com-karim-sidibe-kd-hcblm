@@ -56,8 +56,14 @@ function headline(content: CourseContent) {
   };
 }
 
-export async function listCourses() {
+/** List courses visible to the caller: the shared catalogue (no org) + courses
+ *  of the orgs they belong to ("all" for cross-tenant SUPER_ADMIN). */
+export async function listCourses(visibleOrgIds: string[] | "all") {
+  const where = visibleOrgIds === "all"
+    ? {}
+    : { OR: [{ organizationId: null }, { organizationId: { in: visibleOrgIds } }] };
   return prisma.course.findMany({
+    where,
     orderBy: { updatedAt: "desc" },
     include: {
       author: { select: { id: true, name: true, email: true } },
@@ -80,7 +86,7 @@ export async function getCourse(id: string) {
 }
 
 /** Create a course + its first DRAFT version from a content document. */
-export async function createCourse(params: { slug: string; content: unknown; authorId?: string }) {
+export async function createCourse(params: { slug: string; content: unknown; authorId?: string; organizationId?: string | null }) {
   const shape = validateShape(params.content);
   if (!shape.ok) throw new ContentInvalidError(shape.issues as never);
 
@@ -89,6 +95,7 @@ export async function createCourse(params: { slug: string; content: unknown; aut
     data: {
       slug: params.slug,
       authorId: params.authorId ?? null,
+      organizationId: params.organizationId ?? null,
       versions: {
         create: {
           version: 1,
@@ -103,7 +110,7 @@ export async function createCourse(params: { slug: string; content: unknown; aut
 }
 
 /** AI-assisted draft: generate a validated DRAFT course from a brief. */
-export async function draftCourse(brief: CourseBrief, authorId?: string) {
+export async function draftCourse(brief: CourseBrief, authorId?: string, organizationId?: string | null) {
   const { content, aiGenerated, provider } = await draftCourseContent(brief);
   const shape = validateShape(content);
   if (!shape.ok) throw new ContentInvalidError(shape.issues as never); // scaffold should never fail
@@ -111,7 +118,7 @@ export async function draftCourse(brief: CourseBrief, authorId?: string) {
   const slug = `${slugify(`${brief.domainLabel}-n${brief.level}`)}-${randomBytes(2).toString("hex")}`;
   const course = await prisma.course.create({
     data: {
-      slug, authorId: authorId ?? null,
+      slug, authorId: authorId ?? null, organizationId: organizationId ?? null,
       versions: {
         create: { version: 1, status: CourseStatus.DRAFT, ...headline(shape.content), content: shape.content as unknown as Prisma.InputJsonValue },
       },

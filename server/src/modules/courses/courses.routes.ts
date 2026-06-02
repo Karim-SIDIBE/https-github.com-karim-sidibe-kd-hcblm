@@ -17,6 +17,7 @@ import {
   validateContent,
 } from "./courses.service.js";
 import { guard } from "../../lib/auth.js";
+import { resolveTenant, memberOrgIds } from "../../lib/tenant.js";
 import { audit } from "../../lib/audit.js";
 
 const SlugSchema = z
@@ -43,21 +44,32 @@ function mapErr(reply: FastifyReply, err: unknown) {
 }
 
 export async function courseRoutes(app: FastifyInstance) {
-  // --- reads (any authenticated user with course:read) ---
-  app.get("/courses", { preHandler: guard("course:read") }, async () => ({ data: await listCourses() }));
+  // --- reads (any authenticated user with course:read), tenant-scoped ---
+  app.get("/courses", { preHandler: guard("course:read") }, async (req) => {
+    const p = req.principal!;
+    const visible = p.role === "SUPER_ADMIN" ? "all" as const : await memberOrgIds(p);
+    return { data: await listCourses(visible) };
+  });
 
   app.get("/courses/:id", { preHandler: guard("course:read") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const course = await getCourse(id);
     if (!course) return reply.notFound("Parcours introuvable");
+    // Tenant isolation: an org-scoped course is only visible to its members.
+    const p = req.principal!;
+    if (course.organizationId && p.role !== "SUPER_ADMIN") {
+      const member = (await memberOrgIds(p)).includes(course.organizationId);
+      if (!member) return reply.notFound("Parcours introuvable");
+    }
     return { data: course };
   });
 
   // --- authoring (Learning Designer) ---
   app.post("/courses", { preHandler: guard("course:create") }, async (req, reply) => {
     const body = CreateBody.parse(req.body);
+    const ctx = await resolveTenant(req.principal!, req.headers["x-org-id"]);
     try {
-      const course = await createCourse({ slug: body.slug, authorId: body.authorId ?? req.principal?.id, content: body.content });
+      const course = await createCourse({ slug: body.slug, authorId: body.authorId ?? req.principal?.id, content: body.content, organizationId: ctx?.organizationId });
       return reply.status(201).send({ data: course });
     } catch (err) { return mapErr(reply, err); }
   });
@@ -72,8 +84,9 @@ export async function courseRoutes(app: FastifyInstance) {
       audience: z.string().optional(),
       competencies: z.array(z.object({ code: z.string(), label: z.string() })).optional(),
     }).parse(req.body);
+    const ctx = await resolveTenant(req.principal!, req.headers["x-org-id"]);
     try {
-      const result = await draftCourse(brief, req.principal?.id);
+      const result = await draftCourse(brief, req.principal?.id, ctx?.organizationId);
       return reply.status(201).send({ data: result });
     } catch (err) { return mapErr(reply, err); }
   });

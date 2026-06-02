@@ -219,6 +219,17 @@ Admins may publish directly.
 | POST | `/versions/:id/review` | `course:review` (`approve` / `request_changes`) |
 | POST | `/versions/:id/archive` | `course:archive` |
 
+**Multi-tenancy** (organizations / workspaces; `x-org-id` selects the tenant)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST/GET | `/organizations` | Create (`org:manage`) / list (membership-scoped) |
+| GET | `/organizations/:id/members` · POST · DELETE | Membership (org OWNER/ADMIN or `org:manage`) |
+
+Courses carry an optional `organizationId` (null = shared catalogue). `GET /courses`
+returns the shared catalogue + the caller's org courses; a private course is
+hidden (404) from non-members. SUPER_ADMIN is cross-tenant.
+
 **Authentication**
 
 | Method | Path | Purpose |
@@ -384,6 +395,11 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   descriptors, **SCORM RTE tracking** (cmi data model persisted on Commit), and
   **cmi5** launch (endpoint/fetch/registration/actor params) reporting to an
   **inbound xAPI LRS** endpoint.
+- **Multi-tenancy (done)** — organizations (tenants) with memberships (OWNER/
+  ADMIN/MEMBER). Courses are optionally org-scoped; the catalogue is isolated per
+  tenant (shared global content + the caller's org content; private courses
+  hidden from non-members), with cross-tenant SUPER_ADMIN. Tenant selected via
+  the `x-org-id` header, validated against membership. (SCIM next.)
 - **Interoperability — export / migration (done)** — export any published course
   to a standard, portable package: **SCORM 1.2** (universal), **cmi5** (xAPI) or
   **Common Cartridge 1.3** (Canvas/Moodle/Blackboard/D2L). Content is rendered to
