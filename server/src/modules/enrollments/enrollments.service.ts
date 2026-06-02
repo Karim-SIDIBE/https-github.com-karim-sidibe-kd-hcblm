@@ -594,3 +594,26 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
 export async function getEnrollment(enrollmentId: string) {
   return reconcile(enrollmentId);
 }
+
+/** Lightweight list of a learner's enrolments (for the PWA enrolment picker). */
+export async function listEnrollmentsForUser(userId: string) {
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId },
+    include: { courseVersion: { include: { course: true } }, completions: { select: { blockIndex: true, itemKey: true, scorePct: true } } },
+    orderBy: { startedAt: "desc" },
+  });
+  return enrollments.map((e) => {
+    const content = CourseContent.parse(e.courseVersion.content);
+    const progress = computeProgress(content, toRecords(e.completions), Boolean(e.momentAncrage));
+    return {
+      id: e.id,
+      status: e.status,
+      course: { slug: e.courseVersion.course.slug, title: e.courseVersion.title, level: e.courseVersion.level },
+      blocksTotal: content.blocks.length,
+      blocksCompleted: progress.completedBlockIndexes.length,
+      progressPercent: Math.round((progress.completedBlockIndexes.length / content.blocks.length) * 100),
+      lastSeenAt: e.lastSeenAt,
+      startedAt: e.startedAt,
+    };
+  });
+}

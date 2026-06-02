@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
-  getProjectSubmission, getResume, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  getProjectSubmission, getResume, listEnrollmentsForUser, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
@@ -46,6 +46,14 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       const e = await enroll(userId, courseId, isEnterprise ?? false);
       return reply.status(201).send({ data: e });
     } catch (err) { return handle(reply, err); }
+  });
+
+  // List the caller's own enrolments (staff may target another user via ?userId).
+  app.get("/enrollments", { preHandler: [authenticate] }, async (req) => {
+    const { userId } = z.object({ userId: z.string().optional() }).parse(req.query ?? {});
+    const p = req.principal!;
+    const target = userId && isStaff(p.role) ? userId : p.id;
+    return { data: await listEnrollmentsForUser(target) };
   });
 
   // Full progress map + badges — owner or staff

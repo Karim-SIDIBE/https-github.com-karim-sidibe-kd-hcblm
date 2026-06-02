@@ -49,6 +49,7 @@ export function openapiDocument() {
         post: { tags: ["Auth"], summary: "OAuth 2.0 token endpoint (password / refresh grants)", security: [], responses: ok("Token issued") },
       },
       "/enrollments": {
+        get: { tags: ["Enrolments"], summary: "List the caller's enrolments (course, status, progress)", responses: ok("Enrolment list") },
         post: { tags: ["Enrolments"], summary: "Enrol a learner in a course", responses: { 201: { description: "Enrolment created" } } },
       },
       "/enrollments/{id}": {
