@@ -115,12 +115,12 @@ async function applyOne(enrollmentId: string, type: string, payload: Record<stri
     case "peer": return designatePeer(enrollmentId, String(payload.name ?? ""), String(payload.email ?? ""));
     case "position": return savePosition(enrollmentId, num(payload.blockIndex), String(payload.itemKey ?? ""), payload.positionSec != null ? num(payload.positionSec) : undefined, payload.durationSec != null ? num(payload.durationSec) : undefined);
     case "complete_item":
-      return completeItem(enrollmentId, num(payload.blockIndex), payload.itemType as never, String(payload.itemKey ?? ""), payload.data);
+      return completeItem(enrollmentId, num(payload.blockIndex), payload.itemType as never, String(payload.itemKey ?? ""), payload.data, (payload.meta ?? {}) as never);
     case "quiz_trigger":
       return submitTriggerQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, payload.profileKey as string | undefined);
-    case "quiz_diagnostic": return submitDiagnosticQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>);
-    case "quiz_interblock": return submitInterBlockQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>);
-    case "quiz_final": return submitFinalQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>);
+    case "quiz_diagnostic": return submitDiagnosticQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, (payload.meta ?? {}) as never);
+    case "quiz_interblock": return submitInterBlockQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, (payload.meta ?? {}) as never);
+    case "quiz_final": return submitFinalQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, (payload.meta ?? {}) as never);
     default: throw new OfflineError(400, "unknown_type", `Type d'action inconnu : ${type}`);
   }
 }

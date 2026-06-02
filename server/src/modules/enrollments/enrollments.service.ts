@@ -14,7 +14,7 @@ import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../dom
 import { computeResume } from "../../domain/engine/resume.js";
 import { SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
-import { activityId, buildStatement, quizResult, type VerbKey } from "../../domain/engine/xapi.js";
+import { activityId, buildStatement, quizResult, secondsToIsoDuration, XAPI_EXT, type VerbKey } from "../../domain/engine/xapi.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { issueCredential } from "../credentials/credentials.service.js";
 
@@ -46,16 +46,55 @@ async function emitXapi(
   objectParts: string[],
   objectName: string,
   result?: Parameters<typeof buildStatement>[0]["result"],
+  contextExtensions?: Record<string, unknown>,
 ) {
   const { enrollment } = ctx;
   const objectId = activityId(enrollment.course.slug, objectParts);
   const statement = buildStatement({
     actor: { name: enrollment.user.name, userId: enrollment.userId },
-    verb, objectId, objectName, result, enrollmentId: enrollment.id,
+    verb, objectId, objectName, result, enrollmentId: enrollment.id, contextExtensions,
   });
   await prisma.xapiStatement.create({
     data: { enrollmentId: enrollment.id, verb, objectId, statement: statement as unknown as Prisma.InputJsonValue },
   });
+}
+
+/** Per-question response metadata the client may attach for granular xAPI. */
+type QuestionMeta = Record<string, { timeMs?: number; feedbackViewed?: boolean }>;
+
+/**
+ * Emit one `answered` statement per question (§5.2 / AC#11): records question
+ * ID, selected option, correct option, time-on-question (s), and feedback-viewed.
+ */
+async function emitQuestionStatements(
+  ctx: Awaited<ReturnType<typeof loadContext>>,
+  blockIndex: number,
+  itemKey: string,
+  questions: { id: string; correctKey?: string }[],
+  answers: Record<string, string>,
+  meta: QuestionMeta = {},
+) {
+  for (const q of questions) {
+    const selected = answers[q.id];
+    if (selected == null) continue;
+    const m = meta[q.id] ?? {};
+    const correct = q.correctKey != null ? selected === q.correctKey : undefined;
+    const result: Parameters<typeof buildStatement>[0]["result"] = {
+      response: selected,
+      ...(correct != null ? { success: correct } : {}),
+      ...(m.timeMs != null ? { duration: secondsToIsoDuration(m.timeMs / 1000) } : {}),
+      extensions: {
+        ...(q.correctKey != null ? { [XAPI_EXT.correctResponse]: q.correctKey } : {}),
+        [XAPI_EXT.feedbackViewed]: Boolean(m.feedbackViewed),
+        ...(m.timeMs != null ? { [XAPI_EXT.timeOnTaskSeconds]: Math.round(m.timeMs / 1000) } : {}),
+      },
+    };
+    await emitXapi(
+      ctx, "answered", [`blocks/${blockIndex}`, `items/${itemKey}`, `questions/${q.id}`],
+      `Question ${q.id}`, result,
+      { [XAPI_EXT.block]: blockIndex, [XAPI_EXT.session]: itemKey },
+    );
+  }
 }
 
 /**
@@ -152,8 +191,11 @@ async function upsertCompletion(
   });
 }
 
+/** Exercise interaction metadata for granular xAPI (§5.3 / §5.4). */
+export type ExerciseMeta = { timeMs?: number; feedbackViewed?: boolean; response?: string; correct?: boolean };
+
 export async function completeItem(
-  enrollmentId: string, blockIndex: number, itemType: ItemType, itemKey: string, data?: unknown,
+  enrollmentId: string, blockIndex: number, itemType: ItemType, itemKey: string, data?: unknown, meta: ExerciseMeta = {},
 ) {
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
@@ -168,7 +210,22 @@ export async function completeItem(
     });
   }
   await touch(enrollmentId, blockIndex, itemKey);
-  await emitXapi(ctx, "completed", [`blocks/${blockIndex}`, `items/${itemKey}`], `${itemType} ${itemKey}`);
+  // Exercise-completion statement with time-on-exercise + feedback-viewed (§5.4).
+  const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
+  const result = hasMeta ? {
+    completion: true,
+    ...(meta.response != null ? { response: meta.response } : {}),
+    ...(meta.correct != null ? { success: meta.correct } : {}),
+    ...(meta.timeMs != null ? { duration: secondsToIsoDuration(meta.timeMs / 1000) } : {}),
+    extensions: {
+      [XAPI_EXT.feedbackViewed]: Boolean(meta.feedbackViewed),
+      ...(meta.timeMs != null ? { [XAPI_EXT.timeOnTaskSeconds]: Math.round(meta.timeMs / 1000) } : {}),
+    },
+  } : undefined;
+  await emitXapi(
+    ctx, "completed", [`blocks/${blockIndex}`, `items/${itemKey}`], `${itemType} ${itemKey}`, result,
+    { [XAPI_EXT.block]: blockIndex, [XAPI_EXT.session]: itemKey, [XAPI_EXT.exercise]: itemKey },
+  );
   return reconcile(enrollmentId);
 }
 
@@ -231,7 +288,7 @@ export async function submitTriggerQuiz(enrollmentId: string, answers: Record<st
 }
 
 /** Inter-block quiz (Bloc 2) — non-scored consolidation; records answers + correct count. */
-export async function submitInterBlockQuiz(enrollmentId: string, answers: Record<string, string>) {
+export async function submitInterBlockQuiz(enrollmentId: string, answers: Record<string, string>, meta: QuestionMeta = {}) {
   const ctx = await loadContext(enrollmentId);
   const block = ctx.content.blocks.find((b) => b.type === "PRACTICE");
   if (block?.type !== "PRACTICE" || !block.payload.interBlockQuiz) {
@@ -242,12 +299,13 @@ export async function submitInterBlockQuiz(enrollmentId: string, answers: Record
   const { correct, total } = scoreQuiz(qs, answers); // for feedback only — not gated
   await upsertCompletion(enrollmentId, block.index, "INTER_BLOCK_QUIZ", "interblock", null, { answers, correct, total });
   await touch(enrollmentId, block.index, "interblock");
+  await emitQuestionStatements(ctx, block.index, "interblock", qs, answers, meta);
   await emitXapi(ctx, "completed", [`blocks/${block.index}`, "items/interblock"], "Quiz interbloc");
   return { ...(await reconcile(enrollmentId)), quiz: { correct, total, scored: false } };
 }
 
 /** Diagnostic quiz (Bloc 1) — scored on /N, mapped to a profile band. */
-export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record<string, string>) {
+export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record<string, string>, meta: QuestionMeta = {}) {
   const ctx = await loadContext(enrollmentId);
   const block = ctx.content.blocks.find((b) => b.type === "COMPREHENSION");
   if (block?.type !== "COMPREHENSION") throw new EngineError(409, "no_block", "Bloc 1 absent");
@@ -262,6 +320,7 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
     answers, correct, total, profile: band?.name ?? null, subAreaScores, priorities,
   });
   await touch(enrollmentId, block.index, "diagnostic");
+  await emitQuestionStatements(ctx, block.index, "diagnostic", qs, answers, meta);
   await emitXapi(ctx, "completed", [`blocks/${block.index}`, "items/diagnostic"], "Quiz diagnostique", quizResult(scorePct, correct, total));
   return {
     ...(await reconcile(enrollmentId)),
@@ -270,7 +329,7 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
 }
 
 /** Final quiz (Bloc 3) — scored; gates Bloc 4 via the pass threshold. */
-export async function submitFinalQuiz(enrollmentId: string, answers: Record<string, string>) {
+export async function submitFinalQuiz(enrollmentId: string, answers: Record<string, string>, meta: QuestionMeta = {}) {
   const ctx = await loadContext(enrollmentId);
   const block = ctx.content.blocks.find((b) => b.type === "ANCHORING");
   if (block?.type !== "ANCHORING") throw new EngineError(409, "no_block", "Bloc 3 absent");
@@ -280,6 +339,7 @@ export async function submitFinalQuiz(enrollmentId: string, answers: Record<stri
   const threshold = block.payload.finalQuiz.passThreshold;
   await upsertCompletion(enrollmentId, block.index, "FINAL_QUIZ", "final", scorePct, { answers, correct, total });
   await touch(enrollmentId, block.index, "final");
+  await emitQuestionStatements(ctx, block.index, "final", qs, answers, meta);
   const passed = scorePct >= threshold;
   await emitXapi(ctx, passed ? "passed" : "failed", [`blocks/${block.index}`, "items/final"], "Quiz final", quizResult(scorePct, correct, total, threshold));
   return { ...(await reconcile(enrollmentId)), quiz: { scorePct, correct, total, passed, threshold } };
@@ -422,7 +482,7 @@ export async function reconcile(enrollmentId: string) {
  * exact spot across devices (server-side state — Pilier 4.2).
  */
 export async function savePosition(enrollmentId: string, blockIndex: number, itemKey: string, positionSec?: number, durationSec?: number) {
-  await loadContext(enrollmentId);
+  const ctx = await loadContext(enrollmentId);
   await touch(enrollmentId, blockIndex, itemKey);
   if (positionSec != null) {
     const rounded = Math.max(0, Math.round(positionSec / 5) * 5);
@@ -431,6 +491,18 @@ export async function savePosition(enrollmentId: string, blockIndex: number, ite
       update: { positionSec: rounded, durationSec: durationSec ?? undefined },
       create: { enrollmentId, blockIndex, itemKey, positionSec: rounded, durationSec: durationSec ?? null },
     });
+    // Video-progress statement (ADL Video Profile §8.1): position in seconds and,
+    // when the length is known, fraction viewed.
+    await emitXapi(
+      ctx, "progressed", [`blocks/${blockIndex}`, `items/${itemKey}`, "video"], `Vidéo ${itemKey}`,
+      {
+        extensions: {
+          [XAPI_EXT.videoTime]: rounded,
+          ...(durationSec ? { [XAPI_EXT.videoLength]: durationSec, [XAPI_EXT.videoProgress]: Math.min(1, Math.round((rounded / durationSec) * 100) / 100) } : {}),
+        },
+      },
+      { [XAPI_EXT.block]: blockIndex, [XAPI_EXT.session]: itemKey },
+    );
   }
   return getResume(enrollmentId);
 }

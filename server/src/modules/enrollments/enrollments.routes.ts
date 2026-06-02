@@ -21,6 +21,11 @@ const GenericItemType = z.enum([
 
 const idParam = z.object({ id: z.string() });
 const answers = z.record(z.string(), z.string());
+/** Per-question response metadata for granular xAPI (§5.2): time + feedback-viewed. */
+const questionMeta = z.record(z.string(), z.object({
+  timeMs: z.number().int().min(0).optional(),
+  feedbackViewed: z.boolean().optional(),
+})).optional();
 
 function handle(reply: import("fastify").FastifyReply, err: unknown) {
   if (err instanceof EngineError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
@@ -99,8 +104,14 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       itemType: GenericItemType,
       itemKey: z.string().min(1),
       data: z.unknown().optional(),
+      meta: z.object({
+        timeMs: z.number().int().min(0).optional(),
+        feedbackViewed: z.boolean().optional(),
+        response: z.string().optional(),
+        correct: z.boolean().optional(),
+      }).optional(),
     }).parse(req.body);
-    try { return { data: await completeItem(id, body.blockIndex, body.itemType, body.itemKey, body.data) }; }
+    try { return { data: await completeItem(id, body.blockIndex, body.itemType, body.itemKey, body.data, body.meta) }; }
     catch (err) { return handle(reply, err); }
   });
 
@@ -113,20 +124,20 @@ export async function enrollmentRoutes(app: FastifyInstance) {
 
   app.post("/enrollments/:id/quiz/interblock", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { answers: a } = z.object({ answers }).parse(req.body);
-    try { return { data: await submitInterBlockQuiz(id, a) }; } catch (err) { return handle(reply, err); }
+    const { answers: a, meta } = z.object({ answers, meta: questionMeta }).parse(req.body);
+    try { return { data: await submitInterBlockQuiz(id, a, meta) }; } catch (err) { return handle(reply, err); }
   });
 
   app.post("/enrollments/:id/quiz/diagnostic", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { answers: a } = z.object({ answers }).parse(req.body);
-    try { return { data: await submitDiagnosticQuiz(id, a) }; } catch (err) { return handle(reply, err); }
+    const { answers: a, meta } = z.object({ answers, meta: questionMeta }).parse(req.body);
+    try { return { data: await submitDiagnosticQuiz(id, a, meta) }; } catch (err) { return handle(reply, err); }
   });
 
   app.post("/enrollments/:id/quiz/final", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { answers: a } = z.object({ answers }).parse(req.body);
-    try { return { data: await submitFinalQuiz(id, a) }; } catch (err) { return handle(reply, err); }
+    const { answers: a, meta } = z.object({ answers, meta: questionMeta }).parse(req.body);
+    try { return { data: await submitFinalQuiz(id, a, meta) }; } catch (err) { return handle(reply, err); }
   });
 
   // Human rubric evaluation — evaluator/admin only (NOT the learner).
