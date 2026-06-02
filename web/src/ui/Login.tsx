@@ -1,0 +1,28 @@
+import { useState } from "react";
+import { api } from "../lib/app";
+
+export function Login({ onLogin }: { onLogin: () => void }) {
+  const [email, setEmail] = useState("admin@kompetences.net");
+  const [password, setPassword] = useState("Declick!Dev2026");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await api.login(email, password); onLogin(); }
+    catch { setError("Identifiants invalides"); }
+    finally { setBusy(false); }
+  }
+
+  return (
+    <form className="card" onSubmit={submit} style={{ maxWidth: 360, margin: "60px auto" }}>
+      <h1>Kompetences Declick</h1>
+      <p className="muted">Connexion apprenant</p>
+      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
+      <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required /></label>
+      {error && <p className="ko">{error}</p>}
+      <button disabled={busy}>{busy ? "…" : "Se connecter"}</button>
+    </form>
+  );
+}

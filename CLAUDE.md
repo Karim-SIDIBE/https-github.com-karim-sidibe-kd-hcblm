@@ -4,8 +4,10 @@ Kompetences Declick learning platform. Two parts:
 
 - **`project/`** — design source: the handoff spec, the real Niveau 1 course
   (`project/course_extracted.md`) and the learner-UI prototype.
-- **`server/`** — the production backend (this is where most work happens). See
+- **`server/`** — the production backend (most work happens here). See
   **`server/README.md`** for the full architecture, API and status.
+- **`web/`** — the offline-first learner **PWA** (Vite · React · TypeScript)
+  consuming the API. See **`web/README.md`**.
 
 ## The one non-negotiable: the content model is the contract
 
