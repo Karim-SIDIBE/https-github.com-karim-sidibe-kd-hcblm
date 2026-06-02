@@ -7,10 +7,43 @@ import { CourseContent } from "../../domain/content-model.js";
 import { computeResume } from "../../domain/engine/resume.js";
 import { dueStage, daysInactive, type Stage } from "../../domain/engine/reengagement.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { generateNudge } from "../../lib/ai/nudge.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 
 const MS_PER_DAY = 86_400_000;
+const ADMIN_EMAIL = "admin@kompetences.net";
+
+/**
+ * Bloc 4 SLA enforcement (spec §6.3, AC#14) — alert the course administrator
+ * when a submitted certification project has not been evaluated within
+ * 5 business days. Idempotent per submission via `slaAlertedAt`.
+ */
+export async function runProjectSlaAlerts(now: Date = new Date()) {
+  const pending = await prisma.projectSubmission.findMany({
+    where: { evaluatedAt: null, slaAlertedAt: null },
+    include: { enrollment: { include: { user: true } }, evaluator: true },
+  });
+  const alerted: { enrollmentId: string; submittedAt: Date; evaluator: string | null }[] = [];
+
+  for (const s of pending) {
+    if (!slaAlertDue(s.submittedAt, now)) continue;
+    const who = s.evaluator ? `assigné à ${s.evaluator.name}` : "non encore assigné";
+    await enqueueNotification({
+      enrollmentId: s.enrollmentId, recipientKind: "ADMIN", recipient: ADMIN_EMAIL,
+      subject: `SLA dépassé — projet de ${s.enrollment.user.name} sans évaluation`,
+      body:
+        `Le projet de certification de ${s.enrollment.user.name} a été soumis le ` +
+        `${s.submittedAt.toISOString().slice(0, 10)} et n'a pas reçu d'évaluation après ` +
+        `${SLA_ALERT_BUSINESS_DAYS} jours ouvrés (engagement : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés). ` +
+        `Évaluateur : ${who}. Merci d'intervenir pour préserver l'engagement de délai.`,
+      provider: "project-sla",
+    });
+    await prisma.projectSubmission.update({ where: { id: s.id }, data: { slaAlertedAt: now } });
+    alerted.push({ enrollmentId: s.enrollmentId, submittedAt: s.submittedAt, evaluator: s.evaluator?.name ?? null });
+  }
+  return { scanned: pending.length, alerted };
+}
 
 /**
  * Journal trigger scheduler (Pilier 5.1) — pushes the PAM-injected journal prompt

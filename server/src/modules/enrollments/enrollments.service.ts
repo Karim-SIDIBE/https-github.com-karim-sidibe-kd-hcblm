@@ -12,6 +12,8 @@ import { computeProgress, scoreQuiz, diagnosticProfile, type CompletionRecord } 
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
+import { SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
+import { hasPermission } from "../../domain/auth/permissions.js";
 import { activityId, buildStatement, quizResult, type VerbKey } from "../../domain/engine/xapi.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { issueCredential } from "../credentials/credentials.service.js";
@@ -156,9 +158,57 @@ export async function completeItem(
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
   await upsertCompletion(enrollmentId, blockIndex, itemType, itemKey, null, data ?? null);
+  // Bloc 4 project: open/refresh the certification-project record (starts the
+  // 5-business-day SLA clock). The full lifecycle is kept in-platform (§6.3).
+  if (itemType === "PROJECT") {
+    await prisma.projectSubmission.upsert({
+      where: { enrollmentId },
+      update: { submittedAt: new Date(), content: (data ?? null) as Prisma.InputJsonValue, revisionStatus: "SUBMITTED", slaAlertedAt: null },
+      create: { enrollmentId, blockIndex, content: (data ?? null) as Prisma.InputJsonValue },
+    });
+  }
   await touch(enrollmentId, blockIndex, itemKey);
   await emitXapi(ctx, "completed", [`blocks/${blockIndex}`, `items/${itemKey}`], `${itemType} ${itemKey}`);
   return reconcile(enrollmentId);
+}
+
+/**
+ * Assign an evaluator (an EVALUATOR / staff user) to a Bloc 4 project (§6.3).
+ * The learner must have submitted the project first.
+ */
+export async function assignEvaluator(enrollmentId: string, evaluatorId: string) {
+  const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
+  if (!submission) throw new EngineError(409, "no_submission", "Aucun projet soumis pour cette inscription");
+  const evaluator = await prisma.user.findUnique({ where: { id: evaluatorId } });
+  if (!evaluator) throw new EngineError(404, "no_evaluator", "Évaluateur introuvable");
+  if (!hasPermission(evaluator.role, "evaluation:grade")) {
+    throw new EngineError(422, "not_evaluator", `${evaluator.name} ne peut pas évaluer (rôle ${evaluator.role})`);
+  }
+  const updated = await prisma.projectSubmission.update({
+    where: { enrollmentId },
+    data: {
+      evaluatorId, assignedAt: new Date(),
+      revisionStatus: submission.evaluatedAt ? submission.revisionStatus : "ASSIGNED",
+    },
+  });
+  // Notify the evaluator that work is waiting (in-platform, not e-mail-only).
+  await enqueueNotification({
+    enrollmentId, recipientKind: "ADMIN", recipient: evaluator.email,
+    subject: "Projet de certification à évaluer",
+    body: `Un projet de certification (Bloc 4) vous a été assigné. Engagement de retour : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés.`,
+    provider: "project",
+  });
+  return updated;
+}
+
+/** Full project record for verification / reporting (§6.3 metadata). */
+export async function getProjectSubmission(enrollmentId: string) {
+  const submission = await prisma.projectSubmission.findUnique({
+    where: { enrollmentId },
+    include: { evaluator: { select: { id: true, name: true, email: true } } },
+  });
+  if (!submission) throw new EngineError(404, "no_submission", "Aucun projet soumis pour cette inscription");
+  return submission;
 }
 
 // --- quizzes ----------------------------------------------------------------
@@ -249,7 +299,7 @@ export type RubricEvaluationInput = {
  * weight and the weighted total (= sum, rubric totals 100) is computed by the
  * platform. A single `scorePct` is still accepted for compatibility.
  */
-export async function recordRubricEvaluation(enrollmentId: string, input: RubricEvaluationInput) {
+export async function recordRubricEvaluation(enrollmentId: string, input: RubricEvaluationInput, gradedBy?: string) {
   const ctx = await loadContext(enrollmentId);
   const block = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
   if (block?.type !== "CERTIFICATION") throw new EngineError(409, "no_block", "Bloc 4 absent");
@@ -272,9 +322,37 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
     throw new EngineError(422, "missing_score", "Fournir criteria[] (par critère) ou scorePct");
   }
 
+  const passed = scorePct >= threshold;
   await upsertCompletion(enrollmentId, block.index, "RUBRIC_EVALUATION", "rubric", scorePct, { notes: input.notes ?? null, criteria: breakdown });
-  await emitXapi(ctx, scorePct >= threshold ? "passed" : "failed", [`blocks/${block.index}`, "items/rubric"], "Évaluation grille", quizResult(scorePct, scorePct, 100, threshold));
-  return { ...(await reconcile(enrollmentId)), evaluation: { scorePct, threshold, passed: scorePct >= threshold, breakdown } };
+
+  // Close the project lifecycle on the submission record (stops the SLA clock,
+  // freezes the verification metadata) and notify the learner of the result.
+  const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
+  if (submission) {
+    await prisma.projectSubmission.update({
+      where: { enrollmentId },
+      data: {
+        evaluatorId: submission.evaluatorId ?? gradedBy ?? null,
+        scoreTotal: scorePct,
+        criteria: (breakdown ?? null) as Prisma.InputJsonValue,
+        feedback: input.notes ?? null,
+        result: passed ? "PASS" : "FAIL",
+        evaluatedAt: new Date(),
+        revisionStatus: passed ? "PASSED" : "REVISION_REQUESTED",
+      },
+    });
+    await enqueueNotification({
+      enrollmentId, recipientKind: "LEARNER", recipient: ctx.enrollment.user.email,
+      subject: passed ? "Projet de certification validé 🎉" : "Projet de certification — révision demandée",
+      body: passed
+        ? `Félicitations ! Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}).${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`
+        : `Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}). Une révision est demandée.${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`,
+      provider: "project",
+    });
+  }
+
+  await emitXapi(ctx, passed ? "passed" : "failed", [`blocks/${block.index}`, "items/rubric"], "Évaluation grille", quizResult(scorePct, scorePct, 100, threshold));
+  return { ...(await reconcile(enrollmentId)), evaluation: { scorePct, threshold, passed, breakdown } };
 }
 
 // --- reconciliation: recompute progress + issue badges ----------------------

@@ -19,6 +19,7 @@ export type Permission =
   | "enrollment:create" // enrol someone (self handled by ownership)
   | "enrollment:read_any" // read any enrolment (staff)
   | "evaluation:grade" // Bloc 4 rubric scoring
+  | "evaluation:assign" // assign an evaluator to a Bloc 4 project
   | "user:manage" // create / manage users
   | "job:run" // trigger scheduled jobs
   | "analytics:read" // dashboards / reports
@@ -33,7 +34,7 @@ export type Permission =
 const ALL: Permission[] = [
   "course:create", "course:read", "course:update", "course:submit_review",
   "course:review", "course:publish", "course:archive",
-  "enrollment:create", "enrollment:read_any", "evaluation:grade",
+  "enrollment:create", "enrollment:read_any", "evaluation:grade", "evaluation:assign",
   "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
 ];
 
@@ -42,7 +43,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   COURSE_ADMIN: [
     "course:create", "course:read", "course:update", "course:submit_review",
     "course:review", "course:publish", "course:archive",
-    "enrollment:create", "enrollment:read_any", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
+    "enrollment:create", "enrollment:read_any", "evaluation:assign", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
   ],
   LEARNING_DESIGNER: ["course:create", "course:read", "course:update", "course:submit_review", "media:manage"],
   REVIEWER: ["course:read", "course:review", "course:publish"],

@@ -117,6 +117,7 @@ model User {
   cohortMemberships CohortMembership[]
   authoredThreads  ForumThread[]         @relation("ThreadAuthor")
   authoredPosts    ForumPost[]           @relation("PostAuthor")
+  evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
 
   @@index([role])
 }
@@ -577,6 +578,7 @@ model Enrollment {
   tutorSessions  TutorSession[]
   mediaPositions MediaPosition[]
   journalTriggers JournalTrigger[]
+  projectSubmission ProjectSubmission?
 
   @@unique([userId, courseId])
   @@index([status])
@@ -657,6 +659,49 @@ model MediaPosition {
 
   @@unique([enrollmentId, blockIndex, itemKey])
   @@index([enrollmentId])
+}
+
+/// Bloc 4 certification project lifecycle (Pilier 6.3) — the authoritative
+/// in-platform record for employer / institutional verification: submission,
+/// evaluator assignment, per-criterion rubric result, written feedback,
+/// pass/fail, revision status, and the 5-business-day SLA alert state.
+/// One per enrolment (the final certification deliverable).
+model ProjectSubmission {
+  id             String         @id @default(cuid())
+  enrollmentId   String         @unique
+  enrollment     Enrollment     @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  blockIndex     Int
+  /// Submission payload: file references or rich-text body.
+  submittedAt    DateTime       @default(now())
+  content        Json?
+  /// Evaluator assignment (an EVALUATOR / staff user).
+  evaluatorId    String?
+  evaluator      User?          @relation("EvaluatorAssignments", fields: [evaluatorId], references: [id], onDelete: SetNull)
+  assignedAt     DateTime?
+  /// Evaluation result — mirrors the rubric completion for the verification API.
+  scoreTotal     Int?
+  criteria       Json?
+  feedback       String?
+  result         ProjectResult?
+  evaluatedAt    DateTime?
+  /// SUBMITTED → ASSIGNED → PASSED | REVISION_REQUESTED.
+  revisionStatus ProjectStatus  @default(SUBMITTED)
+  /// Day+5 SLA: set once the admin alert has fired (idempotent).
+  slaAlertedAt   DateTime?
+
+  @@index([evaluatorId])
+}
+
+enum ProjectResult {
+  PASS
+  FAIL
+}
+
+enum ProjectStatus {
+  SUBMITTED
+  ASSIGNED
+  PASSED
+  REVISION_REQUESTED
 }
 
 /// One row per completed content item for an enrolment.

@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
-  EngineError, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
-  getResume, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
+  getProjectSubmission, getResume, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
@@ -139,8 +139,25 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       notes: z.string().optional(),
     }).parse(req.body);
     try {
-      const data = await recordRubricEvaluation(id, body);
+      const data = await recordRubricEvaluation(id, body, req.principal!.id);
       await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct } });
+      return { data };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Bloc 4 project record — full lifecycle metadata (owner or staff; §6.3).
+  app.get("/enrollments/:id/project", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await getProjectSubmission(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Assign an evaluator to the Bloc 4 project — admin only (NOT the learner).
+  app.post("/enrollments/:id/project/assign", { preHandler: [authenticate, authorize("evaluation:assign")] }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { evaluatorId } = z.object({ evaluatorId: z.string().min(1) }).parse(req.body);
+    try {
+      const data = await assignEvaluator(id, evaluatorId);
+      await audit({ actorId: req.principal!.id, action: "evaluation.assign", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { evaluatorId } });
       return { data };
     } catch (err) { return handle(reply, err); }
   });

@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { runReEngagement, runJournalTriggers } from "./jobs.service.js";
+import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "./jobs.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
 import { guard } from "../../lib/auth.js";
@@ -22,6 +22,12 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/journal-triggers/run", { preHandler: guard("job:run") }, async (req) => {
     const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
     return { data: await runJournalTriggers(now ? new Date(now) : new Date()) };
+  });
+
+  // Bloc 4 SLA: alert admin for projects unevaluated after 5 business days.
+  app.post("/jobs/project-sla/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
+    return { data: await runProjectSlaAlerts(now ? new Date(now) : new Date()) };
   });
 
   // Forward stored xAPI statements to the external LRS.
