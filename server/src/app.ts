@@ -27,6 +27,8 @@ import { exportRoutes } from "./modules/export/export.routes.js";
 import { credentialRoutes } from "./modules/credentials/credentials.routes.js";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
+import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
+import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -95,6 +97,8 @@ export async function buildApp(): Promise<FastifyInstance> {
       await credentialRoutes(api);
       await analyticsRoutes(api);
       await auditRoutes(api);
+      await webhookRoutes(api);
+      await docsRoutes(api);
       await jobRoutes(api);
     },
     { prefix: "/api/v1" },

@@ -12,36 +12,50 @@ import { env } from "../../config/env.js";
 
 export type DeliveryResult = { ok: boolean; provider: string; error?: string };
 
+export type DeliveryChannel = "CONSOLE" | "EMAIL" | "WEBHOOK" | "SMS" | "WHATSAPP" | "PUSH";
+
 export type DeliverableNotification = {
   id: string;
   recipientKind: string;
   recipient: string;
-  channel: "CONSOLE" | "EMAIL" | "WEBHOOK";
+  channel: DeliveryChannel;
   subject?: string | null;
   body: string;
 };
 
-async function postWebhook(url: string, n: DeliverableNotification): Promise<DeliveryResult> {
+async function postGateway(url: string, provider: string, n: DeliverableNotification): Promise<DeliveryResult> {
   try {
     const res = await fetch(url, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        id: n.id, to: n.recipient, kind: n.recipientKind, subject: n.subject ?? null, body: n.body,
+        id: n.id, to: n.recipient, kind: n.recipientKind, channel: n.channel,
+        subject: n.subject ?? null, body: n.body,
       }),
     });
-    if (!res.ok) return { ok: false, provider: "webhook", error: `webhook ${res.status}` };
-    return { ok: true, provider: "webhook" };
+    if (!res.ok) return { ok: false, provider, error: `${provider} ${res.status}` };
+    return { ok: true, provider };
   } catch (e) {
-    return { ok: false, provider: "webhook", error: e instanceof Error ? e.message : "webhook error" };
+    return { ok: false, provider, error: e instanceof Error ? e.message : `${provider} error` };
+  }
+}
+
+/** Channel → configured gateway URL (when set). */
+function gatewayFor(channel: DeliveryChannel): { url: string; provider: string } | null {
+  switch (channel) {
+    case "SMS": return env.SMS_WEBHOOK_URL ? { url: env.SMS_WEBHOOK_URL, provider: "sms" } : null;
+    case "WHATSAPP": return env.WHATSAPP_WEBHOOK_URL ? { url: env.WHATSAPP_WEBHOOK_URL, provider: "whatsapp" } : null;
+    case "PUSH": return env.PUSH_WEBHOOK_URL ? { url: env.PUSH_WEBHOOK_URL, provider: "push" } : null;
+    case "EMAIL":
+    case "WEBHOOK": return env.NOTIFY_WEBHOOK_URL ? { url: env.NOTIFY_WEBHOOK_URL, provider: "webhook" } : null;
+    default: return null;
   }
 }
 
 export async function deliver(n: DeliverableNotification): Promise<DeliveryResult> {
-  if ((n.channel === "EMAIL" || n.channel === "WEBHOOK") && env.NOTIFY_WEBHOOK_URL) {
-    return postWebhook(env.NOTIFY_WEBHOOK_URL, n);
-  }
-  // Console fallback (dev / unconfigured).
+  const gateway = gatewayFor(n.channel);
+  if (gateway) return postGateway(gateway.url, gateway.provider, n);
+  // Console fallback (dev / unconfigured gateway).
   console.log(`[notify ${n.channel}/${n.recipientKind}] → ${n.recipient}${n.subject ? ` · ${n.subject}` : ""}: ${n.body}`);
   return { ok: true, provider: "console" };
 }

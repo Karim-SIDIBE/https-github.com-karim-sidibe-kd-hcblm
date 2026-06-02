@@ -99,6 +99,8 @@ model User {
   email     String   @unique
   name      String
   role      Role     @default(LEARNER)
+  /// Mobile number for SMS / WhatsApp re-engagement (§7.2). Optional.
+  phone     String?
   /// Argon2id hash for first-party password auth (null = SSO-only / no password).
   passwordHash String?
   /// Brute-force lockout (OWASP): failed-attempt counter + temporary lock.
@@ -172,6 +174,52 @@ model Organization {
 
   memberships OrganizationMembership[]
   courses     Course[]
+  webhooks    Webhook[]
+}
+
+/// Outbound webhook subscription (§8.2) — integrates with employer HR systems,
+/// LinkedIn certification import, and investor reporting. Org-scoped (null = the
+/// platform). Payloads are HMAC-SHA256 signed with `secret`.
+model Webhook {
+  id             String         @id @default(cuid())
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  url            String
+  secret         String
+  events         WebhookEvent[]
+  active         Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+
+  deliveries WebhookDelivery[]
+
+  @@index([organizationId])
+}
+
+/// One attempt-log row per (webhook, event) — the durable delivery queue.
+model WebhookDelivery {
+  id           String       @id @default(cuid())
+  webhookId    String
+  webhook      Webhook      @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event        WebhookEvent
+  payload      Json
+  status       String       @default("PENDING") // PENDING | SENT | FAILED
+  attempts     Int          @default(0)
+  responseCode Int?
+  error        String?
+  createdAt    DateTime     @default(now())
+  sentAt       DateTime?
+
+  @@index([webhookId])
+  @@index([status])
+}
+
+enum WebhookEvent {
+  BADGE_ISSUED
+  BLOCK_COMPLETED
+  PROJECT_SUBMITTED
+  REENGAGEMENT_DAY14
+  CERTIFICATE_ISSUED
+  EXERCISE_SUBMITTED
 }
 
 enum OrgRole {
@@ -551,6 +599,8 @@ model Enrollment {
   /// Progress peer (Pilier 6.3) — notified at each badge.
   peerName  String?
   peerEmail String?
+  /// Peer mobile number for SMS / WhatsApp delivery (§7.1 — African reach).
+  peerPhone String?
 
   /// Enterprise enrolment → J+14 inactivity signals go to the admin (Pilier 6.4).
   isEnterprise Boolean @default(false)
@@ -805,6 +855,9 @@ enum NotificationChannel {
   CONSOLE
   EMAIL
   WEBHOOK
+  SMS
+  WHATSAPP
+  PUSH
 }
 
 enum NotificationStatus {

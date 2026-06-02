@@ -92,8 +92,8 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   // Designate progress peer
   app.post("/enrollments/:id/peer", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { name, email } = z.object({ name: z.string().trim().min(1), email: z.string().email() }).parse(req.body);
-    try { return { data: await designatePeer(id, name, email) }; } catch (err) { return handle(reply, err); }
+    const { name, email, phone } = z.object({ name: z.string().trim().min(1), email: z.string().email(), phone: z.string().trim().min(1).optional() }).parse(req.body);
+    try { return { data: await designatePeer(id, name, email, phone) }; } catch (err) { return handle(reply, err); }
   });
 
   // Generic item completion

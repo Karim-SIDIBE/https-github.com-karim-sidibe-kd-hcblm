@@ -9,10 +9,10 @@ function handle(reply: FastifyReply, err: unknown) {
 }
 
 export async function exportRoutes(app: FastifyInstance) {
-  // Export a published course as a portable package (SCORM 1.2 / cmi5 / Common Cartridge).
+  // Export a published course as a portable package (SCORM 1.2 / SCORM 2004 / cmi5 / Common Cartridge).
   app.get("/courses/:id/export", { preHandler: guard("course:read") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const { format } = z.object({ format: z.enum(["scorm12", "cmi5", "cc"]).default("scorm12") }).parse(req.query);
+    const { format } = z.object({ format: z.enum(["scorm12", "scorm2004", "cmi5", "cc"]).default("scorm12") }).parse(req.query);
     try {
       const pkg = await exportCourse(id, format);
       const ext = pkg.filename.endsWith(".imscc") ? "imscc" : "zip";

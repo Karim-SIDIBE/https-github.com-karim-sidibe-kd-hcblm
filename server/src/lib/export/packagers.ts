@@ -8,7 +8,7 @@
 import AdmZip from "adm-zip";
 import type { RenderedCourse } from "./render.js";
 
-export type ExportFormat = "scorm12" | "cmi5" | "cc";
+export type ExportFormat = "scorm12" | "scorm2004" | "cmi5" | "cc";
 export type CourseMeta = { slug: string; title: string; summary: string; threshold: number };
 
 const xmlEsc = (s: string) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
@@ -22,6 +22,15 @@ function get(){var a=find(window);if(!a&&window.opener)a=find(window.opener);ret
 window.KLMS={init:function(){API=get();if(API)API.LMSInitialize("");},
 complete:function(score){if(!API)return;if(score!=null){API.LMSSetValue("cmi.core.score.raw",String(score));API.LMSSetValue("cmi.core.score.min","0");API.LMSSetValue("cmi.core.score.max","100");API.LMSSetValue("cmi.core.lesson_status",score>=70?"passed":"completed");}else{API.LMSSetValue("cmi.core.lesson_status","completed");}API.LMSCommit("");},
 finish:function(){if(API){API.LMSFinish("");API=null;}}};
+window.addEventListener("unload",function(){if(window.KLMS)KLMS.finish();});})();`;
+
+// SCORM 2004 uses the API_1484_11 object and completion/success status verbs.
+const SCORM2004_RUNTIME = `(function(){var API=null;
+function find(w){var n=0;while(w&&!w.API_1484_11&&w.parent&&w.parent!==w&&n++<12)w=w.parent;return w?w.API_1484_11:null;}
+function get(){var a=find(window);if(!a&&window.opener)a=find(window.opener);return a;}
+window.KLMS={init:function(){API=get();if(API)API.Initialize("");},
+complete:function(score){if(!API)return;if(score!=null){API.SetValue("cmi.score.raw",String(score));API.SetValue("cmi.score.min","0");API.SetValue("cmi.score.max","100");API.SetValue("cmi.score.scaled",String(score/100));API.SetValue("cmi.success_status",score>=70?"passed":"failed");}API.SetValue("cmi.completion_status","completed");API.Commit("");},
+finish:function(){if(API){API.Terminate("");API=null;}}};
 window.addEventListener("unload",function(){if(window.KLMS)KLMS.finish();});})();`;
 
 const CMI5_RUNTIME = `(function(){var q=new URLSearchParams(location.search);
@@ -50,6 +59,34 @@ function scorm12Manifest(meta: CourseMeta, course: RenderedCourse): string {
   <organizations default="ORG">
     <organization identifier="ORG"><title>${xmlEsc(meta.title)}</title>
 ${items}
+    </organization>
+  </organizations>
+  <resources>
+${resources}
+  </resources>
+</manifest>`;
+}
+
+function scorm2004Manifest(meta: CourseMeta, course: RenderedCourse): string {
+  const items = course.pages.map((p, i) => `      <item identifier="ITEM-${i}" identifierref="RES-${i}"><title>${xmlEsc(p.title)}</title></item>`).join("\n");
+  const resources = course.pages.map((p, i) =>
+    `    <resource identifier="RES-${i}" type="webcontent" adlcp:scormType="sco" href="${p.filename}">\n      <file href="${p.filename}"/>\n      <file href="runtime.js"/>\n      <file href="style.css"/>\n    </resource>`).join("\n");
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<manifest identifier="${idOf(meta.slug)}" version="1.0"
+  xmlns="http://www.imsglobal.org/xsd/imscp_v1p1"
+  xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_v1p3"
+  xmlns:adlseq="http://www.adlnet.org/xsd/adlseq_v1p3"
+  xmlns:adlnav="http://www.adlnet.org/xsd/adlnav_v1p3"
+  xmlns:imsss="http://www.imsglobal.org/xsd/imsss"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.imsglobal.org/xsd/imscp_v1p1 imscp_v1p1.xsd http://www.adlnet.org/xsd/adlcp_v1p3 adlcp_v1p3.xsd http://www.adlnet.org/xsd/adlseq_v1p3 adlseq_v1p3.xsd http://www.adlnet.org/xsd/adlnav_v1p3 adlnav_v1p3.xsd http://www.imsglobal.org/xsd/imsss imsss_v1p0.xsd">
+  <metadata><schema>ADL SCORM</schema><schemaversion>2004 4th Edition</schemaversion></metadata>
+  <organizations default="ORG">
+    <organization identifier="ORG"><title>${xmlEsc(meta.title)}</title>
+${items}
+      <imsss:sequencing>
+        <imsss:controlMode choice="true" flow="true"/>
+      </imsss:sequencing>
     </organization>
   </organizations>
   <resources>
@@ -111,6 +148,11 @@ export function buildPackage(format: ExportFormat, meta: CourseMeta, course: Ren
     zip.addFile("runtime.js", Buffer.from(SCORM_RUNTIME, "utf8"));
     zip.addFile("imsmanifest.xml", Buffer.from(scorm12Manifest(meta, course), "utf8"));
     return { filename: `${meta.slug}-scorm12.zip`, buffer: zip.toBuffer() };
+  }
+  if (format === "scorm2004") {
+    zip.addFile("runtime.js", Buffer.from(SCORM2004_RUNTIME, "utf8"));
+    zip.addFile("imsmanifest.xml", Buffer.from(scorm2004Manifest(meta, course), "utf8"));
+    return { filename: `${meta.slug}-scorm2004.zip`, buffer: zip.toBuffer() };
   }
   if (format === "cmi5") {
     zip.addFile("runtime.js", Buffer.from(CMI5_RUNTIME, "utf8"));

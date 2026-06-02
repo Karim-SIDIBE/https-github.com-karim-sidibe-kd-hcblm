@@ -27,6 +27,20 @@ test("SCORM 1.2 export is a valid package our own parser accepts", () => {
   assert.ok(zip.getEntry("runtime.js") && zip.getEntry("style.css"));
 });
 
+test("SCORM 2004 export is a valid package our own parser accepts", () => {
+  const { buffer, filename } = buildPackage("scorm2004", meta, renderCourse(n1Full));
+  assert.match(filename, /scorm2004\.zip$/);
+  const zip = new AdmZip(buffer);
+  const manifest = zip.getEntry("imsmanifest.xml")!.getData().toString("utf8");
+  const parsed = parseScorm(manifest);
+  assert.equal(parsed.type, "SCORM2004");
+  assert.equal(parsed.launchHref, "index.html");
+  assert.match(manifest, /2004 4th Edition/);
+  assert.match(manifest, /imsss:sequencing/);
+  // 2004 runtime drives the API_1484_11 object.
+  assert.match(zip.getEntry("runtime.js")!.getData().toString("utf8"), /API_1484_11/);
+});
+
 test("cmi5 export is a valid package (masteryScore from the level threshold)", () => {
   const { buffer } = buildPackage("cmi5", meta, renderCourse(n1Full));
   const zip = new AdmZip(buffer);

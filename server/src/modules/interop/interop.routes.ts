@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, registrationByToken,
+  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken,
 } from "./interop.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { authenticate, guard } from "../../lib/auth.js";
@@ -94,5 +94,26 @@ export async function interopRoutes(app: FastifyInstance) {
       for (const s of statements) results.push(await ingestStatement(token, s as Record<string, any>));
       return reply.send(results);
     } catch (err) { return handle(reply, err); }
+  });
+
+  // LRS query (§8.1) — read stored statements by learner, course, date range
+  // and statement type (verb). For Kompetences Declick analytics infrastructure.
+  app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req) => {
+    const q = z.object({
+      learnerId: z.string().optional(),
+      courseId: z.string().optional(),
+      verb: z.string().optional(),
+      since: z.string().datetime().optional(),
+      until: z.string().datetime().optional(),
+      limit: z.coerce.number().int().positive().max(1000).optional(),
+    }).parse(req.query ?? {});
+    return {
+      data: await queryStatements({
+        learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,
+        since: q.since ? new Date(q.since) : undefined,
+        until: q.until ? new Date(q.until) : undefined,
+        limit: q.limit,
+      }),
+    };
   });
 }

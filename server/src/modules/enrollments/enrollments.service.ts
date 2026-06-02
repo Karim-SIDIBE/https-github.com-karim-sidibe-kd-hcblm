@@ -17,6 +17,8 @@ import { hasPermission } from "../../domain/auth/permissions.js";
 import { activityId, buildStatement, quizResult, secondsToIsoDuration, XAPI_EXT, type VerbKey } from "../../domain/engine/xapi.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { issueCredential } from "../credentials/credentials.service.js";
+import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
+import { env } from "../../config/env.js";
 
 export class EngineError extends Error {
   constructor(public statusCode: number, public code: string, message: string) {
@@ -158,7 +160,9 @@ export async function enroll(userId: string, courseId: string, isEnterprise = fa
 export async function captureMomentAncrage(enrollmentId: string, text: string) {
   const { content } = await loadContext(enrollmentId);
   const onboarding = content.blocks.find((b) => b.type === "ONBOARDING");
-  const minChars = onboarding?.type === "ONBOARDING" ? onboarding.payload.momentAncrage.minChars : 50;
+  const courseMin = onboarding?.type === "ONBOARDING" ? onboarding.payload.momentAncrage.minChars : 50;
+  // Per-course minimum, with a configurable platform-wide floor (§6.1).
+  const minChars = Math.max(courseMin, env.PAM_MIN_CHARS);
   const trimmed = text.trim();
   if (trimmed.length < minChars) {
     throw new EngineError(422, "too_short", `Le Moment d'Ancrage doit faire au moins ${minChars} caractères`);
@@ -171,9 +175,9 @@ export async function captureMomentAncrage(enrollmentId: string, text: string) {
 
 // --- peer -------------------------------------------------------------------
 
-export async function designatePeer(enrollmentId: string, name: string, email: string) {
-  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { peerName: name, peerEmail: email } });
-  await upsertCompletion(enrollmentId, 0, "PEER", "peer", null, { name, email });
+export async function designatePeer(enrollmentId: string, name: string, email: string, phone?: string) {
+  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { peerName: name, peerEmail: email, peerPhone: phone ?? null } });
+  await upsertCompletion(enrollmentId, 0, "PEER", "peer", null, { name, email, phone: phone ?? null });
   await touch(enrollmentId, 0, "peer");
   return reconcile(enrollmentId);
 }
@@ -199,6 +203,7 @@ export async function completeItem(
 ) {
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
+  const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
   await upsertCompletion(enrollmentId, blockIndex, itemType, itemKey, null, data ?? null);
   // Bloc 4 project: open/refresh the certification-project record (starts the
   // 5-business-day SLA clock). The full lifecycle is kept in-platform (§6.3).
@@ -208,10 +213,21 @@ export async function completeItem(
       update: { submittedAt: new Date(), content: (data ?? null) as Prisma.InputJsonValue, revisionStatus: "SUBMITTED", slaAlertedAt: null },
       create: { enrollmentId, blockIndex, content: (data ?? null) as Prisma.InputJsonValue },
     });
+    await dispatchEvent("PROJECT_SUBMITTED", {
+      enrollmentId, learnerId: ctx.enrollment.userId, courseId: ctx.enrollment.courseId, blockIndex,
+    }, ctx.enrollment.course.organizationId);
+  }
+  // Exercise-submission webhook (§5.4): pass learner response + PAM + context so
+  // an external service can generate contextualised feedback.
+  if (hasMeta && meta.response != null) {
+    await dispatchEvent("EXERCISE_SUBMITTED", {
+      enrollmentId, learnerId: ctx.enrollment.userId, courseId: ctx.enrollment.courseId,
+      blockIndex, exerciseId: itemKey, response: meta.response, correct: meta.correct ?? null,
+      momentAncrage: ctx.enrollment.momentAncrage ?? null,
+    }, ctx.enrollment.course.organizationId);
   }
   await touch(enrollmentId, blockIndex, itemKey);
   // Exercise-completion statement with time-on-exercise + feedback-viewed (§5.4).
-  const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
   const result = hasMeta ? {
     completion: true,
     ...(meta.response != null ? { response: meta.response } : {}),
@@ -442,16 +458,31 @@ export async function reconcile(enrollmentId: string) {
     } catch (e) {
       console.error(`[credential] issuance failed for badge ${badge.id}:`, e instanceof Error ? e.message : e);
     }
-    // Peer notification (Pilier 6.3) — enqueued for delivery by the dispatcher.
-    if (enrollment.peerEmail) {
-      await enqueueNotification({
-        enrollmentId, recipientKind: "PEER", recipient: enrollment.peerEmail, channel: "EMAIL",
-        subject: `${enrollment.user.name} a obtenu un badge 🏅`,
-        body: peerNotificationText(enrollment.peerName, enrollment.user.name, block.badge.label),
-        provider: "engine",
-      });
+    // Peer notification (Pilier 6.3) — by e-mail and, when a number is on file,
+    // by mobile messaging (§7.1: e-mail alone underreaches African peers).
+    if (enrollment.peerEmail || enrollment.peerPhone) {
+      const peerBody = peerNotificationText(enrollment.peerName, enrollment.user.name, block.badge.label);
+      if (enrollment.peerEmail) {
+        await enqueueNotification({
+          enrollmentId, recipientKind: "PEER", recipient: enrollment.peerEmail, channel: "EMAIL",
+          subject: `${enrollment.user.name} a obtenu un badge 🏅`, body: peerBody, provider: "engine",
+        });
+      }
+      if (enrollment.peerPhone) {
+        await enqueueNotification({
+          enrollmentId, recipientKind: "PEER", recipient: enrollment.peerPhone, channel: "WHATSAPP",
+          body: peerBody, provider: "engine",
+        });
+      }
     }
     await emitXapi(ctx, "earned", [`blocks/${idx}`, `badges/${type}`], block.badge.label);
+    // Outbound webhooks (§8.2): a newly completed block always means a new badge.
+    await dispatchEvent("BLOCK_COMPLETED", {
+      enrollmentId, learnerId: enrollment.userId, courseId: enrollment.courseId, blockIndex: idx, blockType: block.type,
+    }, enrollment.course.organizationId);
+    await dispatchEvent("BADGE_ISSUED", {
+      enrollmentId, learnerId: enrollment.userId, courseId: enrollment.courseId, badgeType: type, badgeId: badge.id, label: block.badge.label,
+    }, enrollment.course.organizationId);
     newlyIssued.push({ type, message });
   }
 
@@ -468,6 +499,9 @@ export async function reconcile(enrollmentId: string) {
       where: { id: enrollmentId }, data: { status: "CERTIFIED", completedAt: new Date() },
     });
     await emitXapi(ctx, "passed", [], content.certificate.title, { completion: true, success: true });
+    await dispatchEvent("CERTIFICATE_ISSUED", {
+      enrollmentId, learnerId: enrollment.userId, courseId: enrollment.courseId, certificate: content.certificate.title,
+    }, enrollment.course.organizationId);
   }
 
   const badges = await prisma.badge.findMany({ where: { enrollmentId }, orderBy: { issuedAt: "asc" } });

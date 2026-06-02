@@ -19,6 +19,15 @@ const EnvSchema = z.object({
 
   // --- notification delivery. Optional: defaults to console. ---
   NOTIFY_WEBHOOK_URL: z.string().url().optional(),
+  /// Mobile-messaging + push gateways (§7.1 — African reach). Optional: console.
+  SMS_WEBHOOK_URL: z.string().url().optional(),
+  WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
+  PUSH_WEBHOOK_URL: z.string().url().optional(),
+
+  // --- Moment d'Ancrage (PAM) capture policy (§6.1). ---
+  /// Minimum PAM length enforced server-side (badge condition floor is 50;
+  /// the input field accepts ≥ 500 — front-end capacity).
+  PAM_MIN_CHARS: z.coerce.number().int().positive().default(50),
 
   // --- xAPI LRS forwarding. Optional: no-op when unset. ---
   LRS_ENDPOINT: z.string().url().optional(),

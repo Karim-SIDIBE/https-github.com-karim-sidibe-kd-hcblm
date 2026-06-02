@@ -9,6 +9,7 @@ import { dueStage, daysInactive, type Stage } from "../../domain/engine/reengage
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { generateNudge } from "../../lib/ai/nudge.js";
+import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 
 const MS_PER_DAY = 86_400_000;
@@ -88,7 +89,7 @@ export type ReEngagementRunResult = {
 export async function runReEngagement(now: Date = new Date()): Promise<ReEngagementRunResult> {
   const enrollments = await prisma.enrollment.findMany({
     where: { status: "ACTIVE" },
-    include: { user: true, courseVersion: true, completions: true, reEngagements: true },
+    include: { user: true, courseVersion: true, completions: true, reEngagements: true, course: { select: { organizationId: true } } },
   });
 
   const created: ReEngagementRunResult["created"] = [];
@@ -132,6 +133,29 @@ export async function runReEngagement(now: Date = new Date()): Promise<ReEngagem
       subject: `Reprenez votre parcours (${stage})`,
       body, aiGenerated, provider,
     });
+
+    // Secondary mobile channel per the re-engagement matrix (§7.2): J3 → push,
+    // J7 → SMS/WhatsApp (reaches learners where e-mail does not). Admin stage skips.
+    if (channel !== "ADMIN") {
+      if (stage === "J3") {
+        await enqueueNotification({
+          enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "PUSH",
+          subject: `Reprenez votre parcours`, body, aiGenerated, provider,
+        });
+      } else if (stage === "J7" && e.user.phone) {
+        await enqueueNotification({
+          enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.phone, channel: "WHATSAPP",
+          body, aiGenerated, provider,
+        });
+      }
+    }
+
+    // Day +14 re-engagement webhook (§8.2) — for enterprise / investor reporting.
+    if (stage === "J14") {
+      await dispatchEvent("REENGAGEMENT_DAY14", {
+        enrollmentId: e.id, learnerId: e.userId, courseId: e.courseId, daysInactive: days,
+      }, e.course.organizationId);
+    }
 
     created.push({ enrollmentId: e.id, stage, channel, body, aiGenerated });
   }

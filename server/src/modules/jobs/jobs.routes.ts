@@ -3,6 +3,7 @@ import { z } from "zod";
 import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "./jobs.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
+import { flushPendingWebhooks } from "../../lib/webhooks/webhooks.js";
 import { guard } from "../../lib/auth.js";
 
 export async function jobRoutes(app: FastifyInstance) {
@@ -34,5 +35,11 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/lrs/forward", { preHandler: guard("job:run") }, async (req) => {
     const { batchSize } = z.object({ batchSize: z.number().int().positive().max(500).optional() }).parse(req.body ?? {});
     return { data: await forwardPending(batchSize ?? 100) };
+  });
+
+  // Deliver pending outbound webhooks (§8.2).
+  app.post("/jobs/webhooks/flush", { preHandler: guard("job:run") }, async (req) => {
+    const { batchSize } = z.object({ batchSize: z.number().int().positive().max(500).optional() }).parse(req.body ?? {});
+    return { data: await flushPendingWebhooks(batchSize ?? 100) };
   });
 }

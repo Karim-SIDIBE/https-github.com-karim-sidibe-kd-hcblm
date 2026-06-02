@@ -7,7 +7,16 @@
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
+import { forecastCompletion, type ForecastRow } from "../../domain/engine/forecast.js";
 import { credentialUrl } from "../../lib/credentials/openbadge.js";
+
+/** Optional reporting window (filters by enrolment start). */
+export type DateRange = { since?: Date; until?: Date };
+function startedAtFilter(range?: DateRange) {
+  if (!range || (!range.since && !range.until)) return {};
+  return { startedAt: { ...(range.since ? { gte: range.since } : {}), ...(range.until ? { lte: range.until } : {}) } };
+}
+const daysBetween = (a: Date, b: Date) => Math.max(0, (b.getTime() - a.getTime()) / 86_400_000);
 
 export class AnalyticsError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -79,10 +88,10 @@ export async function courseLearners(courseId: string) {
 
 // --- course report (aggregates + funnel) ------------------------------------
 
-export async function courseReport(courseId: string) {
+export async function courseReport(courseId: string, range?: DateRange) {
   const course = await prisma.course.findUnique({ where: { id: courseId } });
   if (!course) throw new AnalyticsError(404, "not_found", "Parcours introuvable");
-  const enrollments = await prisma.enrollment.findMany({ where: { courseId }, include: { courseVersion: true, completions: true } });
+  const enrollments = await prisma.enrollment.findMany({ where: { courseId, ...startedAtFilter(range) }, include: { courseVersion: true, completions: true } });
   const now = new Date();
 
   const statusCounts: Record<string, number> = {};
@@ -92,6 +101,7 @@ export async function courseReport(courseId: string) {
   let blocksTotal = 0;
   const funnel: number[] = [];
   let content: CourseContentT | null = null;
+  const forecastRows: ForecastRow[] = [];
 
   for (const e of enrollments) {
     content = CourseContent.parse(e.courseVersion.content);
@@ -104,6 +114,13 @@ export async function courseReport(courseId: string) {
     const r = e.completions.find((c) => c.blockIndex === 4 && c.itemKey === "rubric")?.scorePct;
     if (r != null) rubricScores.push(r);
     for (const idx of progress.completedBlockIndexes) funnel[idx] = (funnel[idx] ?? 0) + 1;
+    forecastRows.push({
+      blocksCompleted: progress.completedBlockIndexes.length,
+      blocksTotal: content.blocks.length,
+      daysSinceStart: daysBetween(e.startedAt, now),
+      certified: e.status === "CERTIFIED",
+      terminated: e.status === "WITHDRAWN",
+    });
   }
 
   const total = enrollments.length;
@@ -120,6 +137,9 @@ export async function courseReport(courseId: string) {
     enrollments: total,
     statusCounts,
     completionRate: total ? Math.round((certified / total) * 100) : 0,
+    // Forecast: % of enrolees expected to reach Block 4 completion (§7.3).
+    forecast: forecastCompletion(forecastRows),
+    range: { since: range?.since ?? null, until: range?.until ?? null },
     activeLearners: active,
     averageFinalQuiz: avg(finalScores),
     averageRubric: avg(rubricScores),
@@ -134,16 +154,17 @@ export async function courseReport(courseId: string) {
 
 // --- platform overview ------------------------------------------------------
 
-export async function overview() {
+export async function overview(range?: DateRange) {
   const now = new Date();
   const since = new Date(now.getTime() - ACTIVE_WINDOW_DAYS * 86_400_000);
+  const rangeWhere = startedAtFilter(range);
   const [usersByRole, publishedCourses, enrollments, certified, activeLearners, credentialsIssued, credentialsRevoked, upcomingSessions] =
     await Promise.all([
       prisma.user.groupBy({ by: ["role"], _count: true }),
       prisma.courseVersion.count({ where: { status: "PUBLISHED" } }),
-      prisma.enrollment.count(),
-      prisma.enrollment.count({ where: { status: "CERTIFIED" } }),
-      prisma.enrollment.count({ where: { lastSeenAt: { gte: since } } }),
+      prisma.enrollment.count({ where: rangeWhere }),
+      prisma.enrollment.count({ where: { status: "CERTIFIED", ...rangeWhere } }),
+      prisma.enrollment.count({ where: { lastSeenAt: { gte: since }, ...rangeWhere } }),
       prisma.credential.count(),
       prisma.credential.count({ where: { revokedAt: { not: null } } }),
       prisma.liveSession.count({ where: { startsAt: { gte: now }, status: { in: ["SCHEDULED", "LIVE"] } } }),
@@ -153,7 +174,28 @@ export async function overview() {
     publishedCourses, enrollments, certified,
     completionRate: enrollments ? Math.round((certified / enrollments) * 100) : 0,
     activeLearners, credentialsIssued, credentialsRevoked, upcomingSessions,
+    range: { since: range?.since ?? null, until: range?.until ?? null },
   };
+}
+
+// --- raw PAM export (§6.1) --------------------------------------------------
+
+/**
+ * Raw Moment d'Ancrage (PAM) export for a course — for authorised employer /
+ * institutional review and AI-feedback integration. Staff-gated at the route.
+ */
+export async function pamExport(courseId: string, range?: DateRange) {
+  const course = await prisma.course.findUnique({ where: { id: courseId } });
+  if (!course) throw new AnalyticsError(404, "not_found", "Parcours introuvable");
+  const enrollments = await prisma.enrollment.findMany({
+    where: { courseId, momentAncrage: { not: null }, ...startedAtFilter(range) },
+    include: { user: { select: { id: true, name: true, email: true } } },
+    orderBy: { startedAt: "asc" },
+  });
+  return enrollments.map((e) => ({
+    learnerId: e.user.id, name: e.user.name, email: e.user.email,
+    momentAncrage: e.momentAncrage, startedAt: e.startedAt,
+  }));
 }
 
 // --- cohort report ----------------------------------------------------------

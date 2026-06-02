@@ -155,3 +155,31 @@ export async function ingestStatement(token: string, statement: Record<string, a
   if (Object.keys(data).length) await prisma.scormRegistration.update({ where: { id: reg.id }, data });
   return { stored: true, verb };
 }
+
+/**
+ * LRS query (§8.1) — read stored xAPI statements by learner, course, date range
+ * and statement type (verb). Joins through the enrolment so analytics can pull
+ * without manual export. Staff-gated at the route.
+ */
+export async function queryStatements(filters: {
+  learnerId?: string; courseId?: string; verb?: string; since?: Date; until?: Date; limit?: number;
+}) {
+  const where: Prisma.XapiStatementWhereInput = {};
+  if (filters.verb) where.verb = filters.verb;
+  if (filters.since || filters.until) {
+    where.storedAt = {};
+    if (filters.since) where.storedAt.gte = filters.since;
+    if (filters.until) where.storedAt.lte = filters.until;
+  }
+  if (filters.learnerId || filters.courseId) {
+    where.enrollment = {
+      ...(filters.learnerId ? { userId: filters.learnerId } : {}),
+      ...(filters.courseId ? { courseId: filters.courseId } : {}),
+    };
+  }
+  const rows = await prisma.xapiStatement.findMany({
+    where, orderBy: { storedAt: "desc" }, take: Math.min(filters.limit ?? 200, 1000),
+    select: { id: true, verb: true, objectId: true, statement: true, storedAt: true, enrollmentId: true },
+  });
+  return { count: rows.length, statements: rows };
+}

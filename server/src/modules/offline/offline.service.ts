@@ -112,7 +112,7 @@ const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 async function applyOne(enrollmentId: string, type: string, payload: Record<string, unknown>) {
   switch (type) {
     case "moment_ancrage": return captureMomentAncrage(enrollmentId, String(payload.text ?? ""));
-    case "peer": return designatePeer(enrollmentId, String(payload.name ?? ""), String(payload.email ?? ""));
+    case "peer": return designatePeer(enrollmentId, String(payload.name ?? ""), String(payload.email ?? ""), payload.phone != null ? String(payload.phone) : undefined);
     case "position": return savePosition(enrollmentId, num(payload.blockIndex), String(payload.itemKey ?? ""), payload.positionSec != null ? num(payload.positionSec) : undefined, payload.durationSec != null ? num(payload.durationSec) : undefined);
     case "complete_item":
       return completeItem(enrollmentId, num(payload.blockIndex), payload.itemType as never, String(payload.itemKey ?? ""), payload.data, (payload.meta ?? {}) as never);

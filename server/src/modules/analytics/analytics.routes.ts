@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, cohortReport, courseLearners, courseReport, overview, toCsv, transcript,
+  AnalyticsError, cohortReport, courseLearners, courseReport, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 
@@ -20,6 +20,10 @@ function maybeCsv(reply: FastifyReply, format: string | undefined, rows: Record<
   return { data: rows };
 }
 
+const rangeQuery = z.object({ since: z.string().datetime().optional(), until: z.string().datetime().optional() });
+const toRange = (q: { since?: string; until?: string }) =>
+  ({ since: q.since ? new Date(q.since) : undefined, until: q.until ? new Date(q.until) : undefined });
+
 export async function analyticsRoutes(app: FastifyInstance) {
   // Learner transcript — owner or staff.
   app.get("/enrollments/:id/transcript", { preHandler: owned }, async (req, reply) => {
@@ -27,13 +31,17 @@ export async function analyticsRoutes(app: FastifyInstance) {
     try { return { data: await transcript(id) }; } catch (err) { return handle(reply, err); }
   });
 
-  // Platform overview.
-  app.get("/analytics/overview", { preHandler: guard("analytics:read") }, async () => ({ data: await overview() }));
+  // Platform overview (optional ?since/&until date range).
+  app.get("/analytics/overview", { preHandler: guard("analytics:read") }, async (req) => {
+    const q = rangeQuery.parse(req.query ?? {});
+    return { data: await overview(toRange(q)) };
+  });
 
-  // Course aggregates + funnel.
+  // Course aggregates + funnel + Block 4 completion forecast (optional date range).
   app.get("/analytics/courses/:courseId", { preHandler: guard("analytics:read") }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
-    try { return { data: await courseReport(courseId) }; } catch (err) { return handle(reply, err); }
+    const q = rangeQuery.parse(req.query ?? {});
+    try { return { data: await courseReport(courseId, toRange(q)) }; } catch (err) { return handle(reply, err); }
   });
 
   // Per-learner course rows (JSON or CSV export).
@@ -41,6 +49,14 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     const { format } = z.object({ format: z.enum(["csv", "json"]).optional() }).parse(req.query);
     try { return maybeCsv(reply, format, await courseLearners(courseId), `course-${courseId}-learners`); }
+    catch (err) { return handle(reply, err); }
+  });
+
+  // Raw PAM export for a course (JSON or CSV) — authorised review (§6.1).
+  app.get("/analytics/courses/:courseId/pam", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    const { format, ...range } = z.object({ format: z.enum(["csv", "json"]).optional() }).merge(rangeQuery).parse(req.query ?? {});
+    try { return maybeCsv(reply, format, await pamExport(courseId, toRange(range)) as unknown as Record<string, unknown>[], `course-${courseId}-pam`); }
     catch (err) { return handle(reply, err); }
   });
 
