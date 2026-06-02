@@ -1,16 +1,20 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import { engine, isLoggedIn, logout } from "./lib/app";
 import { startAutoSync, type SyncState } from "./lib/autosync";
 import { useRoute } from "./lib/router";
 import { Login } from "./ui/Login";
-import { Course } from "./ui/Course";
 import { Enrollments } from "./ui/Enrollments";
-import { SessionScreen } from "./ui/Session";
-import { Onboarding } from "./ui/Onboarding";
-import { QuizScreen } from "./ui/QuizScreen";
-import { Deliverable } from "./ui/Deliverable";
-import { Project } from "./ui/Project";
-import { Badges } from "./ui/Badges";
+
+// Route-level code splitting: the dashboard entry stays in the main chunk; the
+// heavier flows (player + media, quizzes, project, onboarding…) load on demand,
+// keeping first paint small on low-spec / 3G devices (AC#16).
+const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
+const SessionScreen = lazy(() => import("./ui/Session").then((m) => ({ default: m.SessionScreen })));
+const QuizScreen = lazy(() => import("./ui/QuizScreen").then((m) => ({ default: m.QuizScreen })));
+const Deliverable = lazy(() => import("./ui/Deliverable").then((m) => ({ default: m.Deliverable })));
+const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Project })));
+const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
+const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
 
 function Screen() {
   const route = useRoute();
@@ -59,7 +63,9 @@ export function App() {
       </div>
       <main className="app">
         <ConnectivityBanner sync={sync} />
-        <Screen />
+        <Suspense fallback={<div className="skeleton card" style={{ height: 120 }} />}>
+          <Screen />
+        </Suspense>
       </main>
     </>
   );
