@@ -107,6 +107,8 @@ Admins may publish directly.
 | POST | `/enrollments/:id/evaluation` | Human rubric score (Bloc 4) |
 | GET | `/enrollments/:id/blocks/:index` | **PAM-injected** rendered block (403 if locked) |
 | GET | `/enrollments/:id/resume` · POST `/position` | Auto-resume target / save exact position |
+| GET | `/enrollments/:id/offline-bundle` | **Offline-first**: PAM-injected content + media manifest (ETag/304) |
+| POST | `/enrollments/:id/sync` | Replay actions queued offline (idempotent, ordered) |
 | GET | `/enrollments/:id/xapi` | xAPI statements for this enrolment |
 | POST | `/jobs/re-engagement/run` | Scan inactive learners, emit J+3/J+7/J+14 (accepts `now` for testing) |
 | POST | `/jobs/notifications/dispatch` | Deliver PENDING notifications |
@@ -304,7 +306,15 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   → first-party tokens, JIT optional) alongside OIDC. RBAC adds `session:manage`
   and `forum:moderate`.
 
+- **Offline-first (done)** — backend support for low-connectivity contexts:
+  a downloadable, **PAM-injected course bundle** + media manifest with **ETag/304**
+  caching, and an **idempotent, time-ordered sync API** that replays actions
+  queued offline (gating still enforced; replays never double-apply badges or
+  notifications). A PWA/mobile client + media pipeline are the front-end half.
+
 ## Possible next steps
 
-- KMS-backed signer; SCIM provisioning; notifications on forum replies;
-  ICS/calendar feeds for sessions; pgvector for search at scale.
+- Front-end **PWA** (service worker + local cache) consuming the bundle/sync API;
+  **media pipeline** (upload/transcode/adaptive bitrate/captions); verifiable
+  **Open Badges + certificate PDFs**; **AI tutor (RAG)** over the embeddings;
+  **analytics/reporting** module; SCORM/cmi5 + LTI; multi-tenancy; SCIM.

@@ -384,9 +384,26 @@ model Enrollment {
   xapi           XapiStatement[]
   notifications  Notification[]
   aiAssessments  AiAssessment[]
+  syncOperations SyncOperation[]
 
   @@unique([userId, courseId])
   @@index([status])
+}
+
+/// Idempotency ledger for offline-first sync: one row per applied client action,
+/// so replaying a queued action batch never double-applies (Pilier 6.2, offline).
+model SyncOperation {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  /// Client-generated operation id (the idempotency key).
+  opId         String
+  type         String
+  clientTs     DateTime
+  appliedAt    DateTime   @default(now())
+
+  @@unique([enrollmentId, opId])
+  @@index([enrollmentId])
 }
 
 /// One row per completed content item for an enrolment.
