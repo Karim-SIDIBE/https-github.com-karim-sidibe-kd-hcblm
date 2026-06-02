@@ -25,6 +25,11 @@ const EnvSchema = z.object({
   LRS_KEY: z.string().optional(),
   LRS_SECRET: z.string().optional(),
 
+  // --- media pipeline (storage + transcoding). Local FS by default. ---
+  MEDIA_DIR: z.string().default(".media"),
+  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(524_288_000), // 500 MB
+  MEDIA_PUBLIC_BASE_URL: z.string().url().optional(), // CDN base when fronted by one
+
   // --- blended live sessions (Zoom / Microsoft Teams). Optional: manual links. ---
   MEETING_PROVIDER: z.enum(["zoom", "teams", "manual"]).default("manual"),
   ZOOM_ACCOUNT_ID: z.string().optional(),

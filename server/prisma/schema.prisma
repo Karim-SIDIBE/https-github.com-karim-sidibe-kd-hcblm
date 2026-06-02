@@ -235,6 +235,64 @@ model ForumPost {
   @@index([threadId])
 }
 
+/// Media pipeline — uploaded assets transcoded into an adaptive rendition ladder
+/// (low-bandwidth + offline-downloadable variants).
+enum MediaKind {
+  VIDEO
+  AUDIO
+  CAPTIONS
+  IMAGE
+}
+
+enum MediaStatus {
+  UPLOADED
+  PROCESSING
+  READY
+  FAILED
+}
+
+model MediaAsset {
+  id               String      @id @default(cuid())
+  kind             MediaKind   @default(VIDEO)
+  originalFilename String?
+  mime             String
+  sizeBytes        Int?
+  durationSec      Int?
+  width            Int?
+  height           Int?
+  status           MediaStatus @default(UPLOADED)
+  storageKey       String // source object key
+  error            String?
+  createdById      String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  renditions MediaRendition[]
+
+  @@index([status])
+}
+
+model MediaRendition {
+  id          String     @id @default(cuid())
+  assetId     String
+  asset       MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  label       String // "source", "480p", "240p-lite", "audio", "captions-fr"
+  kind        MediaKind
+  mime        String
+  storageKey  String? // local/object key (null when external)
+  url         String? // external/provider URL (null when stored)
+  bitrateKbps Int?
+  width       Int?
+  height      Int?
+  language    String? // for captions
+  sizeBytes   Int?
+  downloadable Boolean   @default(false) // suitable for offline download
+  available    Boolean   @default(true) // false = planned but not yet transcoded
+  createdAt    DateTime   @default(now())
+
+  @@index([assetId])
+}
+
 /// Blended / instructor-led live sessions (Zoom, Teams, or a manual link).
 enum MeetingProvider {
   ZOOM

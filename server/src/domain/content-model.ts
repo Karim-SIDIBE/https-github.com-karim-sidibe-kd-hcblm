@@ -70,6 +70,8 @@ const ProfileBand = z.object({
 export const Video = z.object({
   title: nonEmpty("titre de la vidéo"),
   url: z.string().url().or(z.literal("")).default(""), // placeholder allowed pre-upload
+  /// Optional binding to a MediaAsset (adaptive renditions + offline download).
+  mediaId: z.string().optional(),
   durationSec: z.number().int().positive(),
   subtitlesUrl: z.string().url().optional(),
   keyMessage: z.string().default(""),

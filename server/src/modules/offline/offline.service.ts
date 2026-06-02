@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { publicUrl } from "../../lib/storage/storage.js";
 import {
   EngineError, captureMomentAncrage, completeItem, designatePeer, getResume, reconcile,
   savePosition, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
@@ -50,6 +51,32 @@ export function mediaManifest(content: CourseContentT): MediaAsset[] {
   return out;
 }
 
+/** Collect MediaAsset ids referenced by the content's videos. */
+function collectMediaIds(content: CourseContentT): string[] {
+  const ids = new Set<string>();
+  for (const b of content.blocks) {
+    if (b.type === "ONBOARDING" && b.payload.triggerVideo.mediaId) ids.add(b.payload.triggerVideo.mediaId);
+    if ("microSessions" in b.payload) b.payload.microSessions.forEach((m) => m.video.mediaId && ids.add(m.video.mediaId));
+  }
+  return [...ids];
+}
+
+/** Resolve bound media assets to downloadable rendition URLs (offline). */
+async function resolveBoundMedia(content: CourseContentT) {
+  const ids = collectMediaIds(content);
+  if (ids.length === 0) return [];
+  const renditions = await prisma.mediaRendition.findMany({ where: { assetId: { in: ids }, available: true } });
+  const byAsset = new Map<string, typeof renditions>();
+  for (const r of renditions) (byAsset.get(r.assetId) ?? byAsset.set(r.assetId, []).get(r.assetId)!).push(r);
+  return [...byAsset.entries()].map(([assetId, rs]) => ({
+    mediaId: assetId,
+    renditions: rs.map((r) => ({
+      label: r.label, kind: r.kind, bitrateKbps: r.bitrateKbps, downloadable: r.downloadable,
+      url: r.url ?? (r.storageKey ? publicUrl(r.storageKey) : null),
+    })),
+  }));
+}
+
 /** Stable content hash for ETag-based caching. Includes the PAM so that capturing
  *  it (which changes the injected text) invalidates a previously cached bundle. */
 function bundleVersion(versionId: string, updatedAt: Date, momentAncrage: string | null): string {
@@ -72,6 +99,7 @@ export async function buildBundle(enrollmentId: string) {
       enrollmentId,
       content: rendered,
       media: mediaManifest(content),
+      mediaAssets: await resolveBoundMedia(content),
     },
   };
 }

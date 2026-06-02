@@ -2,6 +2,7 @@ node_modules/
 dist/
 .env
 *.log
+.media/
 .DS_Store
 prisma/*.db
 prisma/*.db-journal

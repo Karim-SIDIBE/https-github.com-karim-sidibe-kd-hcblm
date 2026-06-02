@@ -121,6 +121,15 @@ Admins may publish directly.
 | POST | `/search` | Semantic search over published content |
 | POST | `/versions/:id/index` | (Re)build the search index for a version |
 
+**Media pipeline** (`media:manage` to upload; low-bandwidth + offline)
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/media` | Upload (multipart) → adaptive rendition ladder |
+| POST | `/media/external` | Register a provider-hosted asset (Mux/Cloudflare/CDN) |
+| GET | `/media/:id` · `/media/:id/playback` | Asset / adaptive manifest (lowest-bitrate first + recommended lite + captions) |
+| GET | `/media/:id/download?label=` | Range-aware stream/download of a rendition (offline) |
+
 **Blended live sessions** (`session:manage` to host)
 
 | Method | Path | Purpose |
@@ -312,9 +321,17 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   queued offline (gating still enforced; replays never double-apply badges or
   notifications). A PWA/mobile client + media pipeline are the front-end half.
 
+- **Media pipeline (done)** — pluggable storage (local FS; S3/R2-ready) + a
+  pluggable transcoder (real ffmpeg renditions when present; otherwise the source
+  stays playable and the adaptive ladder is recorded as *planned*, fillable by an
+  ffmpeg worker or Mux/Cloudflare Stream). Adaptive **playback manifest**
+  (lowest-bitrate-first, recommended **lite** variant, captions), **range-aware**
+  streaming/download for seeking + offline, external-provider registration, and
+  `video.mediaId` binding so the **offline bundle** ships downloadable renditions.
+
 ## Possible next steps
 
-- Front-end **PWA** (service worker + local cache) consuming the bundle/sync API;
-  **media pipeline** (upload/transcode/adaptive bitrate/captions); verifiable
+- Front-end **PWA** (service worker + local cache) consuming the bundle/sync API
+  — the client half of offline-first; AI **captions** (ASR); verifiable
   **Open Badges + certificate PDFs**; **AI tutor (RAG)** over the embeddings;
-  **analytics/reporting** module; SCORM/cmi5 + LTI; multi-tenancy; SCIM.
+  **analytics/reporting**; SCORM/cmi5 + LTI; multi-tenancy; SCIM.

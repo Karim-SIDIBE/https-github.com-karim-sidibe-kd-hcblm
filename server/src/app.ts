@@ -3,6 +3,7 @@ import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import sensible from "@fastify/sensible";
 import rateLimit from "@fastify/rate-limit";
+import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import { env, isDev } from "./config/env.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
@@ -16,6 +17,7 @@ import { feedbackRoutes } from "./modules/feedback/feedback.routes.js";
 import { searchRoutes } from "./modules/search/search.routes.js";
 import { sessionRoutes } from "./modules/sessions/sessions.routes.js";
 import { forumRoutes } from "./modules/forum/forum.routes.js";
+import { mediaRoutes } from "./modules/media/media.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 
@@ -30,6 +32,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(sensible);
   // Global IP rate limit (per minute). Auth routes get a stricter cap below.
   await app.register(rateLimit, { global: true, max: env.RATE_LIMIT_MAX, timeWindow: "1 minute" });
+
+  // Multipart uploads (media assets), capped by MEDIA_MAX_BYTES.
+  await app.register(multipart, { limits: { fileSize: env.MEDIA_MAX_BYTES } });
 
   // Parse application/x-www-form-urlencoded (SAML IdP posts the ACS form-encoded).
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {
@@ -62,6 +67,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await searchRoutes(api);
       await sessionRoutes(api);
       await forumRoutes(api);
+      await mediaRoutes(api);
       await auditRoutes(api);
       await jobRoutes(api);
     },

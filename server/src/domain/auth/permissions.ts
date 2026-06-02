@@ -24,13 +24,14 @@ export type Permission =
   | "analytics:read" // dashboards / reports
   | "audit:read" // security audit trail
   | "session:manage" // create / host live sessions, mark attendance
-  | "forum:moderate"; // manage cohorts/memberships, moderate forum threads/posts
+  | "forum:moderate" // manage cohorts/memberships, moderate forum threads/posts
+  | "media:manage"; // upload / manage media assets
 
 const ALL: Permission[] = [
   "course:create", "course:read", "course:update", "course:submit_review",
   "course:review", "course:publish", "course:archive",
   "enrollment:create", "enrollment:read_any", "evaluation:grade",
-  "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate",
+  "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -38,9 +39,9 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   COURSE_ADMIN: [
     "course:create", "course:read", "course:update", "course:submit_review",
     "course:review", "course:publish", "course:archive",
-    "enrollment:create", "enrollment:read_any", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate",
+    "enrollment:create", "enrollment:read_any", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage",
   ],
-  LEARNING_DESIGNER: ["course:create", "course:read", "course:update", "course:submit_review"],
+  LEARNING_DESIGNER: ["course:create", "course:read", "course:update", "course:submit_review", "media:manage"],
   REVIEWER: ["course:read", "course:review", "course:publish"],
   INSTRUCTOR: ["course:read", "enrollment:create", "enrollment:read_any", "analytics:read", "session:manage", "forum:moderate"],
   EVALUATOR: ["course:read", "evaluation:grade", "enrollment:read_any", "analytics:read"],
