@@ -297,9 +297,22 @@ export async function reconcile(enrollmentId: string) {
 
 // --- auto-resume + position (Pilier 6.2) ------------------------------------
 
-export async function savePosition(enrollmentId: string, blockIndex: number, itemKey: string) {
+/**
+ * Save the learner's position. `positionSec` is the in-video offset, rounded to
+ * the nearest 5s and persisted per (block, item) so auto-resume restores the
+ * exact spot across devices (server-side state — Pilier 4.2).
+ */
+export async function savePosition(enrollmentId: string, blockIndex: number, itemKey: string, positionSec?: number, durationSec?: number) {
   await loadContext(enrollmentId);
   await touch(enrollmentId, blockIndex, itemKey);
+  if (positionSec != null) {
+    const rounded = Math.max(0, Math.round(positionSec / 5) * 5);
+    await prisma.mediaPosition.upsert({
+      where: { enrollmentId_blockIndex_itemKey: { enrollmentId, blockIndex, itemKey } },
+      update: { positionSec: rounded, durationSec: durationSec ?? undefined },
+      create: { enrollmentId, blockIndex, itemKey, positionSec: rounded, durationSec: durationSec ?? null },
+    });
+  }
   return getResume(enrollmentId);
 }
 
@@ -309,7 +322,16 @@ export async function getResume(enrollmentId: string) {
     content, toRecords(enrollment.completions), Boolean(enrollment.momentAncrage),
     { blockIndex: enrollment.lastBlockIndex, itemKey: enrollment.lastItemKey },
   );
-  return { resume: target, lastSeenAt: enrollment.lastSeenAt, status: enrollment.status };
+  // Enrich the resume target with its saved video offset (exact in-session spot).
+  let positionSec = 0;
+  let durationSec: number | null = null;
+  if (target) {
+    const pos = await prisma.mediaPosition.findUnique({
+      where: { enrollmentId_blockIndex_itemKey: { enrollmentId, blockIndex: target.blockIndex, itemKey: target.itemKey } },
+    });
+    if (pos) { positionSec = pos.positionSec; durationSec = pos.durationSec; }
+  }
+  return { resume: target ? { ...target, positionSec, durationSec } : null, lastSeenAt: enrollment.lastSeenAt, status: enrollment.status };
 }
 
 export async function listXapi(enrollmentId: string) {

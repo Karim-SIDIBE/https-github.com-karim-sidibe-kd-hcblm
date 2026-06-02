@@ -58,8 +58,11 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   // Save exact position (heartbeat)
   app.post("/enrollments/:id/position", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { blockIndex, itemKey } = z.object({ blockIndex: z.number().int().min(0), itemKey: z.string().min(1) }).parse(req.body);
-    try { return { data: await savePosition(id, blockIndex, itemKey) }; } catch (err) { return handle(reply, err); }
+    const { blockIndex, itemKey, positionSec, durationSec } = z.object({
+      blockIndex: z.number().int().min(0), itemKey: z.string().min(1),
+      positionSec: z.number().int().min(0).optional(), durationSec: z.number().int().positive().optional(),
+    }).parse(req.body);
+    try { return { data: await savePosition(id, blockIndex, itemKey, positionSec, durationSec) }; } catch (err) { return handle(reply, err); }
   });
 
   // xAPI statements for this enrolment

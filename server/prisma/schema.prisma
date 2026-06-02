@@ -571,6 +571,7 @@ model Enrollment {
   syncOperations SyncOperation[]
   credentials    Credential[]
   tutorSessions  TutorSession[]
+  mediaPositions MediaPosition[]
 
   @@unique([userId, courseId])
   @@index([status])
@@ -621,6 +622,23 @@ model SyncOperation {
   appliedAt    DateTime   @default(now())
 
   @@unique([enrollmentId, opId])
+  @@index([enrollmentId])
+}
+
+/// Exact in-session position for auto-resume (Pilier 3.2 / 4.2): the video
+/// offset (to the nearest 5s) per micro-session, stored server-side so resume
+/// works across devices. One row per (enrolment, block, item).
+model MediaPosition {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  blockIndex   Int
+  itemKey      String
+  positionSec  Int        @default(0)
+  durationSec  Int?
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([enrollmentId, blockIndex, itemKey])
   @@index([enrollmentId])
 }
 
