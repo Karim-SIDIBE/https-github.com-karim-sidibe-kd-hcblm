@@ -4,6 +4,7 @@ import { rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { formatDuration, remainingLabel, type Session } from "../lib/format";
 import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
+import { blockMediaUrls, downloadBlock, isBlockDownloaded } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 
 type Block = { index: number; type: string; title: string; payload: any };
@@ -26,6 +27,15 @@ export function Course({ eid }: { eid: string }) {
   const [resume, setResume] = useState<ResumeSnapshot>(() => getCachedResume(eid));
   const [diag, setDiag] = useState<{ priorities: string[]; profile: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
+  const [dl, setDl] = useState<Record<number, "idle" | "busy" | "done">>({});
+
+  async function download(blockIndex: number) {
+    if (!bundle) return;
+    setDl((d) => ({ ...d, [blockIndex]: "busy" }));
+    const r = await downloadBlock(api.cacheFetch, bundle as any, eid, blockIndex);
+    setDl((d) => ({ ...d, [blockIndex]: "done" }));
+    setMsg(`Bloc ${blockIndex} téléchargé pour le mode hors-ligne (${r.cached} fichier(s)).`);
+  }
 
   const refreshProgress = useCallback(async () => {
     try {
@@ -126,6 +136,13 @@ export function Course({ eid }: { eid: string }) {
               <h2 style={{ margin: 0 }}>{b.index}. {b.title}</h2>
               <span className={`chip ${chip.cls}`}>{locked ? "🔒 " : ""}{chip.label}</span>
             </div>
+            {!locked && blockMediaUrls(bundle as any, b.index).length > 0 && (
+              (dl[b.index] === "done" || isBlockDownloaded(eid, b.index))
+                ? <span className="chip ok" style={{ marginTop: 8 }}>⬇ Disponible hors-ligne</span>
+                : <button className="ghost" style={{ marginTop: 4 }} disabled={dl[b.index] === "busy"} onClick={() => download(b.index)}>
+                    {dl[b.index] === "busy" ? "Téléchargement…" : "⬇ Télécharger les vidéos (hors-ligne)"}
+                  </button>
+            )}
             <div className="stack" style={{ marginTop: 10 }}>
               {items.map((it) => {
                 const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");

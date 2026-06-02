@@ -50,6 +50,12 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return j.user as { id: string; name: string; email: string; role: string };
     },
     async me() { return (await (await raw("GET", "/auth/me")).json()).data; },
+    /** Authenticated fetch of an arbitrary (media) URL for offline caching. */
+    async cacheFetch(url: string): Promise<Response> {
+      const abs = new URL(url, baseUrl).href;
+      const t = tokens.get().access;
+      return fetch(abs, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    },
     async get<T = any>(path: string): Promise<T> { return (await (await raw("GET", path)).json()).data as T; },
     async listEnrollments(): Promise<EnrollmentSummary[]> {
       const res = await raw("GET", "/enrollments");
