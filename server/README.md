@@ -164,6 +164,12 @@ Admins may publish directly.
 | GET | `/content/imports/:id/*` | Serve extracted package files (range-aware) |
 | GET | `/imports/:id/cmi5-fetch` · POST `/xapi/statements` | cmi5 auth + inbound xAPI LRS |
 
+**Interoperability — content export / migration**
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/courses/:id/export?format=scorm12\|cmi5\|cc` | Download a portable package (`course:read`) |
+
 **Interoperability — LTI 1.3 Tool** (an LMS launches a K-LMS resource)
 
 | Method | Path | Purpose |
@@ -378,6 +384,12 @@ npm run db:seed   # validates + publishes gestion-du-temps-n1 (idempotent)
   descriptors, **SCORM RTE tracking** (cmi data model persisted on Commit), and
   **cmi5** launch (endpoint/fetch/registration/actor params) reporting to an
   **inbound xAPI LRS** endpoint.
+- **Interoperability — export / migration (done)** — export any published course
+  to a standard, portable package: **SCORM 1.2** (universal), **cmi5** (xAPI) or
+  **Common Cartridge 1.3** (Canvas/Moodle/Blackboard/D2L). Content is rendered to
+  format-agnostic HTML driven by a uniform `window.KLMS` runtime; each packager
+  adds the right manifest + runtime. Verified by a **round-trip** (an exported
+  SCORM/cmi5 package re-imports into K-LMS) so the output is provably valid.
 - **Interoperability — LTI 1.3 Tool (done)** — K-LMS as an LTI 1.3 Tool: platform
   registration, OIDC third-party **login initiation**, and **launch** (the
   platform `id_token` is verified against its JWKS, LTI claims validated, the
