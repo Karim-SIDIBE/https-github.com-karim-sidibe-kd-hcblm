@@ -559,6 +559,10 @@ model Enrollment {
   lastItemKey    String?
   lastSeenAt     DateTime?
 
+  /// Anchor for the journal trigger schedule (Pilier 5.1): set when the
+  /// certification block first unlocks ("block start").
+  journalStartedAt DateTime?
+
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
@@ -572,6 +576,7 @@ model Enrollment {
   credentials    Credential[]
   tutorSessions  TutorSession[]
   mediaPositions MediaPosition[]
+  journalTriggers JournalTrigger[]
 
   @@unique([userId, courseId])
   @@index([status])
@@ -622,6 +627,18 @@ model SyncOperation {
   appliedAt    DateTime   @default(now())
 
   @@unique([enrollmentId, opId])
+  @@index([enrollmentId])
+}
+
+/// One per fired journal prompt (Pilier 5.1) — idempotent per (enrolment, day).
+model JournalTrigger {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  day          Int // J+1, J+3, J+5, J+7, J+10, J+14
+  sentAt       DateTime   @default(now())
+
+  @@unique([enrollmentId, day])
   @@index([enrollmentId])
 }
 

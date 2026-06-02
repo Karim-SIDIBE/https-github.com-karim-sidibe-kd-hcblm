@@ -287,6 +287,13 @@ export async function reconcile(enrollmentId: string) {
     newlyIssued.push({ type, message });
   }
 
+  // Anchor the journal trigger schedule when the certification block first
+  // unlocks ("block start" — Pilier 5.1).
+  const cert = content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert && !enrollment.journalStartedAt && progress.blocks[cert.index]?.state !== "locked") {
+    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { journalStartedAt: new Date() } });
+  }
+
   // Course completion → CERTIFIED.
   if (progress.courseCompleted && enrollment.status !== "CERTIFIED") {
     await prisma.enrollment.update({

@@ -801,14 +801,14 @@ export const n1Full: CourseContent = {
           { title: "Section 5 — Apprentissage personnel", helpText: "Ce que vous avez compris sur votre relation au temps ; l'obstacle culturel surmonté ; 3 prochaines occasions de reprendre le contrôle.", prefillFromMomentAncrage: false },
         ],
         journal: {
+          // Every journal prompt re-injects the Moment d'Ancrage (Pilier 5.1).
           entries: [
-            { day: 1, prompt: "Vous avez commencé à mettre en œuvre votre solution. Décrivez en 2-3 lignes la première réaction concrète de votre environnement africain — verbale, comportementale ou intérieure.", minWords: 50 },
-            // PAM injection touchpoint (2) — journal prompt re-injects the anchor.
+            { day: 1, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement africain — verbale, comportementale ou intérieure.", minWords: 50 },
             { day: 3, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle africain réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50 },
-            { day: 5, prompt: "Avez-vous observé un changement dans votre façon de répondre aux sollicitations depuis le début ? Donnez un exemple concret.", minWords: 50 },
-            { day: 7, prompt: "Qu'avez-vous partagé avec votre pair de progression ? Quelle a été sa perspective sur votre démarche dans votre contexte africain ?", minWords: 50 },
-            { day: 10, prompt: "Quelle est la micro-victoire de productivité africaine la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50 },
-            { day: 14, prompt: "Ce que ce parcours a transformé dans votre relation au temps. Les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50 },
+            { day: 5, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre façon de répondre aux sollicitations depuis le début ? Donnez un exemple concret.", minWords: 50 },
+            { day: 7, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression, et quelle a été sa perspective sur votre démarche ?", minWords: 50 },
+            { day: 10, prompt: "En repartant de {{moment_ancrage}}, quelle est la micro-victoire de productivité africaine la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50 },
+            { day: 14, prompt: "Par rapport à {{moment_ancrage}}, ce que ce parcours a transformé dans votre relation au temps, et les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50 },
           ],
         },
         rubric: {
