@@ -37,3 +37,15 @@ test("OB 3.0 credential is a typed Verifiable Credential", () => {
   assert.equal(vc.credentialSubject.achievement.name, "Certificat de Niveau 1");
   assert.equal(vc.credentialSubject.identifier.identityHash, "sha256$deadbeef");
 });
+
+test("the Bloc 4 rubric result surfaces as OB2 evidence + OB3 results", () => {
+  const withResult = { ...achievement, result: { score: 85, max: 100, threshold: 70, passed: true } };
+  const a: any = hostedAssertion({ credentialId: "c1", achievement: withResult, recipientHash: "x", recipientSalt: "s", issuedAt: new Date(), revoked: false });
+  assert.match(a.narrative, /85\/100/);
+  assert.equal(a.evidence[0].type, "Evidence");
+
+  const vc: any = verifiableCredential({ credentialId: "c1", achievement: withResult, recipientHash: "x", subjectName: "Awa", issuedAt: new Date() });
+  assert.equal(vc.credentialSubject.results[0].value, "85");
+  assert.equal(vc.credentialSubject.results[0].status, "Completed");
+  assert.equal(vc.credentialSubject.achievement.resultDescriptions[0].requiredValue, "70");
+});

@@ -25,6 +25,8 @@ export function issuerDocument() {
   };
 }
 
+export type AchievementResult = { score: number | null; max: number; threshold: number; passed: boolean };
+
 export type AchievementInput = {
   courseSlug: string;
   type: string; // badge type
@@ -32,7 +34,14 @@ export type AchievementInput = {
   description: string;
   criteria: string[];
   competencies?: { code: string; label: string }[];
+  /// Graded result (Bloc 4 rubric): surfaced as OB2 evidence + OB3 results.
+  result?: AchievementResult;
 };
+
+function resultNarrative(r: AchievementResult): string {
+  const s = r.score == null ? "—" : `${r.score}/${r.max}`;
+  return `Évaluation finale par grille : ${s} (seuil de certification ${r.threshold}/${r.max}). ${r.passed ? "Réussi" : "Non atteint"}.`;
+}
 
 export function badgeClassDocument(a: AchievementInput) {
   return {
@@ -57,6 +66,7 @@ export function hostedAssertion(params: {
   revoked: boolean;
   revocationReason?: string | null;
 }) {
+  const r = params.achievement.result;
   return {
     "@context": "https://w3id.org/openbadges/v2",
     type: "Assertion",
@@ -65,6 +75,7 @@ export function hostedAssertion(params: {
     recipient: { type: "email", hashed: true, salt: params.recipientSalt, identity: `sha256$${params.recipientHash}` },
     issuedOn: params.issuedAt.toISOString(),
     verification: { type: "HostedBadge" },
+    ...(r ? { narrative: resultNarrative(r), evidence: [{ type: "Evidence", narrative: resultNarrative(r) }] } : {}),
     ...(params.revoked ? { revoked: true, revocationReason: params.revocationReason ?? "revoked" } : {}),
   };
 }
@@ -96,7 +107,13 @@ export function verifiableCredential(params: {
         description: params.achievement.description,
         criteria: { narrative: params.achievement.criteria.join(" · ") },
         alignments: (params.achievement.competencies ?? []).map((c) => ({ targetName: c.label, targetCode: c.code })),
+        ...(params.achievement.result
+          ? { resultDescriptions: [{ type: ["ResultDescription"], name: "Score grille D4", requiredValue: String(params.achievement.result.threshold) }] }
+          : {}),
       },
+      ...(params.achievement.result
+        ? { results: [{ type: ["Result"], value: params.achievement.result.score == null ? "" : String(params.achievement.result.score), status: params.achievement.result.passed ? "Completed" : "Failed" }] }
+        : {}),
     },
   };
 }

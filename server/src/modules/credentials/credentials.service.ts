@@ -24,14 +24,27 @@ export class CredentialError extends Error {
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
-function achievementFor(content: CourseContent, courseSlug: string, badgeType: string, block: Block): AchievementInput {
+function achievementFor(
+  content: CourseContent, courseSlug: string, badgeType: string, block: Block, result?: AchievementInput["result"],
+): AchievementInput {
+  // For the certifying block, align to the Bloc 4 rubric's competency codes
+  // (finer than the course-level list), merged + de-duplicated.
+  let competencies = content.competencies;
+  if (block.type === "CERTIFICATION") {
+    const byCode = new Map(content.competencies.map((c) => [c.code, c]));
+    for (const c of block.payload.rubric.criteria) {
+      if (c.competencyCode) byCode.set(c.competencyCode, { code: c.competencyCode, label: c.label });
+    }
+    competencies = [...byCode.values()];
+  }
   return {
     courseSlug,
     type: badgeType,
     name: block.badge.label,
     description: block.objective || content.summary || block.title,
     criteria: block.badge.conditions,
-    competencies: content.competencies,
+    competencies,
+    result,
   };
 }
 
@@ -53,7 +66,19 @@ export async function issueCredential(params: {
 }) {
   const salt = randomBytes(16).toString("hex");
   const recipientHash = sha256(params.recipientEmail.toLowerCase() + salt);
-  const achievement = achievementFor(params.content, params.courseSlug, params.badgeType, params.block);
+
+  // Bloc 4 result/evidence: the human rubric score vs. the certification threshold.
+  let result: AchievementInput["result"];
+  if (params.block.type === "CERTIFICATION") {
+    const rubric = await prisma.itemCompletion.findUnique({
+      where: { enrollmentId_blockIndex_itemKey: { enrollmentId: params.enrollmentId, blockIndex: params.block.index, itemKey: "rubric" } },
+    });
+    const threshold = params.block.payload.rubric.threshold;
+    const score = rubric?.scorePct ?? null;
+    result = { score, max: 100, threshold, passed: score != null && score >= threshold };
+  }
+
+  const achievement = achievementFor(params.content, params.courseSlug, params.badgeType, params.block, result);
   const issuedAt = new Date();
 
   // Create the row first to get a stable id for the hosted URLs.
