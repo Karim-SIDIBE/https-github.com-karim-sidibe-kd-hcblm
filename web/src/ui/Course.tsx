@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
-import { api } from "../lib/app";
-import { engine, store } from "../lib/app";
+import { api, engine, store } from "../lib/app";
 import { rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { formatDuration, remainingLabel, type Session } from "../lib/format";
+import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
 import { navigate, routes } from "../lib/router";
 
-type Micro = { id: string; title: string; video?: { durationSec?: number } };
 type Block = { index: number; type: string; title: string; payload: any };
 type Bundle = { course: { title: string }; content: { blocks: Block[] } };
 
@@ -15,23 +14,23 @@ const STATE_CHIP: Record<string, { label: string; cls: string }> = {
   available: { label: "En cours", cls: "warn" },
   completed: { label: "Terminé", cls: "ok" },
 };
-
-/** Micro-sessions of a block (ONBOARDING uses a single trigger video). */
-function blockSessions(b: Block): Micro[] {
-  if (Array.isArray(b.payload?.microSessions)) return b.payload.microSessions;
-  if (b.type === "ONBOARDING" && b.payload?.triggerVideo) return [{ id: "trigger", title: "Introduction", video: b.payload.triggerVideo }];
-  return [];
-}
+const ICON: Record<ItemKind, string> = {
+  onboarding: "🚀", diagnostic: "📝", session: "🎬", case: "📋", scenarios: "🧩",
+  interblock: "📝", field: "📍", self: "🪞", plan: "🗓️", final: "🏁", journal: "📓", project: "🎓",
+};
+const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final"];
+const PHASE5: ItemKind[] = ["journal", "project"];
 
 export function Course({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
   const [resume, setResume] = useState<ResumeSnapshot>(() => getCachedResume(eid));
+  const [diag, setDiag] = useState<{ priorities: string[]; profile: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
 
   const refreshProgress = useCallback(async () => {
     try {
-      const data = await api.progress(eid); // reconcile: { progress, badges, ... }
+      const data = await api.progress(eid);
       if (data?.progress) { setProgress(data.progress); setCachedProgress(eid, data.progress); }
       const r = await api.resume(eid);
       setResume(r?.resume ?? null); setCachedResume(eid, r?.resume ?? null);
@@ -41,6 +40,7 @@ export function Course({ eid }: { eid: string }) {
   useEffect(() => {
     let alive = true;
     rememberEnrollment(eid);
+    try { const d = localStorage.getItem(`klms_diag_${eid}`); if (d) setDiag(JSON.parse(d)); } catch { /* */ }
     (async () => {
       const cached = await store.getBundle<Bundle>(eid);
       if (alive && cached) setBundle(cached);
@@ -55,18 +55,17 @@ export function Course({ eid }: { eid: string }) {
   const stateOf = (i: number) => progress?.blocks.find((b) => b.index === i)?.state ?? (i === 0 ? "available" : "locked");
   const doneKeys = (i: number) => new Set(progress?.blocks.find((b) => b.index === i)?.completedKeys ?? []);
 
-  function openSession(blockIndex: number, itemKey: string) {
-    if (blockIndex === 0) return navigate(routes.onboarding(eid));
-    navigate(routes.session(eid, blockIndex, itemKey));
+  function onItem(blockIndex: number, it: BlockItem) {
+    if (it.kind === "onboarding") return navigate(routes.onboarding(eid));
+    if (it.kind === "session") return navigate(routes.session(eid, blockIndex, it.key));
+    if (it.kind === "diagnostic" || it.kind === "interblock" || it.kind === "final") return navigate(routes.quiz(eid, it.kind));
   }
 
-  // Interim completion affordance (the real gate arrives with the Phase-3 player).
-  async function markDone(blockIndex: number, itemKey: string) {
-    const r = await engine.commit(eid, "complete_item", { blockIndex, itemType: "MICRO_SESSION", itemKey });
+  // Interim completion for item types whose dedicated UI lands in Phase 5.
+  async function completeInterim(blockIndex: number, it: BlockItem) {
+    const r = await engine.commit(eid, "complete_item", { blockIndex, itemType: ITEM_TYPE[it.kind] ?? "MICRO_SESSION", itemKey: it.key });
     if ((r as any).progress) { setProgress((r as any).progress); setCachedProgress(eid, (r as any).progress); }
-    if ((r as any).resume !== undefined) { setResume((r as any).resume); setCachedResume(eid, (r as any).resume); }
-    setMsg((r as any).offline ? "Enregistré hors-ligne — synchronisation à la reconnexion." : null);
-    if (!(r as any).progress) await refreshProgress();
+    else await refreshProgress();
   }
 
   if (!bundle) {
@@ -81,7 +80,7 @@ export function Course({ eid }: { eid: string }) {
   const blocks = bundle.content.blocks;
   const allSessions: Session[] = blocks.flatMap((b) => {
     const done = doneKeys(b.index);
-    return blockSessions(b).map((m) => ({ key: m.id, durationSec: m.video?.durationSec ?? 0, done: done.has(m.id) }));
+    return blockItems(b).filter((it) => it.kind === "session").map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: done.has(it.key) }));
   });
   const blocksDone = progress?.completedBlockIndexes.length ?? 0;
   const pct = Math.round((blocksDone / blocks.length) * 100);
@@ -98,19 +97,27 @@ export function Course({ eid }: { eid: string }) {
         <div className="progress" style={{ margin: "10px 0" }}><span style={{ width: `${pct}%` }} /></div>
         {remaining && <p className="muted" style={{ margin: 0 }}>⏱️ {remaining}</p>}
         {resume && !progress?.courseCompleted && (
-          <button className="block" style={{ marginTop: 12 }} onClick={() => openSession(resume.blockIndex, resume.itemKey)}>
+          <button className="block" style={{ marginTop: 12 }} onClick={() => onItem(resume.blockIndex, { key: resume.itemKey, kind: resume.blockIndex === 0 ? "onboarding" : "session", label: "" })}>
             ▶ Reprendre — bloc {resume.blockIndex}{resume.positionSec ? ` (à ${formatDuration(resume.positionSec)})` : ""}
           </button>
         )}
         {progress?.courseCompleted && <p className="chip ok" style={{ marginTop: 10 }}>Parcours terminé 🎓</p>}
       </div>
 
+      {diag && (diag.priorities?.length ?? 0) > 0 && (
+        <div className="card" style={{ borderLeft: "4px solid var(--brand)" }}>
+          <strong>🎯 Vos priorités d'apprentissage</strong>
+          {diag.profile && <p className="chip ok" style={{ margin: "8px 0", display: "inline-block" }}>{diag.profile}</p>}
+          <ol style={{ margin: "6px 0 0", paddingLeft: 20 }}>{diag.priorities.map((p) => <li key={p}>{p}</li>)}</ol>
+        </div>
+      )}
+
       {blocks.map((b) => {
         const st = stateOf(b.index);
         const chip = STATE_CHIP[st] ?? { label: "—", cls: "" };
         const done = doneKeys(b.index);
-        const sessions = blockSessions(b);
         const locked = st === "locked";
+        const items = blockItems(b);
         return (
           <section key={b.index} className="card" style={locked ? { opacity: 0.6 } : undefined}>
             <div className="row between">
@@ -118,20 +125,23 @@ export function Course({ eid }: { eid: string }) {
               <span className={`chip ${chip.cls}`}>{locked ? "🔒 " : ""}{chip.label}</span>
             </div>
             <div className="stack" style={{ marginTop: 10 }}>
-              {sessions.map((m) => {
-                const isDone = done.has(m.id);
+              {items.map((it) => {
+                const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");
+                const phase5 = PHASE5.includes(it.kind);
                 return (
-                  <div key={m.id} className="row between">
-                    <button className="ghost" style={{ textAlign: "left", flex: 1 }} disabled={locked}
-                      onClick={() => openSession(b.index, m.id)}>
-                      {isDone ? "✅" : "🎬"} {m.id} — {m.title}
-                      <span className="muted"> · {formatDuration(m.video?.durationSec ?? 0)}</span>
+                  <div key={it.key} className="row between">
+                    <button className="ghost" style={{ textAlign: "left", flex: 1 }} disabled={locked || phase5}
+                      onClick={() => onItem(b.index, it)}>
+                      {isDone ? "✅" : ICON[it.kind]} {it.label}
+                      {it.durationSec ? <span className="muted"> · {formatDuration(it.durationSec)}</span> : null}
+                      {phase5 ? <span className="muted"> · bientôt</span> : null}
                     </button>
-                    {!locked && !isDone && b.index !== 0 && <button className="secondary" onClick={() => markDone(b.index, m.id)}>Terminé</button>}
+                    {!locked && !isDone && !NAVIGABLE.includes(it.kind) && !phase5 && (
+                      <button className="secondary" onClick={() => completeInterim(b.index, it)}>Terminé</button>
+                    )}
                   </div>
                 );
               })}
-              {sessions.length === 0 && <p className="muted" style={{ margin: 0 }}>Contenu à venir dans une prochaine étape.</p>}
             </div>
           </section>
         );

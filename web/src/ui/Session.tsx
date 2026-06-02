@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { setCachedPosition, setCachedProgress, getCachedPosition } from "../lib/cache";
 import { currentConn, resolveSource, type Rendition } from "../lib/media";
+import { previousSession } from "../lib/content";
 import { navigate, routes } from "../lib/router";
 import { VideoPlayer } from "./VideoPlayer";
 import { Exercise, type ExerciseMeta, type ExerciseSpec } from "./Exercise";
@@ -81,6 +82,15 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
 
       {phase === "video" && (
         <>
+          {(() => {
+            const prev = previousSession(bundle.content.blocks, block, item);
+            return prev && prev.summaryPoints.length > 0 ? (
+              <div className="card" style={{ background: "#eff6ff" }}>
+                <strong>↩︎ Rappel — {prev.title}</strong>
+                <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>{prev.summaryPoints.map((p, i) => <li key={i}>{p}</li>)}</ul>
+              </div>
+            ) : null;
+          })()}
           <VideoPlayer
             src={source.url} captionsUrl={source.captionsUrl} title={session.title}
             startAt={startAt} quality={source.quality}

@@ -20,6 +20,12 @@ test("session route with block + item", () => {
   assert.deepEqual(parseRoute("#/c/abc/session/3/3.1"), { name: "session", eid: "abc", block: 3, item: "3.1" });
 });
 
+test("quiz route (diagnostic/interblock/final only)", () => {
+  assert.deepEqual(parseRoute("#/c/abc/quiz/diagnostic"), { name: "quiz", eid: "abc", kind: "diagnostic" });
+  assert.deepEqual(parseRoute("#/c/abc/quiz/final"), { name: "quiz", eid: "abc", kind: "final" });
+  assert.deepEqual(parseRoute("#/c/abc/quiz/bogus"), { name: "course", eid: "abc" }); // unknown kind → course
+});
+
 test("trailing slashes and url-encoding tolerated", () => {
   assert.deepEqual(parseRoute("#/c/ab%20c/"), { name: "course", eid: "ab c" });
 });

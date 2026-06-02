@@ -5,10 +5,13 @@
  */
 import { useEffect, useState } from "react";
 
+export type QuizKind = "diagnostic" | "interblock" | "final";
+
 export type Route =
   | { name: "enrollments" }
   | { name: "course"; eid: string }
   | { name: "session"; eid: string; block: number; item: string }
+  | { name: "quiz"; eid: string; kind: QuizKind }
   | { name: "onboarding"; eid: string }
   | { name: "block"; eid: string; block: number };
 
@@ -20,6 +23,7 @@ export function parseRoute(hash: string): Route {
     const eid = decodeURIComponent(seg[1]);
     if (seg[2] === "onboarding") return { name: "onboarding", eid };
     if (seg[2] === "session" && seg[3] && seg[4]) return { name: "session", eid, block: Number(seg[3]), item: decodeURIComponent(seg[4]) };
+    if (seg[2] === "quiz" && (seg[3] === "diagnostic" || seg[3] === "interblock" || seg[3] === "final")) return { name: "quiz", eid, kind: seg[3] };
     if (seg[2] === "block" && seg[3]) return { name: "block", eid, block: Number(seg[3]) };
     return { name: "course", eid };
   }
@@ -39,6 +43,7 @@ export const routes = {
   onboarding: (eid: string) => `#/c/${encodeURIComponent(eid)}/onboarding`,
   block: (eid: string, block: number) => `#/c/${encodeURIComponent(eid)}/block/${block}`,
   session: (eid: string, block: number, item: string) => `#/c/${encodeURIComponent(eid)}/session/${block}/${encodeURIComponent(item)}`,
+  quiz: (eid: string, kind: QuizKind) => `#/c/${encodeURIComponent(eid)}/quiz/${kind}`,
 };
 
 export function useRoute(): Route {
