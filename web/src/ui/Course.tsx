@@ -18,8 +18,7 @@ const ICON: Record<ItemKind, string> = {
   onboarding: "🚀", diagnostic: "📝", session: "🎬", case: "📋", scenarios: "🧩",
   interblock: "📝", field: "📍", self: "🪞", plan: "🗓️", final: "🏁", journal: "📓", project: "🎓",
 };
-const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final"];
-const PHASE5: ItemKind[] = ["journal", "project"];
+const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final", "field", "journal", "project"];
 
 export function Course({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
@@ -59,6 +58,8 @@ export function Course({ eid }: { eid: string }) {
     if (it.kind === "onboarding") return navigate(routes.onboarding(eid));
     if (it.kind === "session") return navigate(routes.session(eid, blockIndex, it.key));
     if (it.kind === "diagnostic" || it.kind === "interblock" || it.kind === "final") return navigate(routes.quiz(eid, it.kind));
+    if (it.kind === "field" || it.kind === "journal") return navigate(routes.deliverable(eid, blockIndex, it.key));
+    if (it.kind === "project") return navigate(routes.project(eid));
   }
 
   // Interim completion for item types whose dedicated UI lands in Phase 5.
@@ -102,6 +103,7 @@ export function Course({ eid }: { eid: string }) {
           </button>
         )}
         {progress?.courseCompleted && <p className="chip ok" style={{ marginTop: 10 }}>Parcours terminé 🎓</p>}
+        <button className="secondary block" style={{ marginTop: 10 }} onClick={() => navigate(routes.badges(eid))}>🏅 Mes badges & certificat</button>
       </div>
 
       {diag && (diag.priorities?.length ?? 0) > 0 && (
@@ -127,16 +129,14 @@ export function Course({ eid }: { eid: string }) {
             <div className="stack" style={{ marginTop: 10 }}>
               {items.map((it) => {
                 const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");
-                const phase5 = PHASE5.includes(it.kind);
                 return (
                   <div key={it.key} className="row between">
-                    <button className="ghost" style={{ textAlign: "left", flex: 1 }} disabled={locked || phase5}
+                    <button className="ghost" style={{ textAlign: "left", flex: 1 }} disabled={locked}
                       onClick={() => onItem(b.index, it)}>
                       {isDone ? "✅" : ICON[it.kind]} {it.label}
                       {it.durationSec ? <span className="muted"> · {formatDuration(it.durationSec)}</span> : null}
-                      {phase5 ? <span className="muted"> · bientôt</span> : null}
                     </button>
-                    {!locked && !isDone && !NAVIGABLE.includes(it.kind) && !phase5 && (
+                    {!locked && !isDone && !NAVIGABLE.includes(it.kind) && (
                       <button className="secondary" onClick={() => completeInterim(b.index, it)}>Terminé</button>
                     )}
                   </div>
