@@ -1,20 +1,29 @@
 # KD-HCBLM v2.0 — repository guide
 
-Kompetences Declick learning platform. Two parts:
+Kompetences Declick learning platform. An **npm-workspaces monorepo**:
 
-- **`project/`** — design source: the handoff spec, the real Niveau 1 course
-  (`project/course_extracted.md`) and the learner-UI prototype.
+- **`packages/shared/`** (`@kd/shared`) — the single source of truth for the
+  **content model** (Zod). Consumed by the server (runtime validation + engine)
+  and the web PWA (types only). Source-only TS — no build step.
 - **`server/`** — the production backend (most work happens here). See
   **`server/README.md`** for the full architecture, API and status.
 - **`web/`** — the offline-first learner **PWA** (Vite · React · TypeScript)
-  consuming the API. See **`web/README.md`**.
+  consuming the API. See **`web/README.md`** and **`web/PWA_PLAN.md`**.
+- **`project/`** — design source: the handoff spec, the real Niveau 1 course
+  (`project/course_extracted.md`) and the learner-UI prototype.
+
+From the repo root: `npm install` (sets up the workspaces), `npm run typecheck`
+and `npm test` run across all three workspaces.
 
 ## The one non-negotiable: the content model is the contract
 
 Everything orbits a single Zod definition of a course —
-`server/src/domain/content-model.ts` (Course → 5 fixed blocks → micro-sessions,
-quizzes, rubric, journal). It is the contract shared by the authoring form, the
-publish-time validation gate, the runtime engine and the learner renderer.
+**`packages/shared/src/content-model.ts`** (Course → 5 fixed blocks →
+micro-sessions, quizzes, rubric, journal), published as `@kd/shared`.
+`server/src/domain/content-model.ts` re-exports it so every `domain/content-model.js`
+import keeps working. It is the one contract shared by the authoring form, the
+publish-time validation gate, the runtime engine, **and the learner PWA renderer**
+(which imports the inferred types) — defined once, zero drift.
 
 `server/src/domain/validation.ts` is the **publish gate**: shape (Zod) + policy
 (exactly 5 ordered blocks, the `{{moment_ancrage}}` token re-injected at the

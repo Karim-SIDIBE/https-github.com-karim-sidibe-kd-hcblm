@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { blockItems, flattenSessions, previousSession } from "./content";
 
-const blocks = [
+const blocks: any[] = [
   { index: 0, type: "ONBOARDING", title: "Onboarding", payload: { triggerVideo: {} } },
   { index: 1, type: "COMPREHENSION", title: "Comprendre", payload: { microSessions: [{ id: "1.1", title: "A", summaryPoints: ["x"], video: { durationSec: 240 } }], caseStudy: { title: "Cas Nadia" } } },
   { index: 2, type: "PRACTICE", title: "Pratiquer", payload: { microSessions: [{ id: "2.1", title: "B", summaryPoints: ["y"] }], guidedScenarios: [{}], interBlockQuiz: { questions: [] }, fieldApplication: {} } },

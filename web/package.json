@@ -11,6 +11,7 @@
     "test": "node --test --import tsx \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@kd/shared": "*",
     "react": "^18.3.1",
     "react-dom": "^18.3.1"
   },

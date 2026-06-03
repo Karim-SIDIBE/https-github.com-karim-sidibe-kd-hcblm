@@ -6,9 +6,9 @@ import { formatDuration, remainingLabel, type Session } from "../lib/format";
 import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
 import { blockMediaUrls, downloadBlock, isBlockDownloaded } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
+import type { CourseContent } from "@kd/shared";
 
-type Block = { index: number; type: string; title: string; payload: any };
-type Bundle = { course: { title: string }; content: { blocks: Block[] } };
+type Bundle = { course: { title: string }; content: CourseContent };
 
 const STATE_CHIP: Record<string, { label: string; cls: string }> = {
   locked: { label: "Verrouillé", cls: "" },

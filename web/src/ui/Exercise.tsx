@@ -1,17 +1,7 @@
 import { useRef, useState } from "react";
+import type { Exercise as ExerciseSpec } from "@kd/shared";
 
-type Option = { key: string; label: string };
-type Field = { label: string; placeholder?: string };
-export type ExerciseSpec = {
-  type: "multi" | "written" | "guidedForm";
-  prompt: string;
-  feedbackText: string;
-  options?: Option[];
-  correctKey?: string;
-  minChars?: number;
-  fields?: Field[];
-};
-
+export type { ExerciseSpec };
 export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?: string; correct?: boolean };
 
 /**
