@@ -2,7 +2,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
 
 /**
  * Capacitor configuration — OPTIONAL native (iOS/Android) shells around the
- * Declick Digital PWA. These wrappers do NOT replace the PWA: the web app
+ * DECLICK DIGITAL PWA. These wrappers do NOT replace the PWA: the web app
  * remains the primary channel. They exist only to ship the *same* build to the
  * App Store / Play Store when a client requires a store presence.
  *
@@ -15,7 +15,7 @@ import type { CapacitorConfig } from "@capacitor/cli";
  * bundle identifier is per-client and permanent once published — override it
  * with CAP_APP_ID for a reseller build.
  */
-const BRAND_NAME = process.env.VITE_BRAND_NAME?.trim() || "Declick Digital";
+const BRAND_NAME = process.env.VITE_BRAND_NAME?.trim() || "DECLICK DIGITAL";
 const APP_ID = process.env.CAP_APP_ID?.trim() || "digital.declick.app";
 
 const config: CapacitorConfig = {

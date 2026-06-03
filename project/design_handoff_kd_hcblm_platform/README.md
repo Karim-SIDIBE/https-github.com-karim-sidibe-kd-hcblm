@@ -1,4 +1,4 @@
-# Handoff — Plateforme KD-HCBLM v2.0 (Kompetences Declick)
+# Handoff — Plateforme KD-HCBLM v2.0 (KOMPETENCES DECLICK)
 
 ## Overview
 
@@ -19,7 +19,7 @@ In other words: **the structure, visual design, and pedagogical mechanics are fi
 
 The files in this bundle are **design references created in HTML/React-via-Babel** — prototypes showing the intended look, content structure and behaviour. **They are not production code to copy directly.** The task is to **recreate these designs in a real codebase**: pick an appropriate stack (the UI maps naturally to **React + a component library + a design-token layer**; backend any modern stack with a relational DB + object storage + a video/streaming service + an LRS), and rebuild the screens using production patterns (real routing, data layer, auth, persistence, streaming, notifications).
 
-Reuse the **design tokens** (`declick-tokens.css`) and the **component intent** (`hifi.css`, `hf-kit.jsx`) verbatim where possible — they are the Kompetences Africa design system applied as-is.
+Reuse the **design tokens** (`declick-tokens.css`) and the **component intent** (`hifi.css`, `hf-kit.jsx`) verbatim where possible — they are the KOMPETENCES AFRICA design system applied as-is.
 
 ## Fidelity
 
@@ -189,7 +189,7 @@ All in `declick-tokens.css` (use verbatim). Highlights:
 - Type: **Plus Jakarta Sans** (display 700/800) + **DM Sans** (body 400/500). Scale, spacing (4px base), radii (sm 6 → 2xl 28, pill 999), shadows (soft navy-tinted; orange-glow CTA `0 10px 24px rgba(243,111,33,.32)`), motion easings — all tokenised.
 
 ## Assets
-- `assets/logo-declick.png` — Kompetences Declick logo (use the brand's real asset in production).
+- `assets/logo-declick.png` — KOMPETENCES DECLICK logo (use the brand's real asset in production).
 - Icons in prototype are inline SVG (Lucide-style, 1.75–2 px stroke) — replace with the codebase's icon set.
 - Videos are placeholders — wire to the real adaptive-streaming service.
 

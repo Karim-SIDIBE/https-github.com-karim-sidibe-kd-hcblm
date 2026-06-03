@@ -2,7 +2,7 @@
   "name": "kd-hcblm",
   "version": "0.1.0",
   "private": true,
-  "description": "Kompetences Declick KD-HCBLM v2.0 — monorepo (shared contract + backend + learner PWA).",
+  "description": "KOMPETENCES DECLICK KD-HCBLM v2.0 — monorepo (shared contract + backend + learner PWA).",
   "workspaces": [
     "packages/*",
     "server",

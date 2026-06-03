@@ -26,7 +26,7 @@ export async function ltiRoutes(app: FastifyInstance) {
   app.get("/lti/config", async () => {
     const base = env.PUBLIC_BASE_URL.replace(/\/$/, "");
     return {
-      title: "Kompetences Declick",
+      title: "KOMPETENCES DECLICK",
       oidc_initiation_url: `${base}/api/v1/lti/login`,
       target_link_uri: `${base}/api/v1/lti/launch`,
       jwks_uri: `${base}/api/v1/lti/jwks`,

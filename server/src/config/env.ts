@@ -54,7 +54,7 @@ const EnvSchema = z.object({
 
   // --- public base + verifiable credentials (Open Badges 2.0 / 3.0) ---
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
-  CREDENTIAL_ISSUER_NAME: z.string().default("Kompetences Africa"),
+  CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES AFRICA"),
   CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
 
   // --- authentication (first-party JWT, OAuth 2.1 / OIDC) ---

@@ -1,6 +1,6 @@
 # KD-HCBLM v2.0 — repository guide
 
-Kompetences Declick learning platform. An **npm-workspaces monorepo**:
+KOMPETENCES DECLICK learning platform. An **npm-workspaces monorepo**:
 
 - **`packages/shared/`** (`@kd/shared`) — the single source of truth for the
   **content model** (Zod). Consumed by the server (runtime validation + engine)

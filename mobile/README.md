@@ -22,7 +22,7 @@ PWA's production assets. The app talks to the backend over HTTPS via the
 build-time `VITE_API_URL` (see [`.env.example`](./.env.example)) — there is no
 dev proxy on a device.
 
-- **App ID**: `digital.declick.app` (env `CAP_APP_ID`) · **Name**: Declick Digital
+- **App ID**: `digital.declick.app` (env `CAP_APP_ID`) · **Name**: DECLICK DIGITAL
   (env `VITE_BRAND_NAME` — the same var that names the PWA). For a SaaS client
   build, set both to the client's brand. The App ID / bundle identifier is
   **permanent** once published, so finalise it before the first submission.
