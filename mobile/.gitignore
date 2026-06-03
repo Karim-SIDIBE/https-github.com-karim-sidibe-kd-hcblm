@@ -1,0 +1,10 @@
+# Native platform projects are GENERATED (npx cap add ios|android) — regenerate
+# rather than commit. They are large and machine-specific. See README.md.
+/ios/
+/android/
+
+# Generated icon/splash assets
+/resources/generated/
+
+node_modules/
+.env
