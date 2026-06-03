@@ -2,7 +2,7 @@
   "name": "@kd/mobile",
   "private": true,
   "version": "0.1.0",
-  "description": "Optional Capacitor (iOS/Android) wrappers around the Kompetences Declick PWA. Reserve channel for clients requiring an App Store / Play Store presence — the PWA stays primary.",
+  "description": "Optional Capacitor (iOS/Android) wrappers around the Declick Digital PWA (white-label: VITE_BRAND_NAME). Reserve channel for clients requiring an App Store / Play Store presence — the PWA stays primary.",
   "type": "module",
   "scripts": {
     "build:web": "npm -w web run build",

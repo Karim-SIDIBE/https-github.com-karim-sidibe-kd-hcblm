@@ -22,9 +22,10 @@ PWA's production assets. The app talks to the backend over HTTPS via the
 build-time `VITE_API_URL` (see [`.env.example`](./.env.example)) — there is no
 dev proxy on a device.
 
-- **App ID**: `digital.declick.app` · **Name**: Kompetences Declick
-  (change both in `capacitor.config.ts` before the first store submission — the
-  App ID / bundle identifier is permanent once published).
+- **App ID**: `digital.declick.app` (env `CAP_APP_ID`) · **Name**: Declick Digital
+  (env `VITE_BRAND_NAME` — the same var that names the PWA). For a SaaS client
+  build, set both to the client's brand. The App ID / bundle identifier is
+  **permanent** once published, so finalise it before the first submission.
 - The service worker degrades gracefully: it works on Android (`https://localhost`)
   and is a harmless no-op on iOS (WKWebView has no SW). Offline learning data
   lives in IndexedDB either way, so behaviour matches the PWA.
@@ -47,10 +48,11 @@ dev proxy on a device.
 npm install                       # installs Capacitor (this workspace included)
 
 cd mobile
-cp .env.example .env              # adjust VITE_API_URL if needed
+cp .env.example .env              # adjust VITE_API_URL / branding if needed
 
-# 1. Build the PWA pointing at the PRODUCTION API
-VITE_API_URL="https://api.declick.digital/api/v1" npm run build:web
+# 1. Build the PWA with the production API + branding from .env
+set -a; . ./.env; set +a          # export VITE_API_URL, VITE_BRAND_*, CAP_APP_ID
+npm run build:web
 
 # 2. Add the native platforms (generates ./ios and ./android — git-ignored)
 npm run add:android               # needs Android SDK
@@ -79,7 +81,8 @@ Whenever the web app changes, rebuild and re-sync — **no native code edits**:
 
 ```bash
 cd mobile
-VITE_API_URL="https://api.declick.digital/api/v1" npm run build:web
+set -a; . ./.env; set +a
+npm run build:web
 npm run sync
 npm run open:android      # → Android Studio: Build > Generate Signed Bundle (.aab)
 npm run open:ios          # → Xcode: Product > Archive > Distribute (App Store)

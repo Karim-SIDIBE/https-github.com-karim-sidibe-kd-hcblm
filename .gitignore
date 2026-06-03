@@ -3,3 +3,7 @@ dist/
 *.log
 .DS_Store
 .env
+.env.*
+!.env.example
+# Per-client deployment presets (real values). Keep the *.example templates.
+deploy/presets/*.env
