@@ -10,6 +10,8 @@ export type QuizKind = "diagnostic" | "interblock" | "final";
 export type Route =
   | { name: "enrollments" }
   | { name: "course"; eid: string }
+  | { name: "cours"; eid: string }
+  | { name: "journal"; eid: string }
   | { name: "session"; eid: string; block: number; item: string }
   | { name: "quiz"; eid: string; kind: QuizKind }
   | { name: "deliverable"; eid: string; block: number; key: string }
@@ -24,6 +26,8 @@ export function parseRoute(hash: string): Route {
   const seg = path ? path.split("/") : [];
   if (seg[0] === "c" && seg[1]) {
     const eid = decodeURIComponent(seg[1]);
+    if (seg[2] === "cours") return { name: "cours", eid };
+    if (seg[2] === "journal") return { name: "journal", eid };
     if (seg[2] === "onboarding") return { name: "onboarding", eid };
     if (seg[2] === "session" && seg[3] && seg[4]) return { name: "session", eid, block: Number(seg[3]), item: decodeURIComponent(seg[4]) };
     if (seg[2] === "quiz" && (seg[3] === "diagnostic" || seg[3] === "interblock" || seg[3] === "final")) return { name: "quiz", eid, kind: seg[3] };
@@ -46,6 +50,8 @@ export function navigate(path: string) {
 export const routes = {
   enrollments: () => "#/",
   course: (eid: string) => `#/c/${encodeURIComponent(eid)}`,
+  cours: (eid: string) => `#/c/${encodeURIComponent(eid)}/cours`,
+  journal: (eid: string) => `#/c/${encodeURIComponent(eid)}/journal`,
   onboarding: (eid: string) => `#/c/${encodeURIComponent(eid)}/onboarding`,
   block: (eid: string, block: number) => `#/c/${encodeURIComponent(eid)}/block/${block}`,
   session: (eid: string, block: number, item: string) => `#/c/${encodeURIComponent(eid)}/session/${block}/${encodeURIComponent(item)}`,

@@ -505,7 +505,12 @@ export async function reconcile(enrollmentId: string) {
   }
 
   const badges = await prisma.badge.findMany({ where: { enrollmentId }, orderBy: { issuedAt: "asc" } });
-  return { progress, badges, newlyIssued, momentAncrageCaptured: Boolean(enrollment.momentAncrage) };
+  return {
+    progress, badges, newlyIssued,
+    momentAncrageCaptured: Boolean(enrollment.momentAncrage),
+    learnerName: enrollment.user.name,
+    peer: enrollment.peerName ? { name: enrollment.peerName, notified: badges.length > 0 } : null,
+  };
 }
 
 // --- auto-resume + position (Pilier 6.2) ------------------------------------

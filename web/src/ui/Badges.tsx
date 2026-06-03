@@ -1,80 +1,88 @@
 import { useEffect, useState } from "react";
-import { api } from "../lib/app";
+import { api, engine, store } from "../lib/app";
 import { navigate, routes } from "../lib/router";
 
 type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; revoked: boolean; hostedUrl: string; verifyUrl: string };
-
 const ORG = "Kompetences Declick";
+const TIERS = [
+  { type: "ENTRY", abbr: "Entré", name: "Badge Entrée", block: "Bloc 0" },
+  { type: "COMPREHENSION", abbr: "Compr", name: "Badge Compréhension", block: "Bloc 1" },
+  { type: "PRACTICE", abbr: "Prati", name: "Badge Pratique", block: "Bloc 2" },
+  { type: "ANCHORING", abbr: "Ancra", name: "Badge Ancrage", block: "Bloc 3" },
+];
+const LEVELS: Record<string, string> = { L1: "Niveau 1", L2: "Niveau 2", L3: "Niveau 3", N1: "Niveau 1", N2: "Niveau 2", N3: "Niveau 3" };
 
-/** LinkedIn "Add to profile" 1-tap deep link (AC#8). */
 function linkedInUrl(c: Credential) {
   const d = new Date(c.issuedAt);
-  const p = new URLSearchParams({
-    startTask: "CERTIFICATION_NAME",
-    name: c.badgeLabel || c.achievementType,
-    organizationName: ORG,
-    issueYear: String(d.getFullYear()),
-    issueMonth: String(d.getMonth() + 1),
-    certUrl: c.hostedUrl,
-    certId: c.id,
-  });
+  const p = new URLSearchParams({ startTask: "CERTIFICATION_NAME", name: c.badgeLabel || c.achievementType, organizationName: ORG, issueYear: String(d.getFullYear()), issueMonth: String(d.getMonth() + 1), certUrl: c.hostedUrl, certId: c.id });
   return `https://www.linkedin.com/profile/add?${p.toString()}`;
 }
 
 export function Badges({ eid }: { eid: string }) {
-  const [creds, setCreds] = useState<Credential[] | null>(null);
+  const [creds, setCreds] = useState<Credential[]>([]);
   const [badges, setBadges] = useState<{ type: string }[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
+  const [completed, setCompleted] = useState(false);
+  const [level, setLevel] = useState("Niveau 1");
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
+      const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
+      if (alive && b?.course?.level) setLevel(LEVELS[b.course.level] ?? b.course.level);
       try {
         const [c, prog] = await Promise.all([api.get<Credential[]>(`/enrollments/${eid}/credentials`), api.progress(eid)]);
         if (!alive) return;
-        setCreds(c ?? []);
-        setBadges(prog?.badges ?? []);
-      } catch { if (alive) setError("Connexion requise pour afficher vos badges."); }
+        setCreds(c ?? []); setBadges(prog?.badges ?? []); setCompleted(Boolean(prog?.progress?.courseCompleted));
+      } catch { /* offline */ }
+      if (alive) setLoaded(true);
     })();
     return () => { alive = false; };
   }, [eid]);
 
-  async function copy(url: string) {
-    try { await navigator.clipboard.writeText(url); setCopied(url); setTimeout(() => setCopied(null), 1500); } catch { /* */ }
-  }
-
-  const Back = () => <button className="ghost" onClick={() => navigate(routes.course(eid))}>← Tableau de bord</button>;
+  const credFor = (type: string) => creds.find((c) => c.achievementType === type || c.badgeLabel === type);
+  const has = (type: string) => badges.some((b) => b.type === type);
+  const cert = creds.find((c) => c.achievementType === "CERTIFICATE" || /CERT/i.test(c.achievementType));
 
   return (
     <div className="stack">
-      <Back />
-      <h1>Mes badges & certificat</h1>
-      {error && <p className="banner offline">{error}</p>}
-      {!creds && !error && <><div className="skeleton card" /><div className="skeleton card" /></>}
+      <div><div className="eyebrow">Vos badges</div><h1 style={{ marginTop: 6 }}>Progression certifiante</h1></div>
+      {!loaded && <><div className="skeleton card" /><div className="skeleton card" /></>}
 
-      {creds && creds.length === 0 && badges.length === 0 && <p className="muted">Aucun badge pour le moment — terminez un bloc pour en débloquer un.</p>}
-
-      {/* Earned block badges not yet credentialed (offline / pending issuance). */}
-      {creds && creds.length === 0 && badges.length > 0 && (
-        <div className="row" style={{ flexWrap: "wrap" }}>{badges.map((b) => <span key={b.type} className="chip ok">🏅 {b.type}</span>)}</div>
-      )}
-
-      {(creds ?? []).map((c) => (
-        <div key={c.id} className="card stack">
-          <div className="row between">
-            <strong>🏅 {c.badgeLabel || c.achievementType}</strong>
-            {c.revoked ? <span className="chip ko">révoqué</span> : <span className="chip ok">vérifiable</span>}
+      {TIERS.map((t) => {
+        const earned = has(t.type); const c = credFor(t.type);
+        return (
+          <div key={t.type} className="hf-card" style={earned ? undefined : { opacity: 0.7 }}>
+            <div className="row between">
+              <div className="row" style={{ gap: 14 }}>
+                <span className={`hf-medal ${earned ? "earned" : ""}`}>{t.abbr}</span>
+                <div><strong className="h4">{t.name}</strong><div className="meta">{t.block}</div></div>
+              </div>
+              {earned ? <span className="hf-pill hf-pill--mint hf-pill--sm">Obtenu</span> : <span className="hf-lock">🔒 Verrouillé</span>}
+            </div>
+            {earned && c && !c.revoked && (
+              <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
+                <a href={linkedInUrl(c)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">Ajouter à LinkedIn</button></a>
+                <a href={c.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">Vérifier</button></a>
+              </div>
+            )}
           </div>
-          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Émis le {new Date(c.issuedAt).toLocaleDateString("fr-FR")}</p>
-          <div className="row" style={{ flexWrap: "wrap" }}>
-            <a href={linkedInUrl(c)} target="_blank" rel="noreferrer"><button>Ajouter à LinkedIn</button></a>
-            <a href={c.verifyUrl} target="_blank" rel="noreferrer"><button className="secondary">Vérifier</button></a>
-            <button className="secondary" onClick={() => copy(c.verifyUrl)}>{copied === c.verifyUrl ? "Copié ✓" : "Copier le lien"}</button>
+        );
+      })}
+
+      {/* Certificate */}
+      <div className="hf-card hf-card--peach hf-card--stripe-orange center">
+        <span className="hf-medal cert lg" style={{ margin: "0 auto" }}>{level}</span>
+        <h2 style={{ marginTop: 12 }}>Certificat de {level}</h2>
+        {completed && cert ? (
+          <div className="row" style={{ justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
+            <a href={linkedInUrl(cert)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">Ajouter à LinkedIn</button></a>
+            <a href={cert.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">Vérification publique</button></a>
           </div>
-          <p className="muted" style={{ margin: 0, fontSize: 12, wordBreak: "break-all" }}>{c.verifyUrl}</p>
-        </div>
-      ))}
+        ) : (
+          <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} onClick={() => navigate(routes.project(eid))}>Déposer mon projet du Bloc 4 →</button>
+        )}
+      </div>
     </div>
   );
 }

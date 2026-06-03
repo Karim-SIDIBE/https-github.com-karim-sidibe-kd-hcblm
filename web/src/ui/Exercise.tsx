@@ -5,10 +5,10 @@ export type { ExerciseSpec };
 export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?: string; correct?: boolean };
 
 /**
- * Exercise — the interactive exercise shown immediately after the video (§5.1).
- * It is the completion gate: the learner cannot advance until they answer and
- * read the feedback. Emits xAPI meta (time-on-exercise, feedback-viewed,
- * response, correctness) for question-level logging (AC#11).
+ * Exercise — the interactive exercise shown immediately after the video (§5.1),
+ * styled to the Declick prototype (peach "Moment d'Ancrage" prompt, option cards,
+ * green feedback). It is the completion gate: the learner cannot advance until
+ * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
 export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void> }) {
   const start = useRef(Date.now());
@@ -29,65 +29,61 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
     if (exercise.type === "written") return text.trim();
     return JSON.stringify(values);
   }
-
   async function finish() {
     setBusy(true);
     const correct = exercise.type === "multi" ? choice === exercise.correctKey : undefined;
     const meta: ExerciseMeta = { timeMs: Date.now() - start.current, feedbackViewed: true, response: response(), correct };
-    const data =
-      exercise.type === "multi" ? { choice } :
-      exercise.type === "written" ? { text: text.trim() } :
-      { fields: values };
+    const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() } : { fields: values };
     try { await onComplete(data, meta); } finally { setBusy(false); }
   }
-
   const isCorrect = exercise.type === "multi" && choice === exercise.correctKey;
 
   return (
-    <div className="card">
-      <h3>Exercice</h3>
-      <p style={{ whiteSpace: "pre-wrap" }}>{exercise.prompt}</p>
+    <div className="hf-card hf-card--stripe-orange stack">
+      <div className="eyebrow">Micro-exercice — obligatoire</div>
+
+      <div className="hf-pam">
+        <span className="tag">🎯 Moment d'Ancrage</span>
+        <div className="quote" style={{ whiteSpace: "pre-wrap" }}>{exercise.prompt}</div>
+      </div>
 
       {phase === "answer" && (
         <div className="stack">
           {exercise.type === "multi" && (exercise.options ?? []).map((o) => (
-            <label key={o.key} className="row" style={{ margin: 0, alignItems: "flex-start", gap: 8 }}>
-              <input type="radio" name="opt" style={{ width: "auto", marginTop: 4 }} checked={choice === o.key} onChange={() => setChoice(o.key)} />
-              <span><strong>{o.key}.</strong> {o.label}</span>
-            </label>
+            <div key={o.key} className={`pt-opt ${choice === o.key ? "sel" : ""}`} onClick={() => setChoice(o.key)} role="button">
+              <strong className="h4"><span className="hf-pill hf-pill--soft hf-pill--sm" style={{ marginRight: 8 }}>{o.key}</span>{o.label}</strong>
+            </div>
           ))}
 
           {exercise.type === "written" && (
-            <>
-              <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder="Votre réponse…"
+            <div className="hf-textwrap">
+              <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder="Votre réponse, ancrée dans votre situation réelle…" style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-              <p className={`muted ${text.trim().length >= minChars ? "ok" : ""}`} style={{ margin: 0, fontSize: 13 }}>
-                {text.trim().length} / {minChars} caractères minimum
-              </p>
-            </>
+              <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars}</span>
+            </div>
           )}
 
           {exercise.type === "guidedForm" && (exercise.fields ?? []).map((f) => (
             <label key={f.label}>{f.label}
-              <input value={values[f.label] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.label]: e.target.value }))}
+              <input className="hf-field" value={values[f.label] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.label]: e.target.value }))}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             </label>
           ))}
 
-          <button className="block" disabled={!canAnswer} onClick={() => setPhase("feedback")}>Valider ma réponse</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer} onClick={() => setPhase("feedback")}>Valider ma réponse</button>
         </div>
       )}
 
       {phase === "feedback" && (
-        <div className="stack">
+        <div className="stack pt-reveal">
           {exercise.type === "multi" && (
-            <p className={`chip ${isCorrect ? "ok" : "ko"}`}>{isCorrect ? "Bonne réponse ✅" : "Réponse à revoir"}</p>
+            <span className={`hf-pill ${isCorrect ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{isCorrect ? "✓ Bonne réponse" : "À revoir"}</span>
           )}
-          <div className="banner syncing" style={{ display: "block" }}>
-            <strong>Feedback</strong>
-            <p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{exercise.feedbackText}</p>
+          <div className="hf-card hf-card--mint">
+            <strong className="ok">Feedback immédiat</strong>
+            <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{exercise.feedbackText}</p>
           </div>
-          <button className="block" disabled={busy} onClick={finish}>{busy ? "…" : "Continuer →"}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={finish}>{busy ? "…" : "Session suivante →"}</button>
         </div>
       )}
     </div>
