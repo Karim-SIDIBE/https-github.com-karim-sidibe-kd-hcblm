@@ -1,0 +1,6 @@
+# Reverse proxy for the API with automatic Let's Encrypt TLS.
+# Requires: an A record  api.declick.digital -> <VPS public IP>, and ports 80/443 open.
+api.declick.digital {
+	encode zstd gzip
+	reverse_proxy api:4000
+}
