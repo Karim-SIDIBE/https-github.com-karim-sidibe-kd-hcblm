@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: declick
+          POSTGRES_PASSWORD: declick
+          POSTGRES_DB: kd_hcblm
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U declick -d kd_hcblm"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+    env:
+      DATABASE_URL: postgresql://declick:declick@localhost:5432/kd_hcblm?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate Prisma client
+        run: npm -w server exec prisma generate
+      - name: Typecheck (all workspaces)
+        run: npm run typecheck
+      - name: Apply migrations
+        run: npm -w server exec prisma migrate deploy
+      - name: Test (shared · server · web)
+        run: |
+          touch server/.env
+          npm test
+      - name: Build PWA
+        run: npm -w web run build
+        env:
+          VITE_API_URL: https://api.declick.digital/api/v1
