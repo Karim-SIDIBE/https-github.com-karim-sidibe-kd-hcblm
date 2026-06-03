@@ -38,7 +38,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       : { level: env.LOG_LEVEL },
   });
 
-  await app.register(cors, { origin: true });
+  // Restrict CORS to the configured front-end origins in production; reflect any
+  // origin when CORS_ORIGINS is unset (dev).
+  await app.register(cors, {
+    origin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(",").map((o) => o.trim()) : true,
+  });
   await app.register(sensible);
   // Global IP rate limit (per minute). Auth routes get a stricter cap below.
   await app.register(rateLimit, { global: true, max: env.RATE_LIMIT_MAX, timeWindow: "1 minute" });

@@ -19,6 +19,8 @@ const EnvSchema = z.object({
 
   // --- notification delivery. Optional: defaults to console. ---
   NOTIFY_WEBHOOK_URL: z.string().url().optional(),
+  /// Allowed CORS origins (comma-separated). Unset → reflect any origin (dev).
+  CORS_ORIGINS: z.string().optional(),
   /// Mobile-messaging + push gateways (§7.1 — African reach). Optional: console.
   SMS_WEBHOOK_URL: z.string().url().optional(),
   WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
