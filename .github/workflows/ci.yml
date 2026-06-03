@@ -28,6 +28,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Generate Prisma client
+        run: npm -w server exec prisma generate
       - name: Typecheck (all workspaces)
         run: npm run typecheck
       - name: Apply migrations
