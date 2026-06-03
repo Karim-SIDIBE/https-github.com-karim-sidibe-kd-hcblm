@@ -1,0 +1,28 @@
+{
+  "name": "@kd/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "KD-HCBLM shared contract — the single Zod content model consumed by the server (runtime validation) and the learner PWA (types).",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./content-model": {
+      "types": "./src/content-model.ts",
+      "import": "./src/content-model.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --import tsx \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}

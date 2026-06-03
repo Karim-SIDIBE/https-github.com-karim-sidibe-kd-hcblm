@@ -1,0 +1,137 @@
+/* KD-HCBLM learner PWA — mobile-first design system.
+   Goals (§4.4/§9): ≥44px touch targets, ≥16px inputs (no iOS zoom), safe-area
+   insets, single-column phone-first layout, light + legible on low-spec screens. */
+
+:root {
+  color-scheme: light;
+  --brand: #1d4ed8;
+  --brand-dark: #1e3a8a;
+  --ink: #1f2937;
+  --muted: #64748b;
+  --line: #e2e8f0;
+  --bg: #f1f5f9;
+  --ok: #15803d;
+  --ok-bg: #dcfce7;
+  --ko: #b91c1c;
+  --ko-bg: #fee2e2;
+  --warn: #b45309;
+  --warn-bg: #fef3c7;
+  --radius: 12px;
+  --tap: 44px; /* minimum touch target */
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  font-family: system-ui, "Segoe UI", Roboto, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+}
+
+/* App frame — phone-first column, safe-area aware, capped on desktop. */
+.app {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: max(12px, env(safe-area-inset-top)) 16px calc(24px + env(safe-area-inset-bottom));
+}
+.appbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #fff;
+  border-bottom: 1px solid var(--line);
+  padding: 10px 14px;
+  padding-top: max(10px, env(safe-area-inset-top));
+}
+.appbar strong { color: var(--brand); }
+
+h1 { color: var(--brand); font-size: 1.4rem; margin: 12px 0; }
+h2 { color: var(--brand-dark); font-size: 1.1rem; margin: 10px 0; }
+h3 { font-size: 1rem; margin: 8px 0; }
+p { margin: 8px 0; }
+a { color: var(--brand); }
+
+.card {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin: 12px 0;
+}
+.card.tappable { cursor: pointer; transition: border-color .15s; }
+.card.tappable:active { border-color: var(--brand); }
+
+.muted { color: var(--muted); }
+.ok { color: var(--ok); }
+.ko { color: var(--ko); }
+.center { text-align: center; }
+.stack > * + * { margin-top: 10px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+.spacer { flex: 1; }
+
+/* Forms — inputs ≥16px so mobile browsers don't zoom on focus. */
+label { display: block; margin: 10px 0; font-weight: 500; font-size: .95rem; }
+input, textarea, select {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  font-size: 16px;
+  font-family: inherit;
+  background: #fff;
+}
+textarea { resize: vertical; min-height: 120px; }
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--brand); outline-offset: 1px; }
+
+/* Buttons — full minimum tap target. */
+button {
+  min-height: var(--tap);
+  min-width: var(--tap);
+  background: var(--brand);
+  color: #fff;
+  border: 0;
+  border-radius: 10px;
+  padding: 11px 16px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+button:active { transform: translateY(1px); }
+button:disabled { opacity: .55; cursor: default; }
+button.secondary { background: #fff; color: var(--brand); border: 1px solid var(--brand); }
+button.ghost { background: transparent; color: var(--muted); border: 0; font-weight: 500; min-height: 0; }
+button.block { width: 100%; }
+
+/* Badges / chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; background: var(--line); border-radius: 999px; padding: 4px 12px; font-size: 13px; }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.ko { background: var(--ko-bg); color: var(--ko); }
+.chip.warn { background: var(--warn-bg); color: var(--warn); }
+
+/* Progress bar */
+.progress { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; }
+.progress > span { display: block; height: 100%; background: var(--brand); border-radius: 999px; transition: width .3s; }
+
+/* Skeleton loaders (perceived performance on 3G) */
+.skeleton { background: linear-gradient(90deg, #eef2f7 25%, #e2e8f0 37%, #eef2f7 63%); background-size: 400% 100%; animation: shimmer 1.4s ease infinite; border-radius: 8px; }
+.skeleton.line { height: 14px; margin: 8px 0; }
+.skeleton.card { height: 84px; }
+@keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+
+/* Sync / connectivity banner */
+.banner { display: flex; align-items: center; gap: 8px; border-radius: 10px; padding: 8px 12px; font-size: 14px; margin: 8px 0; }
+.banner.offline { background: var(--warn-bg); color: var(--warn); }
+.banner.syncing { background: #e0e7ff; color: var(--brand-dark); }
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton, .progress > span, button { animation: none; transition: none; }
+}
