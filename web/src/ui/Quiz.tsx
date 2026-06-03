@@ -12,7 +12,7 @@ export type QuestionMeta = Record<string, { timeMs: number; feedbackViewed: bool
 /**
  * Quiz — one question at a time (mobile-friendly), capturing per-question
  * time-on-question and feedback-viewed for question-level xAPI (AC#11). Shows
- * immediate per-question feedback before advancing.
+ * immediate per-question feedback before advancing. Styled with the hf-* kit.
  */
 export function Quiz({ questions, onSubmit }: {
   questions: QuizQuestion[];
@@ -34,42 +34,46 @@ export function Quiz({ questions, onSubmit }: {
     setMeta((m) => ({ ...m, [q.id]: { timeMs: Date.now() - start.current, feedbackViewed: true } }));
     setPhase("feedback");
   }
-
   async function next() {
     if (!last) { setIdx(idx + 1); setPhase("answer"); start.current = Date.now(); return; }
     setBusy(true);
     try { await onSubmit(answers, meta); } finally { setBusy(false); }
   }
 
+  const pct = ((idx + (phase === "feedback" ? 1 : 0)) / questions.length) * 100;
+
   return (
-    <div className="card stack">
-      <div className="row between">
-        <span className="muted">Question {idx + 1} / {questions.length}</span>
-      </div>
-      <div className="progress"><span style={{ width: `${((idx + (phase === "feedback" ? 1 : 0)) / questions.length) * 100}%` }} /></div>
-      <p style={{ whiteSpace: "pre-wrap", fontWeight: 500 }}>{q.prompt}</p>
+    <div className="hf-card stack">
+      <div className="row between"><span className="eyebrow">Question {idx + 1} / {questions.length}</span></div>
+      <div className="hf-prog"><i style={{ width: `${pct}%` }} /></div>
+      <p className="h4" style={{ whiteSpace: "pre-wrap", margin: "4px 0" }}>{q.prompt}</p>
 
       <div className="stack">
-        {q.options.map((o) => (
-          <label key={o.key} className="row" style={{ margin: 0, alignItems: "flex-start", gap: 8, opacity: phase === "feedback" && q.correctKey && o.key !== q.correctKey && o.key !== chosen ? 0.6 : 1 }}>
-            <input type="radio" name={q.id} style={{ width: "auto", marginTop: 4 }} disabled={phase === "feedback"}
-              checked={chosen === o.key} onChange={() => setAnswers((a) => ({ ...a, [q.id]: o.key }))} />
-            <span>
-              <strong>{o.key}.</strong> {o.label}
-              {phase === "feedback" && q.correctKey === o.key && " ✅"}
-              {phase === "feedback" && chosen === o.key && o.key !== q.correctKey && " ❌"}
-            </span>
-          </label>
-        ))}
+        {q.options.map((o) => {
+          const sel = chosen === o.key;
+          const isRight = phase === "feedback" && q.correctKey === o.key;
+          const isWrong = phase === "feedback" && sel && o.key !== q.correctKey;
+          const dim = phase === "feedback" && q.correctKey && !isRight && !sel;
+          return (
+            <div key={o.key} className={`pt-opt ${sel ? "sel" : ""} ${isWrong ? "ko" : ""}`} role="button"
+              style={{ opacity: dim ? 0.55 : 1, cursor: phase === "feedback" ? "default" : "pointer" }}
+              onClick={() => { if (phase === "answer") setAnswers((a) => ({ ...a, [q.id]: o.key })); }}>
+              <span className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+                <span className="hf-pill hf-pill--soft hf-pill--sm">{o.key}</span>
+                <span className="body" style={{ color: "var(--fg-1)" }}>{o.label}{isRight ? " ✅" : ""}{isWrong ? " ❌" : ""}</span>
+              </span>
+            </div>
+          );
+        })}
       </div>
 
-      {phase === "answer" && <button className="block" disabled={!chosen} onClick={validate}>Valider</button>}
+      {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!chosen} onClick={validate}>Valider</button>}
 
       {phase === "feedback" && (
-        <div className="stack">
-          {q.correctKey != null && <p className={`chip ${correct ? "ok" : "ko"}`} style={{ alignSelf: "flex-start" }}>{correct ? "Bonne réponse" : "À revoir"}</p>}
-          {q.feedbackText && <div className="banner syncing" style={{ display: "block" }}><p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{q.feedbackText}</p></div>}
-          <button className="block" disabled={busy} onClick={next}>{busy ? "…" : last ? "Voir mon résultat →" : "Question suivante →"}</button>
+        <div className="stack pt-reveal">
+          {q.correctKey != null && <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{correct ? "✓ Bonne réponse" : "À revoir"}</span>}
+          {q.feedbackText && <div className="hf-card hf-card--mint"><p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{q.feedbackText}</p></div>}
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={next}>{busy ? "…" : last ? "Voir mon résultat →" : "Question suivante →"}</button>
         </div>
       )}
     </div>
