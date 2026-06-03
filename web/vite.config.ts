@@ -12,14 +12,14 @@ export default defineConfig({
         short_name: "Declick",
         description: "Apprentissage de la gestion du temps en environnements professionnels africains — disponible hors-ligne.",
         lang: "fr",
-        theme_color: "#1d4ed8",
+        theme_color: "#F36F21",
         background_color: "#ffffff",
         display: "standalone",
         start_url: "/",
         icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any maskable" }],
       },
       workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,woff2}"],
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {
             // Downloaded media (video/captions): serve from cache first, with

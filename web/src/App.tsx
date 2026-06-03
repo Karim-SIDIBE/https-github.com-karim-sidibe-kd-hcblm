@@ -1,14 +1,14 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { engine, isLoggedIn, logout } from "./lib/app";
 import { startAutoSync, type SyncState } from "./lib/autosync";
-import { useRoute } from "./lib/router";
+import { navigate, routes, useRoute, type Route } from "./lib/router";
 import { Login } from "./ui/Login";
 import { Enrollments } from "./ui/Enrollments";
+import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
 
-// Route-level code splitting: the dashboard entry stays in the main chunk; the
-// heavier flows (player + media, quizzes, project, onboarding…) load on demand,
-// keeping first paint small on low-spec / 3G devices (AC#16).
+const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
 const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
+const Journal = lazy(() => import("./ui/Journal").then((m) => ({ default: m.Journal })));
 const SessionScreen = lazy(() => import("./ui/Session").then((m) => ({ default: m.SessionScreen })));
 const QuizScreen = lazy(() => import("./ui/QuizScreen").then((m) => ({ default: m.QuizScreen })));
 const Deliverable = lazy(() => import("./ui/Deliverable").then((m) => ({ default: m.Deliverable })));
@@ -16,23 +16,54 @@ const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Proj
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
 
-function Screen() {
-  const route = useRoute();
+/** The eid of a course-scoped route (null on the enrolments list). */
+function eidOf(route: Route): string | null {
+  return "eid" in route ? route.eid : null;
+}
+/** Which bottom tab is active for the current route. */
+function activeTab(route: Route): "home" | "cours" | "journal" | "badges" | null {
   switch (route.name) {
-    case "course": return <Course eid={route.eid} />;
+    case "course": case "onboarding": return "home";
+    case "cours": case "session": case "quiz": case "deliverable": case "project": return "cours";
+    case "journal": return "journal";
+    case "badges": return "badges";
+    default: return null;
+  }
+}
+
+function Screen({ route }: { route: Route }) {
+  switch (route.name) {
+    case "course": return <Home eid={route.eid} />;
+    case "cours": return <Course eid={route.eid} />;
+    case "journal": return <Journal eid={route.eid} />;
     case "session": return <SessionScreen eid={route.eid} block={route.block} item={route.item} />;
     case "quiz": return <QuizScreen eid={route.eid} kind={route.kind} />;
     case "deliverable": return <Deliverable eid={route.eid} block={route.block} itemKey={route.key} />;
     case "project": return <Project eid={route.eid} />;
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
-    // block detail screen lands in a later phase; fall back to the dashboard.
     case "block": return <Course eid={route.eid} />;
     default: return <Enrollments />;
   }
 }
 
-function ConnectivityBanner({ sync }: { sync: SyncState }) {
+const TABS = [
+  { key: "home", label: "Accueil", Icon: IconHome, href: routes.course },
+  { key: "cours", label: "Cours", Icon: IconBook, href: routes.cours },
+  { key: "journal", label: "Journal", Icon: IconJournal, href: routes.journal },
+  { key: "badges", label: "Badges", Icon: IconBadge, href: routes.badges },
+] as const;
+
+function Brand() {
+  return (
+    <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title="Mes parcours">
+      <img className="mark" src="/logo-icon.png" alt="Kompetences Declick" />
+      <span className="wm">KOMPETENCES <b>DECLICK</b><span className="sub">DECLICK DIGITAL</span></span>
+    </div>
+  );
+}
+
+function Banner({ sync }: { sync: SyncState }) {
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false);
@@ -47,26 +78,68 @@ function ConnectivityBanner({ sync }: { sync: SyncState }) {
 export function App() {
   const [authed, setAuthed] = useState(isLoggedIn());
   const [sync, setSync] = useState<SyncState>("idle");
+  const route = useRoute();
 
-  useEffect(() => {
-    if (!authed) return;
-    return startAutoSync(engine, (s) => setSync(s));
-  }, [authed]);
+  useEffect(() => { if (authed) return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
-  return (
-    <>
-      <div className="appbar">
-        <strong>Kompetences Declick</strong>
-        <button className="ghost" onClick={() => { logout(); setAuthed(false); }}>Déconnexion</button>
+  const eid = eidOf(route);
+  const tab = activeTab(route);
+  const onLogout = () => { logout(); setAuthed(false); };
+
+  // Enrolments list (no course context) — simple centered layout.
+  if (!eid) {
+    return (
+      <div className="shell">
+        <div className="main">
+          <div className="appbar"><Brand /><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div>
+          <main className="screen"><Banner sync={sync} /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
+        </div>
       </div>
-      <main className="app">
-        <ConnectivityBanner sync={sync} />
-        <Suspense fallback={<div className="skeleton card" style={{ height: 120 }} />}>
-          <Screen />
-        </Suspense>
-      </main>
-    </>
+    );
+  }
+
+  return (
+    <div className="shell">
+      {/* Desktop sidebar */}
+      <aside className="sidebar">
+        <Brand />
+        {TABS.map(({ key, label, Icon, href }) => (
+          <button key={key} className={`navitem ${tab === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
+            <Icon /> {label}
+          </button>
+        ))}
+        <div className="spacer" />
+        <button className="navitem" onClick={onLogout}>Déconnexion</button>
+      </aside>
+
+      <div className="main">
+        {/* Mobile appbar */}
+        <header className="appbar">
+          <Brand />
+          <div className="tools">
+            <span className="iconbtn" aria-label="Notifications"><IconBell size={18} /></span>
+            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={onLogout}>Déconnexion</button>
+          </div>
+        </header>
+
+        <main className="screen">
+          <Banner sync={sync} />
+          <Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense>
+        </main>
+
+        {/* Mobile bottom tabs */}
+        {tab && (
+          <nav className="tabbar">
+            {TABS.map(({ key, label, Icon, href }) => (
+              <button key={key} className={`tab ${tab === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
+                <Icon /> {label}
+              </button>
+            ))}
+          </nav>
+        )}
+      </div>
+    </div>
   );
 }

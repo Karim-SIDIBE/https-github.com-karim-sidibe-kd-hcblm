@@ -93,13 +93,13 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
           })()}
           <VideoPlayer
             src={source.url} captionsUrl={source.captionsUrl} title={session.title}
-            startAt={startAt} quality={source.quality}
+            startAt={startAt} durationSec={session.video?.durationSec} quality={source.quality}
             onHeartbeat={heartbeat}
             onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
           />
-          {session.video?.keyMessage && <div className="card"><strong>À retenir</strong><p style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
+          {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">À retenir</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
           {session.exercise && (
-            <button className="block secondary" onClick={() => setPhase("exercise")}>Passer à l'exercice →</button>
+            <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>Passer à l'exercice →</button>
           )}
         </>
       )}
