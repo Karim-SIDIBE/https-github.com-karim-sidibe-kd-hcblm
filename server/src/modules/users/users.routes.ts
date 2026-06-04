@@ -5,6 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
+import { UserError, inviteUser } from "./users.service.js";
 
 const RoleEnum = z.enum([
   "LEARNER", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR",
@@ -35,6 +36,20 @@ export async function userRoutes(app: FastifyInstance) {
     } catch (e) {
       if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
         return reply.conflict("Un utilisateur avec cet email existe déjà");
+      throw e;
+    }
+  });
+
+  // (Re)send the access invitation: set a fresh temp password + deliver it.
+  app.post("/users/:id/invite", { preHandler: guard("user:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { password } = z.object({ password: z.string().min(10).optional() }).parse(req.body ?? {});
+    try {
+      const r = await inviteUser(id, password);
+      await audit({ actorId: req.principal?.id, action: "user.invite", targetType: "User", targetId: id, ip: req.ip, meta: { delivered: r.delivered } });
+      return { data: r };
+    } catch (e) {
+      if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
       throw e;
     }
   });

@@ -78,7 +78,7 @@ export async function courseLearners(courseId: string) {
     const progress = computeProgress(content, records(e.completions), Boolean(e.momentAncrage));
     const score = (bi: number, k: string) => e.completions.find((c) => c.blockIndex === bi && c.itemKey === k)?.scorePct ?? null;
     return {
-      name: e.user.name, email: e.user.email, status: e.status,
+      id: e.user.id, name: e.user.name, email: e.user.email, status: e.status,
       progressPercent: Math.round((progress.completedBlockIndexes.length / content.blocks.length) * 100),
       finalQuiz: score(3, "final"), rubric: score(4, "rubric"),
       active: isActive(e.lastSeenAt, now), lastActivity: e.lastSeenAt, startedAt: e.startedAt, completedAt: e.completedAt,

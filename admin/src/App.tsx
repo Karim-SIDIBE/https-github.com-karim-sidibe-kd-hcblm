@@ -11,6 +11,7 @@ import { Enrol } from "./screens/Enrol";
 import { Relances } from "./screens/Relances";
 import { Audit } from "./screens/Audit";
 import { Orgs } from "./screens/Orgs";
+import { Entreprises } from "./screens/Entreprises";
 import { Sessions } from "./screens/Sessions";
 import { Evaluation } from "./screens/Evaluation";
 import { Certificats } from "./screens/Certificats";
@@ -32,6 +33,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "certs", label: "Certificats", Icon: ICert },
   ]},
   { group: "Organisation", items: [
+    { id: "entreprises", label: "Entreprises & licences", Icon: IOrg },
     { id: "orgs", label: "Cohortes & clients", Icon: IOrg },
     { id: "sessions", label: "Sessions live", Icon: ISession },
   ]},
@@ -114,13 +116,14 @@ export function App() {
           <div className="spacer" />
           <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
         </header>
-        {!courseId && route !== "settings" ? (
+        {!courseId && route !== "settings" && route !== "entreprises" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : route === "dashboard" ? <Dashboard ctx={ctx} />
           : route === "learners" ? <Learners ctx={ctx} />
           : route === "enrol" ? <Enrol ctx={ctx} />
           : route === "reeng" ? <Relances ctx={ctx} />
           : route === "audit" ? <Audit />
+          : route === "entreprises" ? <Entreprises />
           : route === "orgs" ? <Orgs />
           : route === "sessions" ? <Sessions />
           : route === "eval" ? <Evaluation />

@@ -6,13 +6,15 @@ import type { CourseCtx } from "../App";
 const field: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid var(--line-strong)", borderRadius: 9, fontFamily: "inherit", fontSize: 13.5 };
 const lbl: React.CSSProperties = { display: "block", fontSize: 12.5, fontWeight: 700, color: "var(--fg-1)", margin: "0 0 6px" };
 
-type RowResult = { name: string; email: string; password: string; status: "ok" | "exists" | "error"; detail?: string };
+type RowResult = { name: string; email: string; password: string; status: "ok" | "exists" | "error"; detail?: string; invited?: boolean };
 
-async function createAndEnrol(name: string, email: string, password: string, courseId: string): Promise<RowResult> {
+async function createAndEnrol(name: string, email: string, password: string, courseId: string, invite: boolean): Promise<RowResult> {
   try {
     const u = await api.createUser({ name, email, password, role: "LEARNER" });
     await api.enroll(u.id, courseId);
-    return { name, email, password, status: "ok" };
+    let invited = false;
+    if (invite) { try { await api.invite(u.id, password); invited = true; } catch { /* delivery best-effort */ } }
+    return { name, email, password, status: "ok", invited };
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) return { name, email, password, status: "exists", detail: "E-mail déjà existant" };
     return { name, email, password, status: "error", detail: e instanceof Error ? e.message : "Erreur" };
@@ -22,6 +24,7 @@ async function createAndEnrol(name: string, email: string, password: string, cou
 export function Enrol({ ctx }: { ctx: CourseCtx }) {
   const { courses, courseId } = ctx;
   const [target, setTarget] = useState(courseId);
+  const [invite, setInvite] = useState(true);
 
   // --- single ---
   const [name, setName] = useState("");
@@ -33,7 +36,7 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
   async function submitSingle(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setSingle(null);
-    const r = await createAndEnrol(name.trim(), email.trim(), pwd, target);
+    const r = await createAndEnrol(name.trim(), email.trim(), pwd, target, invite);
     setSingle(r);
     if (r.status === "ok") { setName(""); setEmail(""); setPwd(genPassword()); }
     setBusy(false);
@@ -50,7 +53,7 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
     setRunning(true); setResults([]);
     const out: RowResult[] = [];
     for (const [n, em] of parsed) {
-      const r = await createAndEnrol(n || em, em, genPassword(), target);
+      const r = await createAndEnrol(n || em, em, genPassword(), target, invite);
       out.push(r); setResults([...out]);
     }
     setRunning(false);
@@ -74,9 +77,14 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
           <h1>Inscriptions</h1>
           <div className="sub">Créez des comptes apprenants et inscrivez-les à un parcours.</div>
         </div>
-        <select className="select" value={target} onChange={(e) => setTarget(e.target.value)}>
-          {courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}
-        </select>
+        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, color: "var(--fg-2)" }}>
+            <input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} /> Envoyer l'invitation
+          </label>
+          <select className="select" value={target} onChange={(e) => setTarget(e.target.value)}>
+            {courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}
+          </select>
+        </div>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "1fr 1.25fr", alignItems: "start" }}>
@@ -98,7 +106,7 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
             {single && (
               <div className="card" style={{ background: single.status === "ok" ? "var(--success-tint)" : "var(--danger-tint)", border: "none", padding: "12px 14px" }}>
                 {single.status === "ok"
-                  ? <div style={{ fontSize: 13 }}>✅ <b>{single.name}</b> inscrit·e. Identifiants : <b>{single.email}</b> / <code style={{ fontFamily: "monospace" }}>{single.password}</code></div>
+                  ? <div style={{ fontSize: 13 }}>✅ <b>{single.name}</b> inscrit·e. Identifiants : <b>{single.email}</b> / <code style={{ fontFamily: "monospace" }}>{single.password}</code>{invite && (single.invited ? " · invitation envoyée" : " · ⚠️ invitation non délivrée (SMTP non configuré) — communiquez le mot de passe")}</div>
                   : <div style={{ fontSize: 13, color: "var(--danger)" }}>✗ {single.detail}</div>}
               </div>
             )}
