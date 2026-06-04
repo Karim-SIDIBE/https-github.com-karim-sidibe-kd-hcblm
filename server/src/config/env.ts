@@ -29,6 +29,10 @@ const EnvSchema = z.object({
   /// the webhook); else falls back to NOTIFY_WEBHOOK_URL, else console.
   SMTP_URL: z.string().optional(),                  // e.g. smtp://user:pass@host:587
   MAIL_FROM: z.string().optional(),                 // e.g. "DECLICK DIGITAL <no-reply@declick.digital>"
+  /// Skip TLS certificate-name verification for SMTP (still encrypted). Needed
+  /// for shared hosts whose cert is for the panel domain (e.g. LWS *.lwspanel.com)
+  /// while you connect via a vanity hostname (mail.yourdomain). "true" to enable.
+  SMTP_TLS_INSECURE: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
   /// Public base URL of the learner app (for links in invitations/verification).
   APP_BASE_URL: z.string().url().optional(),
   /// Brand name used in transactional messages. Optional.

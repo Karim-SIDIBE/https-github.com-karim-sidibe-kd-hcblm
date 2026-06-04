@@ -1,17 +1,33 @@
 /**
  * notify/email.ts — transactional e-mail via SMTP (nodemailer).
  *
- * Configured by SMTP_URL (+ MAIL_FROM). The transport is created lazily and
- * reused. When SMTP is not configured, the dispatcher falls back to the webhook
- * gateway, then to console — so everything runs with zero config in dev/beta.
+ * Configured by SMTP_URL (+ MAIL_FROM). The URL is parsed into explicit
+ * host/port/secure/auth so we can also apply SMTP_TLS_INSECURE (skip TLS
+ * certificate-NAME verification) — needed for shared hosts whose cert is for
+ * the panel domain (e.g. LWS *.lwspanel.com) while you connect via a vanity
+ * hostname. The transport is created lazily and reused. When SMTP is not
+ * configured the dispatcher falls back to the webhook gateway, then console.
  */
 import nodemailer, { type Transporter } from "nodemailer";
 import { env } from "../../config/env.js";
 
 let cached: Transporter | null | undefined; // undefined = uninitialised, null = not configured
 
+function build(): Transporter | null {
+  if (!env.SMTP_URL) return null;
+  const u = new URL(env.SMTP_URL);
+  const secure = u.protocol === "smtps:" || u.port === "465";
+  return nodemailer.createTransport({
+    host: u.hostname,
+    port: u.port ? Number(u.port) : secure ? 465 : 587,
+    secure,
+    auth: u.username ? { user: decodeURIComponent(u.username), pass: decodeURIComponent(u.password) } : undefined,
+    ...(env.SMTP_TLS_INSECURE ? { tls: { rejectUnauthorized: false } } : {}),
+  });
+}
+
 function transport(): Transporter | null {
-  if (cached === undefined) cached = env.SMTP_URL ? nodemailer.createTransport(env.SMTP_URL) : null;
+  if (cached === undefined) cached = build();
   return cached;
 }
 
