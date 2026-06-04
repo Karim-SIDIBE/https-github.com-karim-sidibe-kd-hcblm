@@ -9,6 +9,7 @@
  * Replacing console with a real provider (SES, Postmark, SMTP) is a config swap.
  */
 import { env } from "../../config/env.js";
+import { smtpConfigured, sendSmtpEmail } from "./email.js";
 
 export type DeliveryResult = { ok: boolean; provider: string; error?: string };
 
@@ -53,6 +54,11 @@ function gatewayFor(channel: DeliveryChannel): { url: string; provider: string }
 }
 
 export async function deliver(n: DeliverableNotification): Promise<DeliveryResult> {
+  // Real transactional e-mail via SMTP takes priority over the generic webhook.
+  if (n.channel === "EMAIL" && smtpConfigured()) {
+    try { await sendSmtpEmail(n.recipient, n.subject ?? "", n.body); return { ok: true, provider: "smtp" }; }
+    catch (e) { return { ok: false, provider: "smtp", error: e instanceof Error ? e.message : "smtp error" }; }
+  }
   const gateway = gatewayFor(n.channel);
   if (gateway) return postGateway(gateway.url, gateway.provider, n);
   // Console fallback (dev / unconfigured gateway).
