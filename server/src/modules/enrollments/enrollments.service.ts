@@ -284,6 +284,35 @@ export async function getProjectSubmission(enrollmentId: string) {
   return submission;
 }
 
+/**
+ * Evaluation queue (Bloc 4) — every submitted project with learner, course,
+ * status, assigned evaluator and the course rubric (so the admin console can
+ * render the grading form). Oldest-submitted first (SLA priority).
+ */
+export async function listEvaluationQueue() {
+  const subs = await prisma.projectSubmission.findMany({
+    orderBy: { submittedAt: "asc" },
+    include: {
+      evaluator: { select: { id: true, name: true } },
+      enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true, content: true } } } },
+    },
+  });
+  return subs.map((s) => {
+    const content = s.enrollment.courseVersion.content as { blocks?: { type: string; payload?: { rubric?: unknown } }[] } | null;
+    const b4 = content?.blocks?.find((b) => b.type === "CERTIFICATION");
+    return {
+      enrollmentId: s.enrollmentId,
+      learner: { name: s.enrollment.user.name, email: s.enrollment.user.email },
+      courseTitle: s.enrollment.courseVersion.title,
+      submittedAt: s.submittedAt,
+      revisionStatus: s.revisionStatus,
+      scoreTotal: s.scoreTotal,
+      evaluator: s.evaluator ? { id: s.evaluator.id, name: s.evaluator.name } : null,
+      rubric: (b4?.payload?.rubric as { criteria: { label: string; weightPoints: number }[]; threshold: number } | undefined) ?? null,
+    };
+  });
+}
+
 // --- quizzes ----------------------------------------------------------------
 
 /** Trigger quiz (Bloc 0) — non-scored; also records the chosen profile. */

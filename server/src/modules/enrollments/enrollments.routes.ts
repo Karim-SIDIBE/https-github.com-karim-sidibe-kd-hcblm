@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
-  getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
@@ -171,6 +171,12 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct } });
       return { data };
     } catch (err) { return handle(reply, err); }
+  });
+
+  // Bloc 4 evaluation queue — every submitted project (staff only).
+  app.get("/evaluations", { preHandler: authenticate }, async (req, reply) => {
+    if (!isStaff(req.principal!.role)) return reply.status(403).send({ error: "forbidden", message: "Réservé au personnel" });
+    return { data: await listEvaluationQueue() };
   });
 
   // Bloc 4 project record — full lifecycle metadata (owner or staff; §6.3).
