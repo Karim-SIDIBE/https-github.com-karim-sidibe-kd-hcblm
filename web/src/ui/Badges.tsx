@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { navigate, routes } from "../lib/router";
+import { brand } from "../lib/brand";
 
 type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; revoked: boolean; hostedUrl: string; verifyUrl: string };
-const ORG = "Kompetences Declick";
+const ORG = brand.issuer;
 const TIERS = [
   { type: "ENTRY", abbr: "Entré", name: "Badge Entrée", block: "Bloc 0" },
   { type: "COMPREHENSION", abbr: "Compr", name: "Badge Compréhension", block: "Bloc 1" },

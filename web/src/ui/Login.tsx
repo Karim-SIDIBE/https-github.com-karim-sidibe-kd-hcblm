@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { api } from "../lib/app";
+import { brand } from "../lib/brand";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
   const [email, setEmail] = useState("admin@kompetences.net");
@@ -17,8 +18,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
 
   return (
     <form className="card" onSubmit={submit} style={{ maxWidth: 360, margin: "60px auto" }}>
-      <h1>Kompetences Declick</h1>
-      <p className="muted">Connexion apprenant</p>
+      <h1>{brand.name}</h1>
+      <p className="muted">Connexion apprenant · opéré par {brand.operator}</p>
       <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
       <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required /></label>
       {error && <p className="ko">{error}</p>}

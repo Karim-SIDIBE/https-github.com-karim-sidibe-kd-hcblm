@@ -97,7 +97,7 @@ export async function interopRoutes(app: FastifyInstance) {
   });
 
   // LRS query (§8.1) — read stored statements by learner, course, date range
-  // and statement type (verb). For Kompetences Declick analytics infrastructure.
+  // and statement type (verb). For KOMPETENCES DECLICK analytics infrastructure.
   app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req) => {
     const q = z.object({
       learnerId: z.string().optional(),

@@ -1,6 +1,24 @@
-# Reverse proxy for the API with automatic Let's Encrypt TLS.
-# Requires: an A record  api.declick.digital -> <VPS public IP>, and ports 80/443 open.
+# Caddy — automatic Let's Encrypt TLS for both the API and the PWA.
+# Requires A records → VPS public IP, and ports 80/443 open:
+#   api.declick.digital  A  185.98.136.230
+#   app.declick.digital  A  185.98.136.230
+
+# --- API (Fastify, reverse-proxied) ---
 api.declick.digital {
 	encode zstd gzip
 	reverse_proxy api:4000
+}
+
+# --- PWA (learner app, static) — built into web/dist, mounted at /srv/pwa ---
+app.declick.digital {
+	encode zstd gzip
+	root * /srv/pwa
+	try_files {path} /index.html   # SPA fallback (deep links / refresh)
+	file_server
+
+	# The service worker + HTML must not be cached, so updates roll out instantly;
+	# hashed assets are immutable and cached for a year.
+	@noCache path /sw.js /registerSW.js /index.html /manifest.webmanifest
+	header @noCache Cache-Control "no-cache"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }

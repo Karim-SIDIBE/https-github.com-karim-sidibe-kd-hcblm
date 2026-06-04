@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useState } from "react";
 import { engine, isLoggedIn, logout } from "./lib/app";
 import { startAutoSync, type SyncState } from "./lib/autosync";
 import { navigate, routes, useRoute, type Route } from "./lib/router";
+import { brand, brandWordmark } from "./lib/brand";
 import { Login } from "./ui/Login";
 import { Enrollments } from "./ui/Enrollments";
 import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
@@ -55,10 +56,11 @@ const TABS = [
 ] as const;
 
 function Brand() {
+  const wm = brandWordmark();
   return (
     <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title="Mes parcours">
-      <img className="mark" src="/logo-icon.png" alt="Kompetences Declick" />
-      <span className="wm">KOMPETENCES <b>DECLICK</b><span className="sub">DECLICK DIGITAL</span></span>
+      <img className="mark" src="/logo-icon.png" alt={brand.operator} />
+      <span className="wm">{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}<span className="sub">Opéré par {brand.operator}</span></span>
     </div>
   );
 }
@@ -80,6 +82,7 @@ export function App() {
   const [sync, setSync] = useState<SyncState>("idle");
   const route = useRoute();
 
+  useEffect(() => { document.title = brand.name; }, []);
   useEffect(() => { if (authed) return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;

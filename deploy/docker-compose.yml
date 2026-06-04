@@ -12,6 +12,36 @@ services:
       POSTGRES_USER: declick
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
       POSTGRES_DB: kd_hcblm
+    # Tuned for a 2 vCore / 4 GB VPS (~300 active learners / 30 days). Postgres is
+    # capped so the API + Caddy + OS keep headroom. See deploy/README.md §Capacité.
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=50"
+      - "-c"
+      - "shared_buffers=512MB"
+      - "-c"
+      - "effective_cache_size=1024MB"
+      - "-c"
+      - "maintenance_work_mem=128MB"
+      - "-c"
+      - "work_mem=8MB"
+      - "-c"
+      - "random_page_cost=1.1"            # NVMe SSD: random ≈ sequential
+      - "-c"
+      - "effective_io_concurrency=200"    # NVMe SSD
+      - "-c"
+      - "checkpoint_completion_target=0.9"
+      - "-c"
+      - "wal_compression=on"
+      - "-c"
+      - "max_wal_size=1GB"
+      - "-c"
+      - "min_wal_size=128MB"
+      - "-c"
+      - "jit=off"                         # tiny DB: JIT overhead not worth it
+    shm_size: "256mb"
+    mem_limit: 1536m
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -25,10 +55,14 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
+    mem_limit: 768m
     env_file: .env
     environment:
       # The API reaches Postgres over the compose network (service name "db").
-      DATABASE_URL: postgresql://declick:${POSTGRES_PASSWORD}@db:5432/kd_hcblm?schema=public
+      # connection_limit keeps the Prisma pool well under Postgres max_connections.
+      DATABASE_URL: "postgresql://declick:${POSTGRES_PASSWORD}@db:5432/kd_hcblm?schema=public&connection_limit=15&pool_timeout=30"
+      # Cap the V8 heap under the container mem_limit (leaves room for non-heap).
+      NODE_OPTIONS: "--max-old-space-size=640"
     depends_on:
       db:
         condition: service_healthy
@@ -45,11 +79,13 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    mem_limit: 128m
     ports:
       - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ../web/dist:/srv/pwa:ro          # static PWA build, served on app.declick.digital
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

@@ -18,7 +18,7 @@ export function openapiDocument() {
       title: "KD-HCBLM API",
       version: "2.0.0",
       description:
-        "Kompetences Declick — Human Competency-Based Learning Model. Documented, " +
+        "KOMPETENCES DECLICK — Human Competency-Based Learning Model. Documented, " +
         "version-stable REST API. All paths are prefixed with /api/v1. Responses are " +
         "enveloped as { data }. Errors are { error, message }.",
     },
