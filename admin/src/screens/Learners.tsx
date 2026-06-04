@@ -19,6 +19,19 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("Tous");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function resend(l: LearnerRow) {
+    setBusyId(l.id); setNote(null);
+    try {
+      const r = await api.invite(l.id);
+      setNote(r.delivered
+        ? `✅ Invitation renvoyée à ${l.email}. Nouveau mot de passe : ${r.tempPassword}`
+        : `⚠️ Aucun canal d'envoi configuré (SMTP) — l'invitation n'a PAS été délivrée. Nouveau mot de passe à communiquer manuellement : ${r.tempPassword}`);
+    } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
 
   const rows = useMemo(() => (data ?? []).filter((l) =>
     (filter === "Tous" || (filter === "Certifiés" && l.status === "CERTIFIED") || (filter === "En cours" && l.active && l.status !== "CERTIFIED") || (filter === "Inactifs" && !l.active && l.status !== "CERTIFIED")) &&
@@ -39,6 +52,8 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
       </div>
 
+      {note && <div className="card" style={{ background: note.startsWith("✅") ? "var(--success-tint)" : "var(--warning-tint)", border: "none", padding: "11px 14px", marginBottom: 14, fontSize: 13 }} onClick={() => setNote(null)}>{note}</div>}
+
       <div className="card">
         <div className="card-h" style={{ paddingBottom: 14, borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
           <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-soft)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 300 }}>
@@ -48,7 +63,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th></tr></thead>
+            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
             <tbody>
               {rows.map((l) => (
                 <tr key={l.email}>
@@ -58,6 +73,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                   <td>{b4Pill(l)}</td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
                   <td>{statusPill(l)}</td>
+                  <td><button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer l'invitation"}</button></td>
                 </tr>
               ))}
             </tbody>

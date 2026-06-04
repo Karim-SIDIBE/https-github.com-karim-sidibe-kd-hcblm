@@ -52,14 +52,17 @@ export type CourseReport = {
   badgesIssued: { type: string; count: number }[]; credentialsIssued: number;
 };
 export type LearnerRow = {
-  name: string; email: string; status: string; progressPercent: number;
+  id: string; name: string; email: string; status: string; progressPercent: number;
   finalQuiz: number | null; rubric: number | null; active: boolean;
   lastActivity: string | null; startedAt: string | null; completedAt: string | null;
 };
+export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
+export type Seats = { seats: number; used: number; available: number };
+export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
 export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string };
 export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
-export type Org = { id: string; name: string; slug: string; createdAt: string; _count?: { memberships: number; courses: number } };
+export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; _count?: { registrations: number } };
 export type CredentialRow = {
@@ -89,6 +92,13 @@ export const api = {
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
+  invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
+  // organizations & licensing (platform provisioning)
+  createOrg: (name: string, slug: string) => req<Org>("POST", "/organizations", { name, slug }),
+  orgSeats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),
+  setOrgSeats: (orgId: string, seats: number) => req<Seats>("PATCH", `/organizations/${orgId}/seats`, { seats }),
+  orgMembers: (orgId: string) => req<OrgMember[]>("GET", `/organizations/${orgId}/members`),
+  addOrgMember: (orgId: string, userId: string, orgRole: "OWNER" | "ADMIN" | "MEMBER") => req<unknown>("POST", `/organizations/${orgId}/members`, { userId, orgRole }),
   audit: (limit = 80) => req<AuditRow[]>("GET", `/audit?limit=${limit}`),
   runReEngagement: () => req<ReEngagementResult>("POST", "/jobs/re-engagement/run", {}),
   organizations: () => req<Org[]>("GET", "/organizations"),
