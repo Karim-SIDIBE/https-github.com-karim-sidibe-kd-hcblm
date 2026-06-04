@@ -6,12 +6,14 @@
  * stored only as SHA-256 hashes, rotated on every use; presenting an already-
  * rotated token revokes the whole family (compromise containment).
  */
-import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID, randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
-import { verifyPassword } from "../../lib/auth/password.js";
+import { verifyPassword, hashPassword } from "../../lib/auth/password.js";
 import { signAccessToken } from "../../lib/auth/jwt.js";
 import { audit } from "../../lib/audit.js";
+import { sendMultichannel } from "../../lib/notify/send.js";
+import { otpMessage } from "../../lib/notify/templates.js";
 
 export class AuthError extends Error {
   constructor(public code: string, message: string) { super(message); }
@@ -74,6 +76,11 @@ export async function login(email: string, password: string, ip?: string) {
     await audit({ actorId: user.id, action: "auth.login.disabled", ip, meta: { email } });
     throw new AuthError("account_disabled", "Compte désactivé — contactez votre administrateur");
   }
+  // B2C: a self-registered account must verify its e-mail (OTP) before logging in.
+  if (!user.emailVerifiedAt) {
+    await audit({ actorId: user.id, action: "auth.login.unverified", ip, meta: { email } });
+    throw new AuthError("email_unverified", "E-mail non vérifié — saisissez le code reçu par e-mail");
+  }
   await audit({ actorId: user.id, action: "auth.login.success", ip });
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
@@ -89,7 +96,7 @@ export async function federatedLogin(params: { email: string; name?: string | nu
       await audit({ action: "auth.federated.denied", ip: params.ip, meta: { email: params.email, via: params.via, reason: "no_account" } });
       throw new AuthError("no_account", "Aucun compte pour cette identité fédérée");
     }
-    user = await prisma.user.create({ data: { email: params.email, name: params.name || params.email, role: "LEARNER" } });
+    user = await prisma.user.create({ data: { email: params.email, name: params.name || params.email, role: "LEARNER", emailVerifiedAt: new Date() } });
     await audit({ actorId: user.id, action: "auth.federated.provisioned", ip: params.ip, meta: { email: params.email, via: params.via } });
   }
   if (user.disabledAt) {
@@ -124,6 +131,60 @@ export async function refresh(presented: string, ip?: string) {
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date(), replacedById: next.id } });
   const accessToken = await signAccessToken({ sub: user.id, role: user.role, name: user.name });
   return { accessToken, refreshToken: next.token, tokenType: "Bearer", expiresIn: env.ACCESS_TTL, refreshExpiresAt: next.expiresAt };
+}
+
+// --- B2C self-registration + e-mail verification (OTP) ----------------------
+
+const OTP_TTL_MIN = 15;
+const genOtp = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
+
+async function issueOtpAndSend(user: { id: string; email: string; phone: string | null }) {
+  const code = genOtp();
+  await prisma.verificationCode.create({
+    data: { userId: user.id, codeHash: sha256(code), purpose: "EMAIL_VERIFY", expiresAt: new Date(Date.now() + OTP_TTL_MIN * 60_000) },
+  });
+  const m = otpMessage(code, OTP_TTL_MIN);
+  await sendMultichannel({ email: user.email, phone: user.phone, subject: m.subject, body: m.body, mobileBody: m.mobileBody });
+}
+
+/** Public self-registration: create an unverified LEARNER and send an OTP. */
+export async function registerLearner(params: { name: string; email: string; password: string; phone?: string }) {
+  const existing = await prisma.user.findUnique({ where: { email: params.email } });
+  if (existing) {
+    if (!existing.emailVerifiedAt) { await issueOtpAndSend(existing); return { verificationRequired: true as const, email: existing.email }; }
+    throw new AuthError("email_taken", "Un compte existe déjà avec cet e-mail");
+  }
+  const user = await prisma.user.create({
+    data: { name: params.name, email: params.email, role: "LEARNER", phone: params.phone ?? null, passwordHash: await hashPassword(params.password) },
+  });
+  await issueOtpAndSend(user);
+  await audit({ actorId: user.id, action: "auth.register", meta: { email: user.email } });
+  return { verificationRequired: true as const, email: user.email };
+}
+
+/** Verify the OTP, mark the e-mail verified, and issue a session (auto-login). */
+export async function verifyEmail(email: string, code: string, ip?: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  if (user.emailVerifiedAt) throw new AuthError("already_verified", "Compte déjà vérifié — connectez-vous");
+  const rec = await prisma.verificationCode.findFirst({
+    where: { userId: user.id, purpose: "EMAIL_VERIFY", consumedAt: null, expiresAt: { gt: new Date() }, codeHash: sha256(code) },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  await prisma.$transaction([
+    prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
+    prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } }),
+  ]);
+  await audit({ actorId: user.id, action: "auth.verify.success", ip });
+  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+}
+
+/** Resend an OTP to an unverified account. Always returns ok (no enumeration). */
+export async function resendVerification(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user && !user.emailVerifiedAt) await issueOtpAndSend(user);
+  return { ok: true };
 }
 
 /** Revoke the family of the presented refresh token (logout). */

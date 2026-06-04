@@ -28,6 +28,7 @@ export async function userRoutes(app: FastifyInstance) {
         data: {
           email: body.email, name: body.name, role: body.role ?? "LEARNER",
           passwordHash: body.password ? await hashPassword(body.password) : null,
+          emailVerifiedAt: new Date(), // staff-created → trusted/verified
         },
         select: publicUser,
       });

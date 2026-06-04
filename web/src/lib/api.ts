@@ -44,10 +44,28 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     raw,
     async login(email: string, password: string) {
       const res = await fetch(`${baseUrl}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
-      if (!res.ok) throw new Error("Identifiants invalides");
-      const j = await res.json();
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Identifiants invalides"), { code: j.error as string | undefined });
       tokens.set({ access: j.accessToken, refresh: j.refreshToken });
       return j.user as { id: string; name: string; email: string; role: string };
+    },
+    /** B2C self-registration → sends an OTP; no session yet. */
+    async register(body: { name: string; email: string; password: string; phone?: string }) {
+      const res = await fetch(`${baseUrl}/auth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Inscription impossible"), { code: j.error as string | undefined });
+      return j.data as { verificationRequired: boolean; email: string };
+    },
+    /** Verify the OTP → issues a session (auto-login). */
+    async verify(email: string, code: string) {
+      const res = await fetch(`${baseUrl}/auth/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, code }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Code invalide"), { code: j.error as string | undefined });
+      tokens.set({ access: j.accessToken, refresh: j.refreshToken });
+      return j.user as { id: string; name: string; email: string; role: string };
+    },
+    async resendVerification(email: string) {
+      await fetch(`${baseUrl}/auth/resend-verification`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
     },
     async me() { return (await (await raw("GET", "/auth/me")).json()).data; },
     /** Authenticated fetch of an arbitrary (media) URL for offline caching. */

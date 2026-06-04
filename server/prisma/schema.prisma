@@ -110,6 +110,10 @@ model User {
   /// Account deactivation (B2B seat lifecycle). Non-null = disabled: blocked at
   /// login/refresh and frees its organization seat. Re-enabling re-checks quota.
   disabledAt       DateTime?
+  /// B2C self-registration: set when the e-mail has been verified (OTP). Null =
+  /// unverified → first-party login is blocked. Staff/SSO-created accounts are
+  /// set verified at creation; existing accounts were backfilled at migration.
+  emailVerifiedAt  DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -124,8 +128,24 @@ model User {
   authoredThreads  ForumThread[]         @relation("ThreadAuthor")
   authoredPosts    ForumPost[]           @relation("PostAuthor")
   evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
+  verificationCodes VerificationCode[]
 
   @@index([role])
+}
+
+/// One-time codes for B2C e-mail/phone verification (OTP). Only the hash of the
+/// code is stored; codes expire and are single-use.
+model VerificationCode {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  purpose    String    @default("EMAIL_VERIFY")
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([userId])
 }
 
 /// Rotating refresh tokens with reuse detection (OAuth 2.0 Security BCP, RFC 9700).

@@ -102,6 +102,7 @@ export async function createOrgLearner(organizationId: string, input: { name: st
       return tx.user.create({
         data: {
           email: input.email, name: input.name, role: "LEARNER", passwordHash, phone: input.phone ?? null,
+          emailVerifiedAt: new Date(), // org-provisioned → trusted/verified
           orgMemberships: { create: { organizationId, orgRole: "MEMBER" } },
         },
         select: { id: true, email: true, name: true, role: true, phone: true, createdAt: true },
