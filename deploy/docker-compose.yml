@@ -86,6 +86,7 @@ services:
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../web/dist:/srv/pwa:ro          # static PWA build, served on app.declick.digital
+      - ../admin/dist:/srv/admin:ro      # static admin console, served on admin.declick.digital
       - caddy_data:/data
       - caddy_config:/config
     depends_on:
