@@ -30,9 +30,10 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {
-            // Downloaded media (video/captions): serve from cache first, with
-            // range-request support so the <video> can seek offline. Populated
-            // by the in-app "download session" action into the same cache.
+            // Media made available offline (video/captions): serve from cache
+            // first, with range-request support so the <video> can seek offline.
+            // Populated by the per-element "Rendre disponible hors ligne" action.
+            // 7-day retention backstops the app-level per-element purge (offline.ts).
             urlPattern: ({ request, url }) =>
               request.destination === "video" || request.destination === "track" || /\/media\//.test(url.pathname),
             handler: "CacheFirst",
@@ -40,7 +41,7 @@ export default defineConfig({
               cacheName: "klms-media",
               rangeRequests: true,
               cacheableResponse: { statuses: [0, 200, 206] },
-              expiration: { maxEntries: 80, maxAgeSeconds: 60 * 60 * 24 * 60 },
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
           {

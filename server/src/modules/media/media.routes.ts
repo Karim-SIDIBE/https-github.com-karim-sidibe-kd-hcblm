@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, createFromUpload, getAsset, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, getAsset, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { authenticate, guard } from "../../lib/auth.js";
 
@@ -49,13 +49,13 @@ export async function mediaRoutes(app: FastifyInstance) {
 
   app.get("/media/:id", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    try { return { data: await getAsset(id) }; } catch (err) { return handle(reply, err); }
+    try { await assertAssetAccessible(req.principal, id); return { data: await getAsset(id) }; } catch (err) { return handle(reply, err); }
   });
 
   // Adaptive playback manifest (lowest-bitrate first + recommended lite + captions).
   app.get("/media/:id/playback", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    try { return { data: await playbackManifest(id) }; } catch (err) { return handle(reply, err); }
+    try { await assertAssetAccessible(req.principal, id); return { data: await playbackManifest(id) }; } catch (err) { return handle(reply, err); }
   });
 
   // Download / stream a specific rendition (range-aware). For offline + playback.
@@ -63,6 +63,7 @@ export async function mediaRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const { label } = z.object({ label: z.string().default("source") }).parse(req.query);
     try {
+      await assertAssetAccessible(req.principal, id);
       const r = await resolveRendition(id, label);
       if (r.url) return reply.redirect(r.url); // external/provider-hosted
       return sendObject(req, reply, r.storageKey!, r.mime);
@@ -72,7 +73,14 @@ export async function mediaRoutes(app: FastifyInstance) {
   // Raw object by key (used by the offline bundle / publicUrl when no CDN).
   app.get("/media/file/:key", { preHandler: authenticate }, async (req, reply) => {
     const { key } = z.object({ key: z.string() }).parse(req.params);
-    try { return await sendObject(req, reply, decodeURIComponent(key), "application/octet-stream"); }
-    catch { return reply.notFound("Objet introuvable"); }
+    const decoded = decodeURIComponent(key);
+    try {
+      const assetId = assetIdFromKey(decoded);
+      if (assetId) await assertAssetAccessible(req.principal, assetId);
+      return await sendObject(req, reply, decoded, "application/octet-stream");
+    } catch (err) {
+      if (err instanceof MediaError) return handle(reply, err);
+      return reply.notFound("Objet introuvable");
+    }
   });
 }

@@ -18,4 +18,12 @@ export const store = typeof indexedDB !== "undefined" ? idbStore() : memStore();
 export const engine = createEngine(store, api);
 
 export const isLoggedIn = () => Boolean(tokenBox.get().access);
-export function logout() { localStorage.removeItem(KEY); }
+
+// Logged-in learner identity — kept only to render the per-learner video
+// watermark (anti-leak deterrent). Cleared on logout.
+const ME_KEY = "klms_me";
+export type Identity = { id: string; name: string; email: string };
+export function setIdentity(me: Identity) { try { localStorage.setItem(ME_KEY, JSON.stringify(me)); } catch { /* quota */ } }
+export function getIdentity(): Identity | null { try { return JSON.parse(localStorage.getItem(ME_KEY) || "null"); } catch { return null; } }
+
+export function logout() { localStorage.removeItem(KEY); localStorage.removeItem(ME_KEY); }
