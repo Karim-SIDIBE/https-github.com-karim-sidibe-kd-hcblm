@@ -1,37 +1,41 @@
 import { useMemo, useState } from "react";
-import { LEARNERS, COHORTS, avatarColor, initials, type Risk, type B4 } from "../mock";
+import { api, courseTitle, type LearnerRow } from "../lib/api";
+import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import type { CourseCtx } from "../App";
 
-const riskPill: Record<Risk, { cls: string; label: string }> = {
-  ok: { cls: "pill--green", label: "À jour" },
-  watch: { cls: "pill--warn", label: "À surveiller" },
-  risk: { cls: "pill--red", label: "À risque" },
-};
-const b4Pill: Record<B4, string> = {
-  "—": "pill--soft", "soumis": "pill--info", "en évaluation": "pill--navy", "validé": "pill--green", "révision": "pill--orange",
-};
+function statusPill(l: LearnerRow) {
+  if (l.status === "CERTIFIED") return <span className="pill pill--green"><span className="dot" />Certifié</span>;
+  if (l.active) return <span className="pill pill--navy"><span className="dot" />En cours</span>;
+  return <span className="pill pill--red"><span className="dot" />Inactif</span>;
+}
+function b4Pill(l: LearnerRow) {
+  if (l.status === "CERTIFIED") return <span className="pill pill--green">Validé</span>;
+  if (l.rubric != null) return <span className="pill pill--navy">Évalué · {l.rubric}%</span>;
+  return <span className="muted">—</span>;
+}
 
-export function Learners() {
+export function Learners({ ctx }: { ctx: CourseCtx }) {
+  const { courseId, courses, setCourseId } = ctx;
+  const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId]);
   const [q, setQ] = useState("");
-  const [cohort, setCohort] = useState(COHORTS[0]);
-  const [risk, setRisk] = useState("Tous statuts");
+  const [filter, setFilter] = useState("Tous");
 
-  const rows = useMemo(() => LEARNERS.filter((l) =>
-    (cohort === COHORTS[0] || l.cohort === cohort) &&
-    (risk === "Tous statuts" || riskPill[l.risk].label === risk) &&
+  const rows = useMemo(() => (data ?? []).filter((l) =>
+    (filter === "Tous" || (filter === "Certifiés" && l.status === "CERTIFIED") || (filter === "En cours" && l.active && l.status !== "CERTIFIED") || (filter === "Inactifs" && !l.active && l.status !== "CERTIFIED")) &&
     (q === "" || (l.name + l.email).toLowerCase().includes(q.toLowerCase()))
-  ), [q, cohort, risk]);
+  ), [data, q, filter]);
 
   return (
     <div className="content">
       <div className="pagehead">
         <div>
-          <div className="eyebrow">{rows.length} apprenant{rows.length > 1 ? "s" : ""}</div>
+          <div className="eyebrow">{loading ? "…" : `${rows.length} apprenant${rows.length > 1 ? "s" : ""}`}</div>
           <h1>Apprenants</h1>
-          <div className="sub">Gérez les comptes, les inscriptions et suivez chaque parcours.</div>
+          <div className="sub">{courses.find((c) => c.id === courseId) ? courseTitle(courses.find((c) => c.id === courseId)!) : ""}</div>
         </div>
         <div className="filters">
-          <button className="btn">Importer une liste (CSV)</button>
-          <button className="btn btn--primary">+ Inscrire un apprenant</button>
+          <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>{courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}</select>
+          <a href="#/enrol" className="btn btn--primary">+ Inscrire un apprenant</a>
         </div>
       </div>
 
@@ -40,38 +44,27 @@ export function Learners() {
           <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-soft)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 300 }}>
             <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher par nom ou e-mail…" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
-          <div className="row">
-            <select className="select" value={cohort} onChange={(e) => setCohort(e.target.value)}>{COHORTS.map((c) => <option key={c}>{c}</option>)}</select>
-            <select className="select" value={risk} onChange={(e) => setRisk(e.target.value)}><option>Tous statuts</option><option>À jour</option><option>À surveiller</option><option>À risque</option></select>
-          </div>
+          <select className="select" value={filter} onChange={(e) => setFilter(e.target.value)}><option>Tous</option><option>En cours</option><option>Inactifs</option><option>Certifiés</option></select>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead>
-              <tr><th>Apprenant</th><th>Cohorte</th><th>Progression</th><th>Dernier badge</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th></tr>
-            </thead>
+            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th></tr></thead>
             <tbody>
               {rows.map((l) => (
-                <tr key={l.id}>
-                  <td>
-                    <div className="uitem">
-                      <span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span>
-                      <div className="who"><b>{l.name}</b><span>{l.email}</span></div>
-                    </div>
-                  </td>
-                  <td><span className="muted" style={{ fontSize: 12.5 }}>{l.cohort.split(" — ")[0]}</span></td>
-                  <td>
-                    <div className="progress"><div className="track"><i style={{ width: `${l.progress}%`, background: l.progress === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progress}%</span></div>
-                  </td>
-                  <td>{l.lastBadge === "—" ? <span className="muted">—</span> : <span className="pill pill--soft">{l.lastBadge}</span>}</td>
-                  <td><span className={`pill ${b4Pill[l.b4]}`}>{l.b4}</span></td>
-                  <td><span className="muted" style={{ fontSize: 12.5 }}>{l.lastActive}</span></td>
-                  <td><span className={`pill ${riskPill[l.risk].cls}`}><span className="dot" />{riskPill[l.risk].label}</span></td>
+                <tr key={l.email}>
+                  <td><div className="uitem"><span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span><div className="who"><b>{l.name}</b><span>{l.email}</span></div></div></td>
+                  <td><div className="progress"><div className="track"><i style={{ width: `${l.progressPercent}%`, background: l.progressPercent === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progressPercent}%</span></div></td>
+                  <td>{l.finalQuiz != null ? <span className="pill pill--soft">{l.finalQuiz}%</span> : <span className="muted">—</span>}</td>
+                  <td>{b4Pill(l)}</td>
+                  <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
+                  <td>{statusPill(l)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {rows.length === 0 && <div className="empty"><div className="big">🔍</div>Aucun apprenant ne correspond à ces filtres.</div>}
+          {loading && <div className="empty">Chargement des apprenants…</div>}
+          {error && <div className="empty" style={{ color: "var(--danger)" }}>Erreur : {error}</div>}
+          {!loading && !error && rows.length === 0 && <div className="empty"><div className="big">👤</div>Aucun apprenant inscrit à ce parcours. Utilisez « Inscrire un apprenant ».</div>}
         </div>
       </div>
     </div>
