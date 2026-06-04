@@ -91,7 +91,13 @@ const EnvSchema = z.object({
   SAML_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
 });
 
-const parsed = EnvSchema.safeParse(process.env);
+// Treat empty-string env vars as "unset" so blank optional fields (e.g. the
+// commented-out webhook/LRS URLs in .env.example) fall back to their default /
+// optional handling instead of failing url()/coercion validation.
+const rawEnv = Object.fromEntries(
+  Object.entries(process.env).map(([k, v]) => [k, v === "" ? undefined : v]),
+);
+const parsed = EnvSchema.safeParse(rawEnv);
 if (!parsed.success) {
   console.error("Configuration d'environnement invalide :");
   for (const issue of parsed.error.issues) {
