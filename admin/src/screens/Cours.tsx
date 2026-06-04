@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, courseTitle, type CourseFull } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
+import { CourseEditor } from "./CourseEditor";
 
 const STATUS: Record<string, { cls: string; label: string }> = {
   DRAFT: { cls: "pill--warn", label: "Brouillon" },
@@ -11,7 +12,6 @@ const STATUS: Record<string, { cls: string; label: string }> = {
 };
 const TYPE_FR: Record<string, string> = { ONBOARDING: "Onboarding · Ancrage", COMPREHENSION: "Compréhension", PRACTICE: "Pratique terrain", ANCHORING: "Ancrage", CERTIFICATION: "Certification" };
 
-/** Human summary of a block's items (read-only). */
 function blockItems(p: Record<string, unknown> = {}): string[] {
   const out: string[] = [];
   const arr = (k: string) => Array.isArray(p[k]) ? (p[k] as unknown[]).length : 0;
@@ -36,7 +36,7 @@ function blockItems(p: Record<string, unknown> = {}): string[] {
   return out;
 }
 
-function Structure({ id, onBack }: { id: string; onBack: () => void }) {
+function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onEdit: (content: unknown, courseId: string) => void }) {
   const { data, loading, error } = useAsync<CourseFull>(() => api.course(id), [id]);
   const v = data?.versions?.[0];
   const blocks = v?.content?.blocks ?? [];
@@ -55,7 +55,7 @@ function Structure({ id, onBack }: { id: string; onBack: () => void }) {
             </div>
             <div className="row" style={{ gap: 8 }}>
               <span className={`pill ${(STATUS[v.status] ?? { cls: "pill--soft" }).cls}`}>{(STATUS[v.status] ?? { label: v.status }).label}</span>
-              <button className="btn" disabled title="Éditeur de contenu à venir">Éditer (bientôt)</button>
+              <button className="btn btn--primary" onClick={() => onEdit(v.content, id)}>Éditer (nouvelle version)</button>
             </div>
           </div>
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
@@ -77,9 +77,29 @@ function Structure({ id, onBack }: { id: string; onBack: () => void }) {
   );
 }
 
+type Mode = { t: "list" } | { t: "structure"; id: string } | { t: "editor"; isNew: boolean; courseId?: string; initial: any };
+
 export function Cours({ ctx }: { ctx: CourseCtx }) {
-  const [sel, setSel] = useState<string | null>(null);
-  if (sel) return <Structure id={sel} onBack={() => setSel(null)} />;
+  const [mode, setMode] = useState<Mode>({ t: "list" });
+  const [loadingNew, setLoadingNew] = useState(false);
+
+  async function newCourse() {
+    // Start from the canonical course as a gate-passing template.
+    const template = ctx.courses[0];
+    if (!template) return;
+    setLoadingNew(true);
+    try {
+      const full = await api.course(template.id);
+      const content = structuredClone(full.versions[0].content) as any;
+      content.title = "Nouveau parcours";
+      setMode({ t: "editor", isNew: true, initial: content });
+    } finally { setLoadingNew(false); }
+  }
+
+  if (mode.t === "editor")
+    return <CourseEditor initial={mode.initial} courseId={mode.courseId} isNew={mode.isNew} onClose={() => setMode({ t: "list" })} onSaved={() => { /* keep editor open to allow publish */ }} />;
+  if (mode.t === "structure")
+    return <Structure id={mode.id} onBack={() => setMode({ t: "list" })} onEdit={(content, courseId) => setMode({ t: "editor", isNew: false, courseId, initial: content })} />;
 
   return (
     <div className="content">
@@ -89,7 +109,7 @@ export function Cours({ ctx }: { ctx: CourseCtx }) {
           <h1>Cours</h1>
           <div className="sub">Parcours certifiants — structure, versions et statut de publication.</div>
         </div>
-        <button className="btn btn--primary" disabled title="Éditeur de contenu à venir">+ Nouveau cours (bientôt)</button>
+        <button className="btn btn--primary" disabled={loadingNew || ctx.courses.length === 0} onClick={newCourse}>{loadingNew ? "…" : "+ Nouveau cours"}</button>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
@@ -97,7 +117,7 @@ export function Cours({ ctx }: { ctx: CourseCtx }) {
           const v = c.versions.find((x) => x.status === "PUBLISHED") ?? c.versions[0];
           const st = STATUS[v?.status ?? ""] ?? { cls: "pill--soft", label: v?.status ?? "—" };
           return (
-            <button key={c.id} className="card" style={{ textAlign: "left", cursor: "pointer", border: "1px solid var(--line)" }} onClick={() => setSel(c.id)}>
+            <button key={c.id} className="card" style={{ textAlign: "left", cursor: "pointer", border: "1px solid var(--line)" }} onClick={() => setMode({ t: "structure", id: c.id })}>
               <div className="card-b">
                 <div className="row between" style={{ marginBottom: 10 }}>
                   <span className="pill pill--navy">{v?.level ?? "—"}</span>

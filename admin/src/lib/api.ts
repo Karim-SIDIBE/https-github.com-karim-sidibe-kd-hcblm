@@ -101,7 +101,15 @@ export const api = {
   credentials: () => req<CredentialRow[]>("GET", "/credentials"),
   revokeCredential: (id: string, reason: string) => req<unknown>("POST", `/credentials/${id}/revoke`, { reason }),
   course: (id: string) => req<CourseFull>("GET", `/courses/${id}`),
+  validateCourse: (content: unknown) => req<ValidateResult>("POST", "/courses/validate", { content }),
+  createCourse: (slug: string, content: unknown) => req<{ id: string }>("POST", "/courses", { slug, content }),
+  newVersion: (courseId: string, content: unknown) => req<{ id: string; version: number; status: string }>("POST", `/courses/${courseId}/versions`, { content }),
+  submitReview: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/submit-review`, {}),
+  publishVersion: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/publish`, {}),
 };
+
+export type ValidationIssue = { level: "error" | "warning"; rule: string; path: string; message: string };
+export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { ok: boolean; issues: ValidationIssue[] } };
 
 export type CourseVersionFull = { version: number; status: string; title: string; level: string; domainLabel?: string; passThreshold?: number; publishedAt: string | null; updatedAt: string; content: { blocks?: { index: number; type: string; title: string; payload?: Record<string, unknown> }[] } };
 export type CourseFull = { id: string; slug: string; versions: CourseVersionFull[] };
