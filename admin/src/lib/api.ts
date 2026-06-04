@@ -59,6 +59,9 @@ export type LearnerRow = {
 
 export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string };
 export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
+export type Org = { id: string; name: string; slug: string; createdAt: string; _count?: { memberships: number; courses: number } };
+export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
+export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; _count?: { registrations: number } };
 
 // --- endpoints ---
 export const api = {
@@ -70,6 +73,9 @@ export const api = {
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
   audit: (limit = 80) => req<AuditRow[]>("GET", `/audit?limit=${limit}`),
   runReEngagement: () => req<ReEngagementResult>("POST", "/jobs/re-engagement/run", {}),
+  organizations: () => req<Org[]>("GET", "/organizations"),
+  cohorts: () => req<Cohort[]>("GET", "/cohorts"),
+  sessions: () => req<Session[]>("GET", "/sessions"),
 };
 
 /** Title of the latest published (or newest) version of a course. */
