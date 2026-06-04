@@ -2,14 +2,70 @@
  * media.service.ts — media ingest + adaptive playback.
  */
 import { Readable } from "node:stream";
-import type { MediaKind } from "@prisma/client";
+import type { MediaKind, Role } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
 import { env } from "../../config/env.js";
 import { processVideo, ffmpegAvailable } from "../../lib/media/transcode.js";
+import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
+import { computeProgress } from "../../domain/engine/progress.js";
+import { isStaff } from "../../domain/auth/permissions.js";
 
 export class MediaError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
+}
+
+// --- access control: a learner may only fetch media of an UNLOCKED block -----
+
+type AccessPrincipal = { id: string; role: Role } | null | undefined;
+
+/** Storage keys are `sources/<assetId>/…` or `renditions/<assetId>/…`. */
+export function assetIdFromKey(key: string): string | null {
+  const parts = key.replace(/^\/+/, "").split("/");
+  return parts.length >= 2 ? parts[1]! : null;
+}
+
+/** The block index that references this media asset in the course content, or null. */
+function blockIndexForAsset(content: CourseContentT, assetId: string): number | null {
+  for (const b of content.blocks) {
+    if (b.type === "ONBOARDING" && b.payload.triggerVideo.mediaId === assetId) return b.index;
+    if ("microSessions" in b.payload) {
+      for (const m of b.payload.microSessions) if (m.video.mediaId === assetId) return b.index;
+    }
+  }
+  return null;
+}
+
+/**
+ * Enforce that the caller may access this asset. Staff have full access; a learner
+ * is allowed only if one of their enrolments references the asset in a block that
+ * is NOT locked by their progress. This closes the hole where any authenticated
+ * learner could fetch any media (incl. a not-yet-unlocked block) by id/key.
+ *
+ * NOTE: this guards media served BY THE API. When a public CDN is configured
+ * (MEDIA_PUBLIC_BASE_URL), bytes are served by the CDN and this check no longer
+ * applies — locked-block protection then relies on the unguessable UUID keys.
+ */
+export async function assertAssetAccessible(principal: AccessPrincipal, assetId: string): Promise<void> {
+  if (!principal) throw new MediaError(401, "unauthorized", "Authentification requise");
+  if (isStaff(principal.role)) return;
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId: principal.id },
+    include: { courseVersion: true, completions: true },
+  });
+  for (const e of enrollments) {
+    let content: CourseContentT;
+    try { content = CourseContent.parse(e.courseVersion.content); } catch { continue; }
+    const idx = blockIndexForAsset(content, assetId);
+    if (idx == null) continue;
+    const progress = computeProgress(
+      content,
+      e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
+      Boolean(e.momentAncrage),
+    );
+    if (progress.blocks.find((b) => b.index === idx)?.state !== "locked") return;
+  }
+  throw new MediaError(403, "block_locked", "Ce contenu n'est pas encore débloqué.");
 }
 
 function kindFromMime(mime: string): MediaKind {

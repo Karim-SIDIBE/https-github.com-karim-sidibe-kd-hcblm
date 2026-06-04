@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, engine, store } from "../lib/app";
+import { api, engine, store, getIdentity } from "../lib/app";
 import { setCachedPosition, setCachedProgress, getCachedPosition } from "../lib/cache";
 import { currentConn, resolveSource, type Rendition } from "../lib/media";
 import { previousSession } from "../lib/content";
@@ -94,6 +94,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
           <VideoPlayer
             src={source.url} captionsUrl={source.captionsUrl} title={session.title}
             startAt={startAt} durationSec={session.video?.durationSec} quality={source.quality}
+            watermark={(() => { const me = getIdentity(); return me ? `${me.name} · ${me.email}` : null; })()}
             onHeartbeat={heartbeat}
             onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
           />

@@ -1,11 +1,22 @@
 /**
- * offline.ts — offline session download (§9 / AC#12).
+ * offline.ts — per-element offline availability (§9 / AC#12).
  *
- * Caches each session's lowest-bitrate video rendition + caption track into the
- * `klms-media` Cache Storage bucket, which the service worker serves CacheFirst
- * (with range requests) so a downloaded session plays with no connectivity. The
- * course text + exercises are already cached in the bundle, so only the video
- * files need explicit download. `blockMediaUrls` is pure + unit-tested.
+ * The unit the learner makes available offline is a SINGLE block element (a
+ * micro-session — with or without video — a quiz, an étude de cas, etc.), never a
+ * whole block. Making an element available:
+ *   1. caches its media (lowest-bitrate video + captions, if any) into the
+ *      `klms-media` Cache Storage bucket (served CacheFirst, range-aware), and
+ *   2. records it in a per-enrolment registry with a 7-DAY expiry.
+ *
+ * After 7 days, or once the element is completed online (or as soon as an
+ * offline completion syncs), the element is PURGED: its media is evicted from the
+ * cache and the registry entry removed, so it must be made available again.
+ *
+ * Note: media is cached into the browser's internal Cache Storage (served back to
+ * <video>) — it is never written to the device as a downloadable file. The term
+ * surfaced in the UI is "Rendre disponible hors ligne", never "télécharger".
+ *
+ * Pure helpers (itemMediaUrls) are unit-tested.
  */
 type Rendition = { kind?: string; bitrateKbps?: number | null; url?: string | null; downloadable?: boolean };
 type Bundle = {
@@ -15,7 +26,12 @@ type Bundle = {
 };
 
 const MEDIA_CACHE = "klms-media";
-const dlKey = (eid: string) => `klms_dl_${eid}`;
+const TTL_DAYS = 7;
+const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+const regKey = (eid: string) => `klms_off_${eid}`;
+const entryKey = (blockIndex: number, itemKey: string) => `b${blockIndex}:${itemKey}`;
 
 /** Lowest-bitrate downloadable video rendition for an asset (smallest = friendliest offline). */
 function liteRendition(asset?: { renditions: Rendition[] }): Rendition | undefined {
@@ -25,48 +41,121 @@ function liteRendition(asset?: { renditions: Rendition[] }): Rendition | undefin
     .sort((a, b) => (a.bitrateKbps ?? 1e9) - (b.bitrateKbps ?? 1e9))[0];
 }
 
-/** URLs to cache for offline playback of a block's sessions (videos + captions). */
-export function blockMediaUrls(bundle: Bundle, blockIndex: number): string[] {
-  const block = bundle.content.blocks.find((b) => b.index === blockIndex);
-  const sessions: any[] = block?.payload?.microSessions ?? [];
+/** Media URLs for one video object (lowest rendition + caption track). */
+function videoUrls(bundle: Bundle, blockIndex: number, sessionId: string, video: { mediaId?: string; url?: string; subtitlesUrl?: string }): string[] {
   const urls: string[] = [];
-  for (const m of sessions) {
-    const v = m.video ?? {};
-    const lite = liteRendition(bundle.mediaAssets?.find((a) => a.mediaId === v.mediaId));
-    const videoUrl = (lite?.downloadable !== false ? lite?.url : null) ?? (v.url && String(v.url).trim() ? v.url : null);
-    if (videoUrl) urls.push(videoUrl);
-    const cap = v.subtitlesUrl || bundle.media?.find((x) => x.key === `blocks[${blockIndex}].${m.id}.captions`)?.url;
-    if (cap) urls.push(cap);
-  }
+  const lite = liteRendition(bundle.mediaAssets?.find((a) => a.mediaId === video.mediaId));
+  const v = (lite?.downloadable !== false ? lite?.url : null) ?? (video.url && String(video.url).trim() ? video.url : null);
+  if (v) urls.push(v);
+  const cap = video.subtitlesUrl || bundle.media?.find((x) => x.key === `blocks[${blockIndex}].${sessionId}.captions`)?.url;
+  if (cap) urls.push(cap);
   return [...new Set(urls)];
 }
 
-export function downloadedBlocks(eid: string): number[] {
-  try { return JSON.parse(localStorage.getItem(dlKey(eid)) || "[]"); } catch { return []; }
-}
-export function isBlockDownloaded(eid: string, blockIndex: number): boolean {
-  return downloadedBlocks(eid).includes(blockIndex);
-}
-function markBlockDownloaded(eid: string, blockIndex: number) {
-  const s = new Set(downloadedBlocks(eid)); s.add(blockIndex);
-  try { localStorage.setItem(dlKey(eid), JSON.stringify([...s])); } catch { /* quota */ }
+/** URLs to cache for offline use of ONE element. Light-only elements return []. */
+export function itemMediaUrls(bundle: Bundle, blockIndex: number, itemKey: string): string[] {
+  const block = bundle.content.blocks.find((b) => b.index === blockIndex);
+  if (!block) return [];
+  if (block.type === "ONBOARDING" && (itemKey === "onboarding" || itemKey === "trigger")) {
+    return videoUrls(bundle, blockIndex, "trigger", block.payload?.triggerVideo ?? {});
+  }
+  const session = (block.payload?.microSessions ?? []).find((s: any) => s.id === itemKey);
+  if (session) return videoUrls(bundle, blockIndex, session.id, session.video ?? {});
+  return []; // light-only element (quiz, case study, field application, journal, plan…)
 }
 
-/** Fetch + cache the block's media. Returns how many files were stored. */
-export async function downloadBlock(
-  cacheFetch: (url: string) => Promise<Response>,
-  bundle: Bundle, eid: string, blockIndex: number,
-): Promise<{ cached: number; total: number }> {
-  const urls = blockMediaUrls(bundle, blockIndex);
-  if (typeof caches === "undefined") return { cached: 0, total: urls.length };
+// --- registry ---------------------------------------------------------------
+
+type Entry = { at: number; exp: number; urls: string[] };
+type Registry = Record<string, Entry>;
+
+function readReg(eid: string): Registry {
+  try { return JSON.parse(localStorage.getItem(regKey(eid)) || "{}"); } catch { return {}; }
+}
+function writeReg(eid: string, reg: Registry) {
+  try { localStorage.setItem(regKey(eid), JSON.stringify(reg)); } catch { /* quota */ }
+}
+
+async function deleteFromCache(urls: string[]) {
+  if (typeof caches === "undefined" || urls.length === 0) return;
   const cache = await caches.open(MEDIA_CACHE);
+  for (const u of urls) { try { await cache.delete(new URL(u, location.href).href); } catch { /* */ } }
+}
+
+export type Availability = { available: boolean; expiresAt: number | null; daysLeft: number };
+
+/** Current offline availability of one element (expired entries read as unavailable). */
+export function availabilityOf(eid: string, blockIndex: number, itemKey: string): Availability {
+  const e = readReg(eid)[entryKey(blockIndex, itemKey)];
+  if (!e) return { available: false, expiresAt: null, daysLeft: 0 };
+  const now = Date.now();
+  if (e.exp <= now) return { available: false, expiresAt: e.exp, daysLeft: 0 };
+  return { available: true, expiresAt: e.exp, daysLeft: Math.max(1, Math.ceil((e.exp - now) / DAY_MS)) };
+}
+
+/** Make ONE element available offline (cache its media + start the 7-day timer). */
+export async function makeAvailable(
+  cacheFetch: (url: string) => Promise<Response>,
+  bundle: Bundle, eid: string, blockIndex: number, itemKey: string,
+): Promise<{ cached: number; total: number }> {
+  const urls = itemMediaUrls(bundle, blockIndex, itemKey);
   let cached = 0;
-  for (const u of urls) {
-    try {
-      const res = await cacheFetch(u);
-      if (res.ok) { await cache.put(new URL(u, location.href).href, res.clone()); cached++; }
-    } catch { /* skip this file; partial download still useful */ }
+  if (typeof caches !== "undefined" && urls.length > 0) {
+    const cache = await caches.open(MEDIA_CACHE);
+    for (const u of urls) {
+      try {
+        const res = await cacheFetch(u);
+        if (res.ok) { await cache.put(new URL(u, location.href).href, res.clone()); cached++; }
+      } catch { /* skip this file; partial still useful */ }
+    }
   }
-  if (cached > 0 || urls.length === 0) markBlockDownloaded(eid, blockIndex);
+  const now = Date.now();
+  const reg = readReg(eid);
+  reg[entryKey(blockIndex, itemKey)] = { at: now, exp: now + TTL_MS, urls };
+  writeReg(eid, reg);
   return { cached, total: urls.length };
+}
+
+/** Remove ONE element's offline availability (evict media + registry entry). */
+export async function removeAvailability(eid: string, blockIndex: number, itemKey: string): Promise<void> {
+  const reg = readReg(eid);
+  const e = reg[entryKey(blockIndex, itemKey)];
+  if (!e) return;
+  await deleteFromCache(e.urls);
+  delete reg[entryKey(blockIndex, itemKey)];
+  writeReg(eid, reg);
+}
+
+/** Purge every element whose 7-day window has elapsed. Returns how many were purged. */
+export async function purgeExpired(eid: string): Promise<number> {
+  const reg = readReg(eid);
+  const now = Date.now();
+  let n = 0; let changed = false;
+  for (const key of Object.keys(reg)) {
+    if (reg[key]!.exp <= now) { await deleteFromCache(reg[key]!.urls); delete reg[key]; changed = true; n++; }
+  }
+  if (changed) writeReg(eid, reg);
+  return n;
+}
+
+/**
+ * Purge elements that the server now considers completed. Called with the
+ * per-block list of completed item keys from the latest progress snapshot — so a
+ * completion done online purges immediately, and one done offline purges as soon
+ * as it syncs (progress then reflects it). Returns how many were purged.
+ */
+export async function purgeCompleted(eid: string, completedByBlock: Record<number, string[]>): Promise<number> {
+  const reg = readReg(eid);
+  let n = 0; let changed = false;
+  for (const key of Object.keys(reg)) {
+    const m = /^b(\d+):(.+)$/.exec(key);
+    if (!m) continue;
+    const blockIndex = Number(m[1]);
+    const itemKey = m[2]!;
+    if ((completedByBlock[blockIndex] ?? []).includes(itemKey)) {
+      await deleteFromCache(reg[key]!.urls); delete reg[key]; changed = true; n++;
+    }
+  }
+  if (changed) writeReg(eid, reg);
+  return n;
 }

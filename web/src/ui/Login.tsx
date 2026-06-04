@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../lib/app";
+import { api, setIdentity } from "../lib/app";
 import { brand } from "../lib/brand";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
@@ -11,7 +11,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null);
-    try { await api.login(email, password); onLogin(); }
+    try { const u = await api.login(email, password); setIdentity({ id: u.id, name: u.name, email: u.email }); onLogin(); }
     catch { setError("Identifiants invalides"); }
     finally { setBusy(false); }
   }

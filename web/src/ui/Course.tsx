@@ -4,7 +4,7 @@ import { rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, setCachedProgress, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
 import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
-import { blockMediaUrls, downloadBlock, isBlockDownloaded } from "../lib/offline";
+import { availabilityOf, makeAvailable, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 import type { CourseContent } from "@kd/shared";
 
@@ -20,19 +20,36 @@ const ICON: Record<ItemKind, string> = {
 };
 const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final", "field", "journal", "project"];
 
+const akey = (blockIndex: number, itemKey: string) => `${blockIndex}:${itemKey}`;
+
 export function Course({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
   const [diag, setDiag] = useState<{ priorities: string[]; profile: string | null } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
-  const [dl, setDl] = useState<Record<number, "idle" | "busy" | "done">>({});
+  const [avail, setAvail] = useState<Record<string, Availability>>({});
+  const [busy, setBusy] = useState<Record<string, boolean>>({});
 
-  async function download(blockIndex: number) {
+  // Recompute every element's offline availability from the local registry.
+  const refreshAvail = useCallback((b: Bundle | null) => {
+    if (!b) return;
+    const next: Record<string, Availability> = {};
+    for (const blk of b.content.blocks) for (const it of blockItems(blk)) next[akey(blk.index, it.key)] = availabilityOf(eid, blk.index, it.key);
+    setAvail(next);
+  }, [eid]);
+
+  async function makeItemAvailable(blockIndex: number, it: BlockItem) {
     if (!bundle) return;
-    setDl((d) => ({ ...d, [blockIndex]: "busy" }));
-    const r = await downloadBlock(api.cacheFetch, bundle as any, eid, blockIndex);
-    setDl((d) => ({ ...d, [blockIndex]: "done" }));
-    setMsg(`Bloc ${blockIndex} téléchargé pour le hors-ligne (${r.cached} fichier·s).`);
+    const k = akey(blockIndex, it.key);
+    setBusy((m) => ({ ...m, [k]: true }));
+    const r = await makeAvailable(api.cacheFetch, bundle as any, eid, blockIndex, it.key);
+    setBusy((m) => ({ ...m, [k]: false }));
+    refreshAvail(bundle);
+    setMsg(r.total > 0 ? `« ${it.label} » disponible hors ligne (${r.cached}/${r.total}) · 7 jours.` : `« ${it.label} » disponible hors ligne · 7 jours.`);
+  }
+  async function removeItem(blockIndex: number, it: BlockItem) {
+    await removeAvailability(eid, blockIndex, it.key);
+    refreshAvail(bundle);
   }
 
   const refreshProgress = useCallback(async () => {
@@ -45,11 +62,27 @@ export function Course({ eid }: { eid: string }) {
     (async () => {
       const cached = await store.getBundle<Bundle>(eid); if (alive && cached) setBundle(cached);
       const b = await engine.cacheBundle(eid);
-      if (alive && b) setBundle(b); else if (alive && !cached) setMsg("Parcours indisponible (hors-ligne et non téléchargé).");
+      const loaded = (b ?? cached) as Bundle | null;
+      if (alive && b) setBundle(b); else if (alive && !cached) setMsg("Parcours indisponible (hors-ligne et non rendu disponible).");
+      await purgeExpired(eid);                 // evict elements past their 7-day window
+      if (alive) refreshAvail(loaded);
       await refreshProgress();
     })();
     return () => { alive = false; };
-  }, [eid, refreshProgress]);
+  }, [eid, refreshProgress, refreshAvail]);
+
+  // When progress changes, purge offline copies of any element now completed
+  // (online → immediately; offline → as soon as the completion syncs).
+  useEffect(() => {
+    if (!progress || !bundle) return;
+    const completedByBlock: Record<number, string[]> = {};
+    for (const b of progress.blocks) {
+      completedByBlock[b.index] = [...(b.completedKeys ?? [])];
+      const blk = bundle.content.blocks.find((x) => x.index === b.index);
+      if (b.state === "completed" && blk?.type === "ONBOARDING") completedByBlock[b.index]!.push("onboarding");
+    }
+    (async () => { const n = await purgeCompleted(eid, completedByBlock); if (n > 0) refreshAvail(bundle); })();
+  }, [progress, bundle, eid, refreshAvail]);
 
   const stateOf = (i: number) => progress?.blocks.find((b) => b.index === i)?.state ?? (i === 0 ? "available" : "locked");
   const doneKeys = (i: number) => new Set(progress?.blocks.find((b) => b.index === i)?.completedKeys ?? []);
@@ -88,26 +121,35 @@ export function Course({ eid }: { eid: string }) {
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
             <div className="row between"><h3 style={{ margin: 0 }}>{b.index}. {b.title}</h3>{STATE(st)}</div>
-            {!locked && blockMediaUrls(bundle as any, b.index).length > 0 && (
-              (dl[b.index] === "done" || isBlockDownloaded(eid, b.index))
-                ? <span className="hf-pill hf-pill--mint hf-pill--sm" style={{ marginTop: 10 }}>⬇ Disponible hors-ligne</span>
-                : <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ marginTop: 6, paddingLeft: 0 }} disabled={dl[b.index] === "busy"} onClick={() => download(b.index)}>
-                    {dl[b.index] === "busy" ? "Téléchargement…" : "⬇ Télécharger les vidéos"}
-                  </button>
-            )}
             <div className="stack" style={{ marginTop: 12 }}>
               {items.map((it) => {
                 const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");
+                const k = akey(b.index, it.key);
+                const av = avail[k];
                 return (
-                  <div key={it.key} className="hf-rowtap row between" style={{ padding: "11px 13px", border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: locked ? "default" : "pointer" }}
-                    onClick={() => { if (!locked) onItem(b.index, it); }}>
-                    <span className="row" style={{ gap: 11 }}>
-                      <span style={{ fontSize: 18 }}>{isDone ? "✅" : ICON[it.kind]}</span>
-                      <span><strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>{it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}</span>
-                    </span>
-                    {!locked && !isDone && !NAVIGABLE.includes(it.kind)
-                      ? <button className="hf-btn hf-btn--sm hf-btn--outline" onClick={(e) => { e.stopPropagation(); completeInterim(b.index, it); }}>Terminé</button>
-                      : <span className="meta">{isDone ? "" : "→"}</span>}
+                  <div key={it.key}>
+                    <div className="hf-rowtap row between" style={{ padding: "11px 13px", border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: locked ? "default" : "pointer" }}
+                      onClick={() => { if (!locked) onItem(b.index, it); }}>
+                      <span className="row" style={{ gap: 11 }}>
+                        <span style={{ fontSize: 18 }}>{isDone ? "✅" : ICON[it.kind]}</span>
+                        <span><strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>{it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}</span>
+                      </span>
+                      {!locked && !isDone && !NAVIGABLE.includes(it.kind)
+                        ? <button className="hf-btn hf-btn--sm hf-btn--outline" onClick={(e) => { e.stopPropagation(); completeInterim(b.index, it); }}>Terminé</button>
+                        : <span className="meta">{isDone ? "" : "→"}</span>}
+                    </div>
+                    {!locked && !isDone && (
+                      <div className="row" style={{ gap: 8, marginTop: 6, paddingLeft: 2 }}>
+                        {av?.available
+                          ? <>
+                              <span className="hf-pill hf-pill--mint hf-pill--sm">✓ Disponible hors ligne · {av.daysLeft} j</span>
+                              <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ padding: "2px 8px" }} onClick={(e) => { e.stopPropagation(); removeItem(b.index, it); }}>Retirer</button>
+                            </>
+                          : <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ padding: "2px 8px" }} disabled={busy[k]} onClick={(e) => { e.stopPropagation(); makeItemAvailable(b.index, it); }}>
+                              {busy[k] ? "…" : "⤓ Rendre disponible hors ligne"}
+                            </button>}
+                      </div>
+                    )}
                   </div>
                 );
               })}

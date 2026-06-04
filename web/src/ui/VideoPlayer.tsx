@@ -12,7 +12,7 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).
  * (play button + quality/ST/1× chips + scrub) so the session flow still works.
  */
 export function VideoPlayer({
-  src, captionsUrl, title, startAt = 0, durationSec, quality, onHeartbeat, onEnded,
+  src, captionsUrl, title, startAt = 0, durationSec, quality, watermark, onHeartbeat, onEnded,
 }: {
   src: string | null;
   captionsUrl: string | null;
@@ -20,6 +20,8 @@ export function VideoPlayer({
   startAt?: number;
   durationSec?: number;
   quality?: string | null;
+  /** Per-learner overlay (name/e-mail) — a leak deterrent, not a copy block. */
+  watermark?: string | null;
   onHeartbeat: (sec: number, durationSec: number | null) => void;
   onEnded: () => void;
 }) {
@@ -27,6 +29,14 @@ export function VideoPlayer({
   const lastBeat = useRef(0);
   const [speed, setSpeed] = useState(1);
   const [captions, setCaptions] = useState(() => (localStorage.getItem(CAP_KEY) ?? "on") === "on");
+  const [wmPos, setWmPos] = useState({ top: "12%", left: "8%" });
+
+  // Reposition the watermark periodically so it can't simply be cropped out.
+  useEffect(() => {
+    if (!watermark) return;
+    const id = setInterval(() => setWmPos({ top: `${10 + Math.random() * 70}%`, left: `${5 + Math.random() * 55}%` }), 8000);
+    return () => clearInterval(id);
+  }, [watermark]);
 
   useEffect(() => {
     const v = ref.current; if (!v) return;
@@ -86,7 +96,7 @@ export function VideoPlayer({
           <div className="scrub"><i style={{ width: `${frac * 100}%` }} /></div>
         </div>
         <p className="meta accent" style={{ marginTop: 8 }}>
-          Touchez pour lire{startAt > 0 ? ` · ↺ reprise ${mmss(startAt)}` : ""} · ⤓ hors‑ligne
+          Touchez pour lire{startAt > 0 ? ` · ↺ reprise ${mmss(startAt)}` : ""}
         </p>
         <Controls />
       </div>
@@ -96,9 +106,10 @@ export function VideoPlayer({
   // --- real player ---
   return (
     <div>
-      <div className="hf-media">
+      <div className="hf-media" style={{ position: "relative" }}>
         <video
           ref={ref} src={src} controls playsInline preload="metadata"
+          controlsList="nodownload noplaybackrate" disablePictureInPicture onContextMenu={(e) => e.preventDefault()}
           onLoadedMetadata={onLoaded} onTimeUpdate={onTime}
           onPause={() => { const v = ref.current!; onHeartbeat(v.currentTime, Number.isFinite(v.duration) ? v.duration : null); }}
           onEnded={onEnded}
@@ -106,6 +117,13 @@ export function VideoPlayer({
           {captionsUrl && <track default kind="subtitles" srcLang="fr" label="Français" src={captionsUrl} />}
         </video>
         {quality && <div className="topchip">Auto {quality}</div>}
+        {watermark && (
+          <div aria-hidden style={{ position: "absolute", top: wmPos.top, left: wmPos.left, pointerEvents: "none", userSelect: "none",
+            color: "rgba(255,255,255,0.32)", fontSize: 12, fontWeight: 600, letterSpacing: 0.3,
+            textShadow: "0 1px 2px rgba(0,0,0,0.65)", whiteSpace: "nowrap", zIndex: 3, transition: "top .6s, left .6s" }}>
+            {watermark}
+          </div>
+        )}
       </div>
       <Controls />
     </div>

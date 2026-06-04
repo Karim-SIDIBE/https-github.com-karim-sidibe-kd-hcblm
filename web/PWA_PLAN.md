@@ -82,9 +82,16 @@ FM7 (test on low-spec→M2), FM8 (duration on cards→DUR), FM4 (re-eng deep lin
 - **Position/resume:** debounced heartbeat (~10 s and on pause/unload) → queued
   `position` action (works offline, syncs later); on session open, seek to the
   saved `positionSec`; app open uses `GET /resume` for the 1-tap deep link.
-- **Offline video:** Cache Storage (separate cache `klms-media`) populated on an
-  explicit "Télécharger" per session (lite rendition + captions); player resolves
-  source from cache when offline. Bundle already lists the assets.
+- **Offline (per element):** the unit made available offline is a single block
+  element (a micro-session — with or without video — a quiz, etc.), never a whole
+  block, and only for unlocked blocks. The "Rendre disponible hors ligne" action
+  caches the element's media (lite rendition + captions) into Cache Storage
+  (`klms-media`) and records a 7-DAY availability in a per-enrolment registry
+  (`klms_off_<eid>`, see `lib/offline.ts`). Elements are purged after 7 days, or
+  once completed (online immediately; offline as soon as it syncs). Media is held
+  in the SW cache (served back to `<video>`), never written as a device file;
+  the player adds `controlsList=nodownload`, blocks the context menu and overlays
+  a moving per-learner watermark. Locked-block media is also refused server-side.
 - **Auto-sync:** Background Sync API (`sync` event) + `online` and
   `visibilitychange` listeners → `engine.flush` for all enrolments. No manual button.
 - **Design system:** small CSS layer — min 44×44 px targets, ≥16 px inputs (avoid
@@ -134,9 +141,10 @@ and is verified against the live backend (`npm run dev` proxying to :4000).
   certificate with **public verify URL/QR**.
 - *Verifies:* P2/AC2, BADGE/AC8, CERT/AC15.
 
-**Phase 6 — Offline video download + sync hardening**
-- "Télécharger la session" → cache lite rendition + captions; play offline;
-  auto-sync queued actions (incl. positions) on reconnect with zero taps.
+**Phase 6 — Offline availability (per element) + sync hardening**
+- "Rendre disponible hors ligne" per element → cache lite rendition + captions
+  with a 7-day window; auto-purge on expiry/completion; play offline; auto-sync
+  queued actions (incl. positions) on reconnect with zero taps.
 - *Verifies:* V3, M5/AC12.
 
 **Phase 7 — Performance & low-spec/3G**
