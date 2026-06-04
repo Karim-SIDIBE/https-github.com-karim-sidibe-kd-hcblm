@@ -100,7 +100,11 @@ export const api = {
   assignEvaluator: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId }),
   credentials: () => req<CredentialRow[]>("GET", "/credentials"),
   revokeCredential: (id: string, reason: string) => req<unknown>("POST", `/credentials/${id}/revoke`, { reason }),
+  course: (id: string) => req<CourseFull>("GET", `/courses/${id}`),
 };
+
+export type CourseVersionFull = { version: number; status: string; title: string; level: string; domainLabel?: string; passThreshold?: number; publishedAt: string | null; updatedAt: string; content: { blocks?: { index: number; type: string; title: string; payload?: Record<string, unknown> }[] } };
+export type CourseFull = { id: string; slug: string; versions: CourseVersionFull[] };
 
 /** Title of the latest published (or newest) version of a course. */
 export function courseTitle(c: CourseSummary): string {
