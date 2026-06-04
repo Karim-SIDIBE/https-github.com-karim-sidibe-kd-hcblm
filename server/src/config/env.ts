@@ -25,6 +25,14 @@ const EnvSchema = z.object({
   SMS_WEBHOOK_URL: z.string().url().optional(),
   WHATSAPP_WEBHOOK_URL: z.string().url().optional(),
   PUSH_WEBHOOK_URL: z.string().url().optional(),
+  /// Transactional e-mail (SMTP). When set, EMAIL is sent via SMTP (priority over
+  /// the webhook); else falls back to NOTIFY_WEBHOOK_URL, else console.
+  SMTP_URL: z.string().optional(),                  // e.g. smtp://user:pass@host:587
+  MAIL_FROM: z.string().optional(),                 // e.g. "DECLICK DIGITAL <no-reply@declick.digital>"
+  /// Public base URL of the learner app (for links in invitations/verification).
+  APP_BASE_URL: z.string().url().optional(),
+  /// Brand name used in transactional messages. Optional.
+  BRAND_NAME: z.string().default("DECLICK DIGITAL"),
 
   // --- Moment d'Ancrage (PAM) capture policy (§6.1). ---
   /// Minimum PAM length enforced server-side (badge condition floor is 50;

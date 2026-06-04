@@ -92,6 +92,22 @@ docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
 > Réservée au personnel (connexion par compte staff). Assurez-vous que
 > `CORS_ORIGINS` (dans `deploy/.env`) inclut **`https://admin.declick.digital`**.
 
+## 5 ter. Construire la console entreprise (servie par Caddy)
+
+Caddy sert `entreprise.declick.digital` depuis `entreprise/dist`. C'est l'espace
+**self-service** des clients entreprises (un admin d'organisation gère ses
+apprenants et ses sièges). Même principe :
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w entreprise run build"
+```
+
+> Ajoutez le DNS `entreprise A 185.98.136.230`, et vérifiez que `CORS_ORIGINS`
+> inclut **`https://entreprise.declick.digital`**. L'accès est réservé aux
+> administrateurs d'organisation (membership OWNER/ADMIN) ; un compte sans rôle
+> admin verra un message « réservé aux administrateurs ».
+
 ## 6. Vérifier
 
 ```bash

@@ -50,6 +50,11 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
   INSTRUCTOR: ["course:read", "enrollment:create", "enrollment:read_any", "analytics:read", "session:manage", "forum:moderate"],
   EVALUATOR: ["course:read", "evaluation:grade", "enrollment:read_any", "analytics:read"],
   ENTERPRISE_CLIENT: ["course:read", "enrollment:read_any", "analytics:read"],
+  // Enterprise self-service admin. GLOBAL perms are read-only (same as the
+  // client); the ability to create learners / enrol is granted ONLY org-scoped
+  // via an OWNER/ADMIN membership (see lib/tenant.ts + organizations routes), so
+  // it is deliberately NOT given "user:manage" / "enrollment:create" here.
+  ENTERPRISE_ADMIN: ["course:read", "enrollment:read_any", "analytics:read"],
   EMPLOYER: ["course:read", "analytics:read"],
   LEARNER: ["enrollment:create"],
 };
