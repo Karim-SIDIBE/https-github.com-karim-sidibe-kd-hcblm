@@ -96,7 +96,7 @@ export function App() {
     return (
       <div className="shell">
         <div className="main">
-          <div className="appbar"><Brand /><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div>
+          <div className="appbar appbar--standalone"><Brand /><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div>
           <main className="screen"><Banner sync={sync} /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>

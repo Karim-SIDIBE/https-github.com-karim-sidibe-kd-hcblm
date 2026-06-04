@@ -215,6 +215,7 @@ button.block { width:100%; }
   .sidebar .navitem.on { background:var(--orange-50); color:var(--orange-600); }
   .sidebar .navitem:hover { background:var(--bg-tint); }
   .appbar { display:none; }              /* desktop uses the sidebar instead */
+  .appbar.appbar--standalone { display:flex; border-radius:var(--r-lg) var(--r-lg) 0 0; }  /* …except the enrolments screen, which has no sidebar */
   .tabbar { display:none; }
   .screen { max-width:720px; padding:28px 32px 40px; }
 }
