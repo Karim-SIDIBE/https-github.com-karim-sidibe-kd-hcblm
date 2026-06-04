@@ -10,7 +10,6 @@ const CFG: Record<QuizKind, { blockType: string; source: string; action: string;
   interblock: { blockType: "PRACTICE", source: "interBlockQuiz", action: "quiz_interblock", title: "Quiz interbloc" },
   final: { blockType: "ANCHORING", source: "finalQuiz", action: "quiz_final", title: "Quiz final" },
 };
-
 const diagKey = (eid: string) => `klms_diag_${eid}`;
 
 export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
@@ -20,10 +19,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
 
   useEffect(() => {
     let alive = true;
-    (async () => {
-      const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
-      if (alive) setBundle(b);
-    })();
+    (async () => { const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid)); if (alive) setBundle(b); })();
     return () => { alive = false; };
   }, [eid]);
 
@@ -45,37 +41,42 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
       const band = (data!.profiles ?? []).find((p: any) => prof.correct >= p.scoreRange[0] && prof.correct <= p.scoreRange[1]);
       try { localStorage.setItem(diagKey(eid), JSON.stringify({ priorities: prof.priorities, profile: band?.name ?? null })); } catch { /* */ }
       setResult({ node: (
-        <div className="card stack">
-          <h2>Votre profil de compétence</h2>
-          {band && <p className="chip ok" style={{ alignSelf: "flex-start" }}>{band.name}</p>}
-          {band?.description && <p className="muted">{band.description}</p>}
-          <p style={{ marginBottom: 0 }}><strong>Vos 2 priorités d'apprentissage :</strong></p>
+        <div className="hf-card hf-card--stripe-orange stack pt-reveal">
+          <div className="eyebrow">Votre profil de compétence</div>
+          {band && <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{band.name}</span>}
+          {band?.description && <p className="body">{band.description}</p>}
+          <strong className="h4">Vos 2 priorités d'apprentissage</strong>
           <div className="stack">
-            {prof.priorities.map((p, i) => <div key={p} className="card" style={{ margin: 0, borderLeft: "4px solid var(--brand)" }}><strong>{i + 1}. {p}</strong></div>)}
+            {prof.priorities.map((p, i) => (
+              <div key={p} className="hf-card hf-card--peach row" style={{ gap: 12, padding: 14 }}>
+                <span className="hf-medal cert" style={{ width: 36, height: 36, fontSize: 14 }}>{i + 1}</span>
+                <strong className="h4">{p}</strong>
+              </div>
+            ))}
           </div>
-          <p className="muted" style={{ fontSize: 13 }}>Score : {prof.correct}/{prof.total}</p>
+          <p className="meta">Score : {prof.correct}/{prof.total}</p>
         </div>
       ) });
     } else if (kind === "final") {
       const s = scoreQuiz(data!.raw, answers);
       const passed = s.scorePct >= (data!.threshold ?? 70);
       setResult({ node: (
-        <div className="card center stack">
-          <p style={{ fontSize: 40, margin: 0 }}>{passed ? "🎉" : "💪"}</p>
+        <div className="hf-card center stack pt-reveal">
+          <p style={{ fontSize: 44, margin: 0 }}>{passed ? "🎉" : "💪"}</p>
           <h2>{passed ? "Quiz final réussi !" : "Pas encore atteint"}</h2>
-          <p className={`chip ${passed ? "ok" : "ko"}`} style={{ alignSelf: "center" }}>{s.scorePct}% · seuil {data!.threshold ?? 70}%</p>
-          <p className="muted">{passed ? "Le bloc de certification est débloqué." : "Reprenez les sessions du bloc puis retentez."}</p>
+          <span className={`hf-pill ${passed ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "center" }}>{s.scorePct}% · seuil {data!.threshold ?? 70}%</span>
+          <p className="body">{passed ? "Le bloc de certification est débloqué." : "Reprenez les sessions du bloc puis retentez."}</p>
         </div>
       ) });
     } else {
       const s = scoreQuiz(data!.raw, answers);
-      setResult({ node: <div className="card center stack"><h2>Consolidation terminée</h2><p className="chip ok" style={{ alignSelf: "center" }}>{s.correct}/{s.total} bonnes réponses</p></div> });
+      setResult({ node: <div className="hf-card center stack pt-reveal"><h2>Consolidation terminée</h2><span className="hf-pill hf-pill--mint" style={{ alignSelf: "center" }}>{s.correct}/{s.total} bonnes réponses</span></div> });
     }
   }
 
-  const Back = () => <button className="ghost" onClick={() => navigate(routes.course(eid))}>← Tableau de bord</button>;
-  if (!bundle) return <div><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
-  if (!data) return <div><Back /><p className="banner offline">Quiz indisponible.</p></div>;
+  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>← Le parcours</button>;
+  if (!bundle) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+  if (!data) return <div className="stack"><Back /><p className="banner offline">Quiz indisponible.</p></div>;
 
   return (
     <div className="stack">
@@ -84,7 +85,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
       {result ? (
         <>
           {result.node}
-          <button className="block" onClick={() => navigate(routes.course(eid))}>Continuer →</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>Continuer →</button>
         </>
       ) : (
         <Quiz questions={data.questions} onSubmit={onSubmit} />

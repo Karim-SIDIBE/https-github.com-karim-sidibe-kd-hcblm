@@ -9,7 +9,7 @@ type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: 
  * Block 4 certification project (§6.3). The rubric is shown to the learner
  * BEFORE submission; the 5 project sections are derived from their PAM. After
  * submission the screen shows the in-platform lifecycle status (assignment →
- * evaluation → result), with no e-mail step.
+ * evaluation → result), with no e-mail step. hf-* kit.
  */
 export function Project({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<any>(null);
@@ -22,7 +22,7 @@ export function Project({ eid }: { eid: string }) {
     (async () => {
       const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
       if (alive) setBundle(b);
-      try { const p = await api.project(eid); if (alive) setStatus(p); }
+      try { const p = await api.project(eid); if (alive) setStatus(p ?? null); }
       catch { if (alive) setStatus(null); }
     })();
     return () => { alive = false; };
@@ -46,28 +46,27 @@ export function Project({ eid }: { eid: string }) {
     } finally { setBusy(false); }
   }
 
-  const Back = () => <button className="ghost" onClick={() => navigate(routes.course(eid))}>← Tableau de bord</button>;
-  if (!bundle || status === undefined) return <div><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
-  if (!spec) return <div><Back /><p className="banner offline">Projet indisponible.</p></div>;
+  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>← Le parcours</button>;
+  if (!bundle || status === undefined) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+  if (!spec) return <div className="stack"><Back /><p className="banner offline">Projet indisponible.</p></div>;
 
   // --- already submitted → lifecycle status ---
   if (status) {
     const STATUS_FR: Record<string, string> = { SUBMITTED: "Soumis — en attente d'attribution", ASSIGNED: "En cours d'évaluation", PASSED: "Validé 🎓", REVISION_REQUESTED: "Révision demandée" };
+    const pillCls = status.result === "PASS" ? "hf-pill--mint" : status.result === "FAIL" ? "hf-pill--orange" : "hf-pill--soft";
     return (
       <div className="stack">
         <Back />
-        <h1>Projet de certification</h1>
-        <div className="card stack">
-          <span className={`chip ${status.result === "PASS" ? "ok" : status.result === "FAIL" ? "ko" : "warn"}`} style={{ alignSelf: "flex-start" }}>
-            {STATUS_FR[status.revisionStatus] ?? status.revisionStatus}
-          </span>
-          {status.submittedAt && <p className="muted" style={{ margin: 0 }}>Soumis le {new Date(status.submittedAt).toLocaleDateString("fr-FR")}</p>}
-          {status.evaluator && <p className="muted" style={{ margin: 0 }}>Évaluateur : {status.evaluator.name}</p>}
-          {status.scoreTotal != null && <p style={{ margin: 0 }}><strong>Score : {status.scoreTotal}/100</strong> (seuil {spec.rubric.threshold})</p>}
+        <div><div className="eyebrow">Bloc 4 · Certification</div><h1 style={{ marginTop: 6 }}>Projet de certification</h1></div>
+        <div className="hf-card stack">
+          <span className={`hf-pill ${pillCls}`} style={{ alignSelf: "flex-start" }}>{STATUS_FR[status.revisionStatus] ?? status.revisionStatus}</span>
+          {status.submittedAt && <p className="meta" style={{ margin: 0 }}>Soumis le {new Date(status.submittedAt).toLocaleDateString("fr-FR")}</p>}
+          {status.evaluator && <p className="meta" style={{ margin: 0 }}>Évaluateur : {status.evaluator.name}</p>}
+          {status.scoreTotal != null && <p className="h4" style={{ margin: 0 }}>Score : {status.scoreTotal}/100 <span className="meta">(seuil {spec.rubric.threshold})</span></p>}
           {Array.isArray(status.criteria) && (
-            <ul style={{ margin: 0, paddingLeft: 18 }}>{status.criteria.map((c: any) => <li key={c.label}>{c.label} : {c.points}/{c.weightPoints}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => <li key={c.label}>{c.label} : {c.points}/{c.weightPoints}</li>)}</ul>
           )}
-          {status.feedback && <div className="banner syncing" style={{ display: "block" }}><strong>Retour de l'évaluateur</strong><p style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
+          {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">Retour de l'évaluateur</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
         </div>
       </div>
     );
@@ -77,26 +76,32 @@ export function Project({ eid }: { eid: string }) {
   return (
     <div className="stack">
       <Back />
-      <h1>Projet de certification</h1>
-      <div className="card" style={{ background: "#eff6ff" }}><p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{spec.brief}</p></div>
+      <div><div className="eyebrow">Bloc 4 · Certification</div><h1 style={{ marginTop: 6 }}>Projet de certification</h1></div>
 
-      <div className="card">
-        <strong>Grille d'évaluation (visible avant de soumettre)</strong>
-        <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
-          {spec.rubric.criteria.map((c) => <li key={c.label}>{c.label} — <span className="muted">{c.weightPoints} pts</span></li>)}
-        </ul>
-        <p className="muted" style={{ margin: "8px 0 0", fontSize: 13 }}>Seuil de réussite : {spec.rubric.threshold}/100</p>
+      <div className="hf-card hf-card--stripe-orange stack">
+        <div className="hf-pam"><span className="tag">🎯 Votre mission</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
+      </div>
+
+      <div className="hf-card hf-card--icy stack">
+        <strong className="h4">Grille d'évaluation <span className="meta" style={{ fontWeight: 400 }}>(visible avant de soumettre)</span></strong>
+        <div className="stack" style={{ gap: 8 }}>
+          {spec.rubric.criteria.map((c) => (
+            <div key={c.label} className="row between"><span className="body">{c.label}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{c.weightPoints} pts</span></div>
+          ))}
+        </div>
+        <p className="meta" style={{ margin: 0 }}>Seuil de réussite : {spec.rubric.threshold}/100</p>
       </div>
 
       {spec.sections.map((s, i) => (
-        <div key={s.title} className="stack">
-          <label style={{ margin: 0 }}>{i + 1}. {s.title}{s.helpText && <span className="muted" style={{ fontWeight: 400 }}> — {s.helpText}</span>}</label>
-          <textarea value={values[s.title] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [s.title]: e.target.value }))} style={{ minHeight: 110 }}
+        <div key={s.title} className="hf-card stack">
+          <strong className="h4">{i + 1}. {s.title}</strong>
+          {s.helpText && <p className="meta" style={{ margin: 0 }}>{s.helpText}</p>}
+          <textarea className="hf-field" value={values[s.title] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [s.title]: e.target.value }))} style={{ minHeight: 110 }}
             onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
         </div>
       ))}
-      <button className="block" disabled={busy || !complete} onClick={submit}>{busy ? "…" : "Soumettre mon projet"}</button>
-      {!complete && <p className="muted" style={{ margin: 0, fontSize: 13 }}>Complétez les 5 sections pour soumettre.</p>}
+      <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !complete} onClick={submit}>{busy ? "…" : "Soumettre mon projet →"}</button>
+      {!complete && <p className="meta" style={{ margin: 0 }}>Complétez les 5 sections pour soumettre.</p>}
     </div>
   );
 }
