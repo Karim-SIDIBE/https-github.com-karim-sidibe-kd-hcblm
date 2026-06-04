@@ -5,6 +5,7 @@ import { Readable } from "node:stream";
 import type { MediaKind } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
+import { env } from "../../config/env.js";
 import { processVideo, ffmpegAvailable } from "../../lib/media/transcode.js";
 
 export class MediaError extends Error {
@@ -80,7 +81,15 @@ export async function playbackManifest(id: string) {
   const playable = available
     .filter((r) => r.kind === "VIDEO" || r.kind === "AUDIO")
     .sort((a, b) => (a.bitrateKbps ?? 1e9) - (b.bitrateKbps ?? 1e9));
-  const toUrl = (r: { id: string; url: string | null }) => r.url ?? `/api/v1/media/${id}/download?label=${encodeURIComponent(asset.renditions.find((x) => x.id === r.id)!.label)}`;
+  // URL resolution order: (1) externally-hosted (Mux/provider) → its own URL;
+  // (2) a CDN is configured (MEDIA_PUBLIC_BASE_URL) → the public CDN URL for the
+  //     object key (offloads disk/bandwidth from the VPS); (3) default → the
+  //     authenticated streaming endpoint on the API. Default behaviour is
+  //     unchanged unless MEDIA_PUBLIC_BASE_URL is set.
+  const cdn = !!env.MEDIA_PUBLIC_BASE_URL;
+  const labelOf = (rid: string) => asset.renditions.find((x) => x.id === rid)!.label;
+  const toUrl = (r: { id: string; url: string | null; storageKey: string | null }) =>
+    r.url ?? (cdn && r.storageKey ? storage.publicUrl(r.storageKey) : `/api/v1/media/${id}/download?label=${encodeURIComponent(labelOf(r.id))}`);
   const recommendedLite = playable.find((r) => r.downloadable) ?? playable[0];
 
   return {
@@ -90,7 +99,7 @@ export async function playbackManifest(id: string) {
     ffmpeg: ffmpegAvailable(),
     renditions: playable.map((r) => ({ label: r.label, kind: r.kind, bitrateKbps: r.bitrateKbps, height: r.height, downloadable: r.downloadable, url: toUrl(r) })),
     recommendedLite: recommendedLite ? recommendedLite.label : null,
-    captions: available.filter((r) => r.kind === "CAPTIONS").map((r) => ({ label: r.label, language: r.language, url: r.url ?? `/api/v1/media/${id}/download?label=${encodeURIComponent(r.label)}` })),
+    captions: available.filter((r) => r.kind === "CAPTIONS").map((r) => ({ label: r.label, language: r.language, url: toUrl(r) })),
   };
 }
 

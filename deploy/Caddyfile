@@ -34,3 +34,19 @@ admin.declick.digital {
 	header @noCache Cache-Control "no-cache"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
+
+# --- Media origin (CDN pull source) — OPTIONAL, enable only when moving to a CDN ---
+# Serves the raw media volume (UUID-based keys, range-capable). A pull-CDN
+# (BunnyCDN / Cloudflare) points its origin here; learners then load videos from
+# the CDN, not the VPS. See deploy/CDN.md for the full rollout.
+#
+# Before uncommenting: add the DNS record  media.declick.digital  A  185.98.136.230
+# and set MEDIA_PUBLIC_BASE_URL=https://cdn.declick.digital in deploy/.env.
+#
+# media.declick.digital {
+# 	encode zstd gzip
+# 	root * /srv/media
+# 	file_server                                  # honours HTTP Range (video seek)
+# 	header Cache-Control "public, max-age=2592000, immutable"   # 30 days at the edge
+# 	header Access-Control-Allow-Origin "*"
+# }
