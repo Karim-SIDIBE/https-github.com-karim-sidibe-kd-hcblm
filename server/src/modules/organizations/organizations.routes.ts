@@ -10,6 +10,8 @@ import { authenticate, guard } from "../../lib/auth.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { resolveTenant, isOrgAdmin } from "../../lib/tenant.js";
 import { audit } from "../../lib/audit.js";
+import { sendMultichannel } from "../../lib/notify/send.js";
+import { invitationMessage } from "../../lib/notify/templates.js";
 
 const OrgRole = z.enum(["OWNER", "ADMIN", "MEMBER"]);
 
@@ -78,6 +80,7 @@ export async function organizationRoutes(app: FastifyInstance) {
   });
 
   // Create a learner in this org (enterprise self-service) — quota-enforced.
+  // Sends an invitation (e-mail + WhatsApp when a phone is given) unless invite:false.
   app.post("/organizations/:id/learners", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
@@ -85,11 +88,23 @@ export async function organizationRoutes(app: FastifyInstance) {
       name: z.string().trim().min(1),
       email: z.string().email(),
       password: z.string().min(10, "10 caractères minimum").optional(),
+      phone: z.string().trim().min(1).optional(),
+      invite: z.boolean().default(true),
     }).parse(req.body);
     try {
       const user = await createOrgLearner(id, body);
-      await audit({ actorId: req.principal?.id, action: "org.learner.create", targetType: "User", targetId: user.id, ip: req.ip, meta: { organizationId: id } });
-      return reply.status(201).send({ data: user });
+      let invited = false;
+      if (body.invite) {
+        // Non-fatal: a delivery failure must not roll back the created account.
+        try {
+          const org = await getOrganization(id);
+          const msg = invitationMessage({ name: body.name, orgName: org.name, email: body.email, tempPassword: body.password });
+          const results = await sendMultichannel({ email: body.email, phone: body.phone, subject: msg.subject, body: msg.body, mobileBody: msg.mobileBody });
+          invited = results.some((r) => r.ok);
+        } catch { /* delivery best-effort */ }
+      }
+      await audit({ actorId: req.principal?.id, action: "org.learner.create", targetType: "User", targetId: user.id, ip: req.ip, meta: { organizationId: id, invited } });
+      return reply.status(201).send({ data: { ...user, invited } });
     } catch (err) { return handle(reply, err); }
   });
 

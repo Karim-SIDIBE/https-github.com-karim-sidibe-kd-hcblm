@@ -89,7 +89,7 @@ export async function setSeats(organizationId: string, seats: number) {
  * Create a LEARNER in this org (enterprise self-service), consuming a seat.
  * Quota is re-checked inside the transaction to avoid a race past the limit.
  */
-export async function createOrgLearner(organizationId: string, input: { name: string; email: string; password?: string }) {
+export async function createOrgLearner(organizationId: string, input: { name: string; email: string; password?: string; phone?: string }) {
   await getOrganization(organizationId);
   const passwordHash = input.password ? await hashPassword(input.password) : null; // hash outside the tx
   try {
@@ -101,10 +101,10 @@ export async function createOrgLearner(organizationId: string, input: { name: st
       }
       return tx.user.create({
         data: {
-          email: input.email, name: input.name, role: "LEARNER", passwordHash,
+          email: input.email, name: input.name, role: "LEARNER", passwordHash, phone: input.phone ?? null,
           orgMemberships: { create: { organizationId, orgRole: "MEMBER" } },
         },
-        select: { id: true, email: true, name: true, role: true, createdAt: true },
+        select: { id: true, email: true, name: true, role: true, phone: true, createdAt: true },
       });
     });
   } catch (e) {
