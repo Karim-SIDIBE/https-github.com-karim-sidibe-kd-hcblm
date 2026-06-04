@@ -57,6 +57,9 @@ export type LearnerRow = {
   lastActivity: string | null; startedAt: string | null; completedAt: string | null;
 };
 
+export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string };
+export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
+
 // --- endpoints ---
 export const api = {
   me: () => req<Principal>("GET", "/auth/me"),
@@ -65,6 +68,8 @@ export const api = {
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
+  audit: (limit = 80) => req<AuditRow[]>("GET", `/audit?limit=${limit}`),
+  runReEngagement: () => req<ReEngagementResult>("POST", "/jobs/re-engagement/run", {}),
 };
 
 /** Title of the latest published (or newest) version of a course. */

@@ -8,6 +8,8 @@ import { Login } from "./screens/Login";
 import { Dashboard } from "./screens/Dashboard";
 import { Learners } from "./screens/Learners";
 import { Enrol } from "./screens/Enrol";
+import { Relances } from "./screens/Relances";
+import { Audit } from "./screens/Audit";
 import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; soon?: boolean };
@@ -16,7 +18,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "dashboard", label: "Tableau de bord", Icon: IDash },
     { id: "learners", label: "Apprenants", Icon: ILearners },
     { id: "enrol", label: "Inscriptions", Icon: IEnrol },
-    { id: "reeng", label: "Relances", Icon: IReeng, soon: true },
+    { id: "reeng", label: "Relances", Icon: IReeng },
   ]},
   { group: "Pédagogie", items: [
     { id: "courses", label: "Cours", Icon: ICourse, soon: true },
@@ -28,7 +30,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "sessions", label: "Sessions live", Icon: ISession, soon: true },
   ]},
   { group: "Système", items: [
-    { id: "audit", label: "Journal d'audit", Icon: IAudit, soon: true },
+    { id: "audit", label: "Journal d'audit", Icon: IAudit },
     { id: "settings", label: "Réglages", Icon: ISettings, soon: true },
   ]},
 ];
@@ -111,6 +113,8 @@ export function App() {
         ) : route === "dashboard" ? <Dashboard ctx={ctx} />
           : route === "learners" ? <Learners ctx={ctx} />
           : route === "enrol" ? <Enrol ctx={ctx} />
+          : route === "reeng" ? <Relances ctx={ctx} />
+          : route === "audit" ? <Audit />
           : <Soon title={TITLES[route] ?? "Module"} />}
       </div>
     </div>
