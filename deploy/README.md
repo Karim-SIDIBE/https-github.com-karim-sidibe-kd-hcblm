@@ -14,6 +14,7 @@ pour les deux) :
 |------|-----|--------|
 | `A` | `api` | `185.98.136.230` (IP du VPS) |
 | `A` | `app` | `185.98.136.230` (IP du VPS) |
+| `A` | `admin` | `185.98.136.230` (IP du VPS — console d'administration) |
 
 > Caddy n’obtiendra les certificats TLS qu’une fois `api.` **et** `app.declick.digital`
 > pointant vers le VPS et les ports **80/443** ouverts (laisser ~quelques minutes
@@ -79,11 +80,24 @@ docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
 > redémarrer. À chaque mise à jour du front : relancer cette commande (le service
 > worker `autoUpdate` propage la nouvelle version).
 
+## 5 bis. Construire la console d'administration (servie par Caddy)
+
+Caddy sert `admin.declick.digital` depuis `admin/dist`. Même principe :
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w admin run build"
+```
+
+> Réservée au personnel (connexion par compte staff). Assurez-vous que
+> `CORS_ORIGINS` (dans `deploy/.env`) inclut **`https://admin.declick.digital`**.
+
 ## 6. Vérifier
 
 ```bash
 curl https://api.declick.digital/api/v1/health      # -> {"status":"ok",...}
 curl -I https://app.declick.digital/                # -> 200, l'app DECLICK DIGITAL
+curl -I https://admin.declick.digital/              # -> 200, la console d'admin
 ```
 Doc API : `https://api.declick.digital/api/v1/docs` · OpenAPI : `/api/v1/openapi.json`
 

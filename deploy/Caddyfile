@@ -1,7 +1,8 @@
-# Caddy — automatic Let's Encrypt TLS for both the API and the PWA.
+# Caddy — automatic Let's Encrypt TLS for the API, the PWA and the admin console.
 # Requires A records → VPS public IP, and ports 80/443 open:
-#   api.declick.digital  A  185.98.136.230
-#   app.declick.digital  A  185.98.136.230
+#   api.declick.digital    A  185.98.136.230
+#   app.declick.digital    A  185.98.136.230
+#   admin.declick.digital  A  185.98.136.230
 
 # --- API (Fastify, reverse-proxied) ---
 api.declick.digital {
@@ -19,6 +20,17 @@ app.declick.digital {
 	# The service worker + HTML must not be cached, so updates roll out instantly;
 	# hashed assets are immutable and cached for a year.
 	@noCache path /sw.js /registerSW.js /index.html /manifest.webmanifest
+	header @noCache Cache-Control "no-cache"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}
+
+# --- Admin console (staff, static SPA) — built into admin/dist, mounted at /srv/admin ---
+admin.declick.digital {
+	encode zstd gzip
+	root * /srv/admin
+	try_files {path} /index.html   # hash-routed SPA fallback
+	file_server
+	@noCache path /index.html
 	header @noCache Cache-Control "no-cache"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
