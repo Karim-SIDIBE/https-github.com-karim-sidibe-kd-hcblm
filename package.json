@@ -8,7 +8,8 @@
     "server",
     "web",
     "mobile",
-    "admin"
+    "admin",
+    "entreprise"
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",

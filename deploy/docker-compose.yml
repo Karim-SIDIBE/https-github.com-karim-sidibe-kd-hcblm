@@ -87,6 +87,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ../web/dist:/srv/pwa:ro          # static PWA build, served on app.declick.digital
       - ../admin/dist:/srv/admin:ro      # static admin console, served on admin.declick.digital
+      - ../entreprise/dist:/srv/entreprise:ro  # enterprise console, served on entreprise.declick.digital
       - media:/srv/media:ro              # raw media objects (CDN pull origin — see deploy/CDN.md)
       - caddy_data:/data
       - caddy_config:/config
