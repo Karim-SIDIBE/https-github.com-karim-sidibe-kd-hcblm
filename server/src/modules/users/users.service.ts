@@ -49,7 +49,9 @@ export async function inviteUser(userId: string, password?: string) {
 
   return {
     tempPassword: temp,
-    delivered: results.some((r) => r.ok),
+    // "delivered" only when a REAL channel succeeded — the console fallback
+    // (no SMTP/webhook configured) does not count as delivered.
+    delivered: results.some((r) => r.ok && r.provider !== "console"),
     channels: results.map((r) => ({ provider: r.provider, ok: r.ok })),
   };
 }

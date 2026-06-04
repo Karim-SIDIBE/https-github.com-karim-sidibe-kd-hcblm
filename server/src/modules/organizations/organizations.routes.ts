@@ -100,7 +100,7 @@ export async function organizationRoutes(app: FastifyInstance) {
           const org = await getOrganization(id);
           const msg = invitationMessage({ name: body.name, orgName: org.name, email: body.email, tempPassword: body.password });
           const results = await sendMultichannel({ email: body.email, phone: body.phone, subject: msg.subject, body: msg.body, mobileBody: msg.mobileBody });
-          invited = results.some((r) => r.ok);
+          invited = results.some((r) => r.ok && r.provider !== "console");
         } catch { /* delivery best-effort */ }
       }
       await audit({ actorId: req.principal?.id, action: "org.learner.create", targetType: "User", targetId: user.id, ip: req.ip, meta: { organizationId: id, invited } });

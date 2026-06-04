@@ -57,7 +57,11 @@ export async function deliver(n: DeliverableNotification): Promise<DeliveryResul
   // Real transactional e-mail via SMTP takes priority over the generic webhook.
   if (n.channel === "EMAIL" && smtpConfigured()) {
     try { await sendSmtpEmail(n.recipient, n.subject ?? "", n.body); return { ok: true, provider: "smtp" }; }
-    catch (e) { return { ok: false, provider: "smtp", error: e instanceof Error ? e.message : "smtp error" }; }
+    catch (e) {
+      const error = e instanceof Error ? e.message : "smtp error";
+      console.error(`[notify smtp] échec d'envoi à ${n.recipient}: ${error}`);
+      return { ok: false, provider: "smtp", error };
+    }
   }
   const gateway = gatewayFor(n.channel);
   if (gateway) return postGateway(gateway.url, gateway.provider, n);
