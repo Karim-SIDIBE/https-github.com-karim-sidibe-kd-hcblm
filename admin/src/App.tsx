@@ -15,6 +15,7 @@ import { Sessions } from "./screens/Sessions";
 import { Evaluation } from "./screens/Evaluation";
 import { Certificats } from "./screens/Certificats";
 import { Cours } from "./screens/Cours";
+import { Settings } from "./screens/Settings";
 import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; soon?: boolean };
@@ -36,7 +37,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Système", items: [
     { id: "audit", label: "Journal d'audit", Icon: IAudit },
-    { id: "settings", label: "Réglages", Icon: ISettings, soon: true },
+    { id: "settings", label: "Réglages", Icon: ISettings },
   ]},
 ];
 const TITLES: Record<string, string> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.id, i.label])));
@@ -125,6 +126,7 @@ export function App() {
           : route === "eval" ? <Evaluation />
           : route === "certs" ? <Certificats />
           : route === "courses" ? <Cours ctx={ctx} />
+          : route === "settings" ? <Settings />
           : <Soon title={TITLES[route] ?? "Module"} />}
       </div>
     </div>

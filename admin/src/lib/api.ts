@@ -106,7 +106,12 @@ export const api = {
   newVersion: (courseId: string, content: unknown) => req<{ id: string; version: number; status: string }>("POST", `/courses/${courseId}/versions`, { content }),
   submitReview: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/submit-review`, {}),
   publishVersion: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/publish`, {}),
+  issuer: () => req<Issuer>("GET", "/credentials/issuer"),
+  webhooks: () => req<Webhook[]>("GET", "/webhooks"),
 };
+
+export type Issuer = { name: string; url: string; id: string };
+export type Webhook = { id: string; url: string; events?: string[]; organizationId?: string | null };
 
 export type ValidationIssue = { level: "error" | "warning"; rule: string; path: string; message: string };
 export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { ok: boolean; issues: ValidationIssue[] } };
