@@ -13,7 +13,7 @@ async function createAndEnrol(name: string, email: string, password: string, cou
     const u = await api.createUser({ name, email, password, role: "LEARNER" });
     await api.enroll(u.id, courseId);
     let invited = false;
-    if (invite) { try { await api.invite(u.id, password); invited = true; } catch { /* delivery best-effort */ } }
+    if (invite) { try { const inv = await api.invite(u.id, password); invited = inv.delivered; } catch { /* delivery best-effort */ } }
     return { name, email, password, status: "ok", invited };
   } catch (e) {
     if (e instanceof ApiError && e.status === 409) return { name, email, password, status: "exists", detail: "E-mail déjà existant" };
