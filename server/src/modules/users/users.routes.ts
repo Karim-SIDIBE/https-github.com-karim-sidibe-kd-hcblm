@@ -5,7 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
-import { UserError, inviteUser } from "./users.service.js";
+import { UserError, inviteUser, deleteUser } from "./users.service.js";
 
 const RoleEnum = z.enum([
   "LEARNER", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR",
@@ -47,6 +47,19 @@ export async function userRoutes(app: FastifyInstance) {
     try {
       const r = await inviteUser(id, password);
       await audit({ actorId: req.principal?.id, action: "user.invite", targetType: "User", targetId: id, ip: req.ip, meta: { delivered: r.delivered } });
+      return { data: r };
+    } catch (e) {
+      if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  // Hard-delete a user (staff). Cascades enrolments/tokens/memberships; audit kept.
+  app.delete("/users/:id", { preHandler: guard("user:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try {
+      const r = await deleteUser(req.principal?.id, id);
+      await audit({ actorId: req.principal?.id, action: "user.delete", targetType: "User", targetId: id, ip: req.ip, meta: { email: r.email } });
       return { data: r };
     } catch (e) {
       if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });

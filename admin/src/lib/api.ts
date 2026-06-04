@@ -93,6 +93,7 @@ export const api = {
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
   invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
+  deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   // organizations & licensing (platform provisioning)
   createOrg: (name: string, slug: string) => req<Org>("POST", "/organizations", { name, slug }),
   orgSeats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),
