@@ -3,8 +3,8 @@ import { api } from "../lib/app";
 import { brand } from "../lib/brand";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
-  const [email, setEmail] = useState("admin@kompetences.net");
-  const [password, setPassword] = useState("Declick!Dev2026");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -20,8 +20,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     <form className="card" onSubmit={submit} style={{ maxWidth: 360, margin: "60px auto" }}>
       <h1>{brand.name}</h1>
       <p className="muted">Connexion apprenant · opéré par {brand.operator}</p>
-      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required /></label>
-      <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required /></label>
+      <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" placeholder="vous@exemple.com" required /></label>
+      <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required /></label>
       {error && <p className="ko">{error}</p>}
       <button disabled={busy}>{busy ? "…" : "Se connecter"}</button>
     </form>

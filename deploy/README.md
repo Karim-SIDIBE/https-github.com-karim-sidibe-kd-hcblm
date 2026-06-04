@@ -160,6 +160,21 @@ Total plafonné ≈ 2,4 Go → il reste ~1,5 Go pour l'OS, Docker et le cache di
   → basculer les vidéos vers un **stockage objet + CDN** et renseigner
   `MEDIA_PUBLIC_BASE_URL`. Le reste (API, DB) tient très largement.
 
+## Sécurité — changer les mots de passe par défaut
+
+Le seed crée des comptes staff avec un **mot de passe par défaut connu**
+(`Declick!Dev2026`). **Avant toute ouverture au public**, changez-les avec le
+script interactif (le mot de passe est saisi au clavier, jamais sur la ligne de
+commande ni dans l'historique) :
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env \
+  exec api npx tsx scripts/set-password.ts admin@kompetences.net
+```
+
+Répétez pour chaque compte à conserver (`designer@…`, `reviewer@…`,
+`evaluator@…`), ou supprimez ceux que vous n'utilisez pas.
+
 ### Notes
 - **Médias** : stockés dans le volume `media` (persistant). Pour de la vidéo à
   l’échelle, fronter par un CDN et renseigner `MEDIA_PUBLIC_BASE_URL`.
