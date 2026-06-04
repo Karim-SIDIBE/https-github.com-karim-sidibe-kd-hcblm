@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   OrgError, addMember, createOrganization, createOrgLearner, enrollOrgLearner, getOrganization,
-  listMembers, listOrganizations, removeMember, seatUsage, setSeats,
+  listMembers, listOrganizations, removeMember, seatUsage, setSeats, setLearnerDisabled,
 } from "./organizations.service.js";
 import { EngineError } from "../enrollments/enrollments.service.js";
 import { provisionToken } from "../scim/scim.service.js";
@@ -90,6 +90,18 @@ export async function organizationRoutes(app: FastifyInstance) {
       const user = await createOrgLearner(id, body);
       await audit({ actorId: req.principal?.id, action: "org.learner.create", targetType: "User", targetId: user.id, ip: req.ip, meta: { organizationId: id } });
       return reply.status(201).send({ data: user });
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Deactivate / reactivate an org learner (frees / re-consumes a seat).
+  app.patch("/organizations/:id/learners/:userId", { preHandler: authenticate }, async (req, reply) => {
+    const { id, userId } = z.object({ id: z.string(), userId: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    const { disabled } = z.object({ disabled: z.boolean() }).parse(req.body);
+    try {
+      const r = await setLearnerDisabled(id, userId, disabled);
+      await audit({ actorId: req.principal?.id, action: disabled ? "org.learner.disable" : "org.learner.enable", targetType: "User", targetId: userId, ip: req.ip, meta: { organizationId: id } });
+      return { data: r };
     } catch (err) { return handle(reply, err); }
   });
 

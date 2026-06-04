@@ -60,15 +60,16 @@ export async function listMembers(organizationId: string) {
   await getOrganization(organizationId);
   return prisma.organizationMembership.findMany({
     where: { organizationId }, orderBy: { createdAt: "asc" },
-    include: { user: { select: { id: true, name: true, email: true, role: true } } },
+    include: { user: { select: { id: true, name: true, email: true, role: true, disabledAt: true } } },
   });
 }
 
 // --- B2B licensing (seats) --------------------------------------------------
 
-/** A consumed seat = one MEMBER membership (org admins are free overhead). */
+/** A consumed seat = one ACTIVE (non-disabled) MEMBER membership. Org admins and
+ *  disabled accounts are free, so deactivating a learner frees its seat. */
 async function countSeatsUsed(organizationId: string, tx: Prisma.TransactionClient = prisma) {
-  return tx.organizationMembership.count({ where: { organizationId, orgRole: "MEMBER" } });
+  return tx.organizationMembership.count({ where: { organizationId, orgRole: "MEMBER", user: { disabledAt: null } } });
 }
 
 export async function seatUsage(organizationId: string) {
@@ -110,6 +111,34 @@ export async function createOrgLearner(organizationId: string, input: { name: st
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") throw new OrgError(409, "email_taken", "Un utilisateur avec cet email existe déjà");
     throw e;
   }
+}
+
+/**
+ * Deactivate / reactivate an org learner. Disabling frees the seat and blocks
+ * login (revokes refresh tokens immediately). Reactivating re-checks the quota
+ * inside a transaction (a freed seat may have been reused meanwhile).
+ */
+export async function setLearnerDisabled(organizationId: string, userId: string, disabled: boolean) {
+  const m = await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId, userId } } });
+  if (!m) throw new OrgError(404, "not_member", "Apprenant introuvable dans cette organisation");
+  if (m.orgRole !== "MEMBER") throw new OrgError(400, "not_learner", "Ce compte n'est pas un apprenant de l'organisation");
+
+  if (disabled) {
+    await prisma.$transaction([
+      prisma.user.update({ where: { id: userId }, data: { disabledAt: new Date() } }),
+      prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
+    ]);
+    return { userId, disabled: true };
+  }
+  return prisma.$transaction(async (tx) => {
+    const org = await tx.organization.findUniqueOrThrow({ where: { id: organizationId }, select: { seats: true } });
+    const used = await countSeatsUsed(organizationId, tx);
+    if (!seatAvailable(org.seats, used)) {
+      throw new OrgError(403, "quota_exceeded", `Licences épuisées (${used}/${org.seats}). Impossible de réactiver ce compte.`);
+    }
+    await tx.user.update({ where: { id: userId }, data: { disabledAt: null } });
+    return { userId, disabled: false };
+  });
 }
 
 /** Enrol an org learner into a course (org-scoped: member + org/platform course). */

@@ -68,6 +68,12 @@ export async function login(email: string, password: string, ip?: string) {
   if (user.failedLoginCount > 0 || user.lockedUntil) {
     await prisma.user.update({ where: { id: user.id }, data: { failedLoginCount: 0, lockedUntil: null } });
   }
+  // Checked only AFTER a correct password, so a disabled account is not
+  // distinguishable from a wrong password to an attacker (no enumeration).
+  if (user.disabledAt) {
+    await audit({ actorId: user.id, action: "auth.login.disabled", ip, meta: { email } });
+    throw new AuthError("account_disabled", "Compte désactivé — contactez votre administrateur");
+  }
   await audit({ actorId: user.id, action: "auth.login.success", ip });
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
@@ -85,6 +91,10 @@ export async function federatedLogin(params: { email: string; name?: string | nu
     }
     user = await prisma.user.create({ data: { email: params.email, name: params.name || params.email, role: "LEARNER" } });
     await audit({ actorId: user.id, action: "auth.federated.provisioned", ip: params.ip, meta: { email: params.email, via: params.via } });
+  }
+  if (user.disabledAt) {
+    await audit({ actorId: user.id, action: "auth.federated.disabled", ip: params.ip, meta: { via: params.via } });
+    throw new AuthError("account_disabled", "Compte désactivé");
   }
   await audit({ actorId: user.id, action: "auth.federated.success", ip: params.ip, meta: { via: params.via } });
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
@@ -105,6 +115,10 @@ export async function refresh(presented: string, ip?: string) {
 
   const user = await prisma.user.findUnique({ where: { id: row.userId } });
   if (!user) throw new AuthError("invalid_token", "Utilisateur introuvable");
+  if (user.disabledAt) {
+    await prisma.refreshToken.updateMany({ where: { familyId: row.familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+    throw new AuthError("account_disabled", "Compte désactivé");
+  }
 
   const next = await issueRefresh(user.id, row.familyId);
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date(), replacedById: next.id } });
