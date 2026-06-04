@@ -62,6 +62,11 @@ export type ReEngagementResult = { processed?: number; sent?: number; byTier?: R
 export type Org = { id: string; name: string; slug: string; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; _count?: { registrations: number } };
+export type CredentialRow = {
+  id: string; achievementType: string; badgeLabel: string; issuedAt: string;
+  revoked: boolean; revocationReason: string | null;
+  learner: { name: string; email: string }; courseTitle: string; verifyUrl: string;
+};
 export type RubricCriterion = { label: string; weightPoints: number };
 export type EvalQueueItem = {
   enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
@@ -93,6 +98,8 @@ export const api = {
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
   assignEvaluator: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId }),
+  credentials: () => req<CredentialRow[]>("GET", "/credentials"),
+  revokeCredential: (id: string, reason: string) => req<unknown>("POST", `/credentials/${id}/revoke`, { reason }),
 };
 
 /** Title of the latest published (or newest) version of a course. */

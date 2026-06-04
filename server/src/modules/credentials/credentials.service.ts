@@ -157,6 +157,25 @@ export async function listForEnrollment(enrollmentId: string) {
   }));
 }
 
+/** All issued credentials, with learner + course (admin console list). */
+export async function listAllCredentials() {
+  const creds = await prisma.credential.findMany({
+    orderBy: { issuedAt: "desc" },
+    include: { badge: true, enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true } } } } },
+  });
+  return creds.map((c) => ({
+    id: c.id,
+    achievementType: c.achievementType,
+    badgeLabel: c.badge.type,
+    issuedAt: c.issuedAt,
+    revoked: Boolean(c.revokedAt),
+    revocationReason: c.revocationReason ?? null,
+    learner: { name: c.enrollment.user.name, email: c.enrollment.user.email },
+    courseTitle: c.enrollment.courseVersion.title,
+    verifyUrl: `${credentialUrl(c.id)}/verify`,
+  }));
+}
+
 /** Certificate PDF for a credential. */
 export async function certificate(id: string): Promise<Buffer> {
   const c = await prisma.credential.findUnique({

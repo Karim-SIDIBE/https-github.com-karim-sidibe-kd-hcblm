@@ -1,11 +1,12 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  CredentialError, certificate, hostedAssertionDoc, listForEnrollment, revoke, vcJwt, verify,
+  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, vcJwt, verify,
 } from "./credentials.service.js";
 import { issuerDocument } from "../../lib/credentials/openbadge.js";
 import { audit } from "../../lib/audit.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
+import { isStaff } from "../../domain/auth/permissions.js";
 
 const owned = [authenticate, requireEnrollmentAccess];
 
@@ -15,6 +16,12 @@ function handle(reply: FastifyReply, err: unknown) {
 }
 
 export async function credentialRoutes(app: FastifyInstance) {
+  // --- admin: list all issued credentials (staff only) ---
+  app.get("/credentials", { preHandler: authenticate }, async (req, reply) => {
+    if (!isStaff(req.principal!.role)) return reply.status(403).send({ error: "forbidden", message: "Réservé au personnel" });
+    return { data: await listAllCredentials() };
+  });
+
   // --- public (verifiers / anyone): issuer, badge class, hosted assertion, VC, verify ---
   app.get("/credentials/issuer", async () => issuerDocument());
 
