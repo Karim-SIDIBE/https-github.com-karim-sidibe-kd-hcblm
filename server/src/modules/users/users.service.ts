@@ -55,3 +55,17 @@ export async function inviteUser(userId: string, password?: string) {
     channels: results.map((r) => ({ provider: r.provider, ok: r.ok })),
   };
 }
+
+/**
+ * Hard-delete a user. All User relations cascade (enrolments + their progress,
+ * tokens, memberships…) or set null (authored content is preserved), and the
+ * audit log keeps actorId as plain text, so history survives. Self-deletion is
+ * refused.
+ */
+export async function deleteUser(actorId: string | undefined, userId: string) {
+  if (actorId && actorId === userId) throw new UserError(400, "self_delete", "Vous ne pouvez pas supprimer votre propre compte");
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true, role: true } });
+  if (!user) throw new UserError(404, "not_found", "Utilisateur introuvable");
+  await prisma.user.delete({ where: { id: userId } });
+  return { id: user.id, email: user.email };
+}

@@ -16,11 +16,20 @@ function b4Pill(l: LearnerRow) {
 
 export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
-  const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId]);
+  const [reloadKey, setReloadKey] = useState(0);
+  const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId, reloadKey]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("Tous");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+
+  async function remove(l: LearnerRow) {
+    if (!window.confirm(`Supprimer définitivement ${l.name} (${l.email}) ?\nCette action est irréversible et efface son compte, ses inscriptions et sa progression.`)) return;
+    setBusyId(l.id); setNote(null);
+    try { await api.deleteUser(l.id); setNote(`🗑️ ${l.email} supprimé.`); setReloadKey((k) => k + 1); }
+    catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
 
   async function resend(l: LearnerRow) {
     setBusyId(l.id); setNote(null);
@@ -52,7 +61,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
       </div>
 
-      {note && <div className="card" style={{ background: note.startsWith("✅") ? "var(--success-tint)" : "var(--warning-tint)", border: "none", padding: "11px 14px", marginBottom: 14, fontSize: 13 }} onClick={() => setNote(null)}>{note}</div>}
+      {note && <div className="card" style={{ background: (note.startsWith("✅") || note.startsWith("🗑️")) ? "var(--success-tint)" : "var(--warning-tint)", border: "none", padding: "11px 14px", marginBottom: 14, fontSize: 13 }} onClick={() => setNote(null)}>{note}</div>}
 
       <div className="card">
         <div className="card-h" style={{ paddingBottom: 14, borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
@@ -73,7 +82,12 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                   <td>{b4Pill(l)}</td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
                   <td>{statusPill(l)}</td>
-                  <td><button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer l'invitation"}</button></td>
+                  <td>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                      <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
+                      <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => remove(l)} title="Supprimer définitivement ce compte" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>🗑️</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
