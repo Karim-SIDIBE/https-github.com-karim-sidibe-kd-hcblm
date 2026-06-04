@@ -31,3 +31,16 @@ test("staff vs non-staff for enrolment ownership", () => {
   assert.equal(isStaff("LEARNING_DESIGNER"), false); // content staff, not learner-mgmt staff
   assert.equal(isStaff("LEARNER"), false);
 });
+
+test("ENTERPRISE_ADMIN is read-only GLOBALLY (create powers are org-scoped only)", () => {
+  // It must NOT be able to manage users or enrol platform-wide via the global
+  // matrix — those are granted only through an OWNER/ADMIN org membership.
+  assert.equal(hasPermission("ENTERPRISE_ADMIN", "user:manage"), false);
+  assert.equal(hasPermission("ENTERPRISE_ADMIN", "enrollment:create"), false);
+  assert.equal(hasPermission("ENTERPRISE_ADMIN", "org:manage"), false);
+  // Read-only reporting is allowed.
+  assert.equal(hasPermission("ENTERPRISE_ADMIN", "analytics:read"), true);
+  assert.equal(hasPermission("ENTERPRISE_ADMIN", "course:read"), true);
+  // Not learner-management staff (can't act cross-tenant via ownership bypass).
+  assert.equal(isStaff("ENTERPRISE_ADMIN"), false);
+});

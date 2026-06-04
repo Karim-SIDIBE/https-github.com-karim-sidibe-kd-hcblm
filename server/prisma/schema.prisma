@@ -36,6 +36,7 @@ enum Role {
   COURSE_ADMIN
   SUPER_ADMIN
   ENTERPRISE_CLIENT
+  ENTERPRISE_ADMIN
   EMPLOYER
 }
 
@@ -170,6 +171,10 @@ model Organization {
   slug      String   @unique
   /// SCIM provisioning bearer-token hash (set when SCIM is enabled for the org).
   scimTokenHash String?
+  /// Licensed learner seats (B2B). Set by the platform; an org admin may create
+  /// learners only up to this count. 0 = no self-service seats configured.
+  /// Seats consumed = memberships with orgRole MEMBER (the org's own admins are free).
+  seats     Int      @default(0)
   createdAt DateTime @default(now())
 
   memberships OrganizationMembership[]
