@@ -62,6 +62,19 @@ export type ReEngagementResult = { processed?: number; sent?: number; byTier?: R
 export type Org = { id: string; name: string; slug: string; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; _count?: { registrations: number } };
+export type RubricCriterion = { label: string; weightPoints: number };
+export type EvalQueueItem = {
+  enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
+  submittedAt: string; revisionStatus: string; scoreTotal: number | null;
+  evaluator: { id: string; name: string } | null;
+  rubric: { criteria: RubricCriterion[]; threshold: number } | null;
+};
+export type ProjectDetail = {
+  content: { sections?: Record<string, string> } | null;
+  revisionStatus: string; scoreTotal: number | null; feedback: string | null;
+  criteria: { label?: string; points: number }[] | null;
+  evaluator: { id: string; name: string } | null; submittedAt: string;
+};
 
 // --- endpoints ---
 export const api = {
@@ -76,6 +89,10 @@ export const api = {
   organizations: () => req<Org[]>("GET", "/organizations"),
   cohorts: () => req<Cohort[]>("GET", "/cohorts"),
   sessions: () => req<Session[]>("GET", "/sessions"),
+  evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
+  project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
+  gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
+  assignEvaluator: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId }),
 };
 
 /** Title of the latest published (or newest) version of a course. */

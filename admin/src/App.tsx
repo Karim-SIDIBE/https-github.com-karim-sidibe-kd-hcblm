@@ -12,6 +12,7 @@ import { Relances } from "./screens/Relances";
 import { Audit } from "./screens/Audit";
 import { Orgs } from "./screens/Orgs";
 import { Sessions } from "./screens/Sessions";
+import { Evaluation } from "./screens/Evaluation";
 import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; soon?: boolean };
@@ -24,7 +25,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Pédagogie", items: [
     { id: "courses", label: "Cours", Icon: ICourse, soon: true },
-    { id: "eval", label: "Projets Bloc 4", Icon: IEval, soon: true },
+    { id: "eval", label: "Projets Bloc 4", Icon: IEval },
     { id: "certs", label: "Certificats", Icon: ICert, soon: true },
   ]},
   { group: "Organisation", items: [
@@ -119,6 +120,7 @@ export function App() {
           : route === "audit" ? <Audit />
           : route === "orgs" ? <Orgs />
           : route === "sessions" ? <Sessions />
+          : route === "eval" ? <Evaluation />
           : <Soon title={TITLES[route] ?? "Module"} />}
       </div>
     </div>
