@@ -7,3 +7,5 @@ dist/
 !.env.example
 # Per-client deployment presets (real values). Keep the *.example templates.
 deploy/presets/*.env
+# Local backup artifacts (DB dumps, media archives, env copies).
+deploy/backups/
