@@ -3,11 +3,12 @@ import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
   getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
-  submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
+  selfEnroll, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { authenticate, authorize, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
+import { memberOrgIds } from "../../lib/tenant.js";
 import { audit } from "../../lib/audit.js";
 
 /** Owner-or-staff guard for learner-scoped routes. */
@@ -44,6 +45,15 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     }
     try {
       const e = await enroll(userId, courseId, isEnterprise ?? false);
+      return reply.status(201).send({ data: e });
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // B2C self-enrolment from the catalogue (the caller enrols themselves).
+  app.post("/enrollments/self", { preHandler: guard("enrollment:create") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.body);
+    try {
+      const e = await selfEnroll(req.principal!.id, courseId, await memberOrgIds(req.principal!));
       return reply.status(201).send({ data: e });
     } catch (err) { return handle(reply, err); }
   });

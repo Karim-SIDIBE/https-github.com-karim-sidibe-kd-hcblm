@@ -9,6 +9,7 @@ import {
   createNextVersion,
   draftCourse,
   getCourse,
+  listCatalog,
   listCourses,
   publishVersion,
   reviewVersion,
@@ -16,7 +17,7 @@ import {
   updateDraftVersion,
   validateContent,
 } from "./courses.service.js";
-import { guard } from "../../lib/auth.js";
+import { guard, authenticate } from "../../lib/auth.js";
 import { resolveTenant, memberOrgIds } from "../../lib/tenant.js";
 import { audit } from "../../lib/audit.js";
 
@@ -44,6 +45,13 @@ function mapErr(reply: FastifyReply, err: unknown) {
 }
 
 export async function courseRoutes(app: FastifyInstance) {
+  // Learner catalogue: published courses the caller can self-enrol into.
+  app.get("/catalog", { preHandler: authenticate }, async (req) => {
+    const p = req.principal!;
+    const orgs = p.role === "SUPER_ADMIN" ? [] : await memberOrgIds(p);
+    return { data: await listCatalog(p.id, orgs) };
+  });
+
   // --- reads (any authenticated user with course:read), tenant-scoped ---
   app.get("/courses", { preHandler: guard("course:read") }, async (req) => {
     const p = req.principal!;
