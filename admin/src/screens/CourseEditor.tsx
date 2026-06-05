@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, type ValidateResult, type ValidationIssue } from "../lib/api";
+import { api, auth, type ValidateResult, type ValidationIssue } from "../lib/api";
+
+const CAN_PUBLISH = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
 type Content = {
   title: string; level: number; language?: string;
@@ -65,6 +67,13 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
     try { await api.publishVersion(versionId); setMsg("✅ Version publiée."); onSaved(); }
     catch (e: any) { setMsg("Publication refusée : " + (e?.message || "la version doit passer la validation")); } finally { setBusy(""); }
   }
+  async function submitForReview() {
+    if (!versionId) return;
+    setBusy("review"); setMsg(null);
+    try { await api.submitReview(versionId); setMsg("✅ Soumis pour revue — un relecteur va l'examiner."); onSaved(); }
+    catch (e: any) { setMsg("Soumission refusée : " + (e?.message || "la version doit être un brouillon valide")); } finally { setBusy(""); }
+  }
+  const canPublish = CAN_PUBLISH.includes(auth.user()?.role ?? "");
 
   const issues: ValidationIssue[] = useMemo(() => {
     if (!result) return [];
@@ -101,7 +110,9 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
                   {warnings.length > 0 && <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>{warnings.map((w, i) => <span key={i} className="pill pill--warn" title={w.path}>{w.message}</span>)}</div>}
                   {errors.length === 0 && warnings.length === 0 && <span className="pill pill--soft">Aucun problème signalé</span>}
                 </div>)}
-            {versionId && <div style={{ marginTop: 12 }}><button className="btn btn--primary btn--sm" disabled={busy === "publish"} onClick={publish}>{busy === "publish" ? "…" : "Publier cette version"}</button> <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>(la publication relance la validation complète)</span></div>}
+            {versionId && (canPublish
+              ? <div style={{ marginTop: 12 }}><button className="btn btn--primary btn--sm" disabled={busy === "publish"} onClick={publish}>{busy === "publish" ? "…" : "Publier cette version"}</button> <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>(la publication relance la validation complète)</span></div>
+              : <div style={{ marginTop: 12 }}><button className="btn btn--primary btn--sm" disabled={busy === "review"} onClick={submitForReview}>{busy === "review" ? "…" : "Soumettre pour revue"}</button> <span className="muted" style={{ fontSize: 12, marginLeft: 8 }}>(un relecteur validera et publiera)</span></div>)}
           </div>
         </div>
       )}

@@ -118,6 +118,7 @@ export const api = {
   createCourse: (slug: string, content: unknown) => req<{ id: string }>("POST", "/courses", { slug, content }),
   newVersion: (courseId: string, content: unknown) => req<{ id: string; version: number; status: string }>("POST", `/courses/${courseId}/versions`, { content }),
   submitReview: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/submit-review`, {}),
+  reviewVersion: (versionId: string, decision: "approve" | "request_changes", notes?: string) => req<{ status: string }>("POST", `/versions/${versionId}/review`, { decision, notes }),
   publishVersion: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/publish`, {}),
   issuer: () => req<Issuer>("GET", "/credentials/issuer"),
   webhooks: () => req<Webhook[]>("GET", "/webhooks"),
@@ -129,7 +130,7 @@ export type Webhook = { id: string; url: string; events?: string[]; organization
 export type ValidationIssue = { level: "error" | "warning"; rule: string; path: string; message: string };
 export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { ok: boolean; issues: ValidationIssue[] } };
 
-export type CourseVersionFull = { version: number; status: string; title: string; level: string; domainLabel?: string; passThreshold?: number; publishedAt: string | null; updatedAt: string; content: { blocks?: { index: number; type: string; title: string; payload?: Record<string, unknown> }[] } };
+export type CourseVersionFull = { id: string; version: number; status: string; title: string; level: string; domainLabel?: string; passThreshold?: number; publishedAt: string | null; updatedAt: string; content: { blocks?: { index: number; type: string; title: string; payload?: Record<string, unknown> }[] } };
 export type CourseFull = { id: string; slug: string; versions: CourseVersionFull[] };
 
 /** Title of the latest published (or newest) version of a course. */
