@@ -17,6 +17,7 @@ import { Sessions } from "./screens/Sessions";
 import { Evaluation } from "./screens/Evaluation";
 import { Certificats } from "./screens/Certificats";
 import { Cours } from "./screens/Cours";
+import { Medias } from "./screens/Medias";
 import { Settings } from "./screens/Settings";
 import { Soon } from "./screens/Soon";
 
@@ -32,6 +33,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Pédagogie", items: [
     { id: "courses", label: "Cours", Icon: ICourse, roles: [A, C, D, R] },
+    { id: "medias", label: "Médiathèque", Icon: ISession, roles: [A, C, D] },
     { id: "eval", label: "Projets Bloc 4", Icon: IEval, roles: [A, C, E] },
     { id: "certs", label: "Certificats", Icon: ICert, roles: [A, C] },
   ]},
@@ -129,7 +131,7 @@ export function App() {
           <div className="spacer" />
           <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
         </header>
-        {!courseId && view !== "settings" && view !== "entreprises" && view !== "users" && view !== "courses" ? (
+        {!courseId && view !== "settings" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
           : view === "users" ? <Utilisateurs />
@@ -143,6 +145,7 @@ export function App() {
           : view === "eval" ? <Evaluation />
           : view === "certs" ? <Certificats />
           : view === "courses" ? <Cours ctx={ctx} />
+          : view === "medias" ? <Medias />
           : view === "settings" ? <Settings />
           : <Soon title={TITLES[view] ?? "Module"} />}
       </div>
