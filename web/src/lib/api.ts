@@ -69,6 +69,17 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     async resendVerification(email: string) {
       await fetch(`${baseUrl}/auth/resend-verification`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
     },
+    async forgotPassword(email: string) {
+      await fetch(`${baseUrl}/auth/forgot-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email }) });
+    },
+    /** Reset with the code → clears lockout and logs in. */
+    async resetPassword(email: string, code: string, password: string) {
+      const res = await fetch(`${baseUrl}/auth/reset-password`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, code, password }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Réinitialisation impossible"), { code: j.error as string | undefined });
+      tokens.set({ access: j.accessToken, refresh: j.refreshToken });
+      return j.user as { id: string; name: string; email: string; role: string };
+    },
     async me() { return (await (await raw("GET", "/auth/me")).json()).data; },
     /** Authenticated fetch of an arbitrary (media) URL for offline caching. */
     async cacheFetch(url: string): Promise<Response> {

@@ -12,6 +12,25 @@ export class UserError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
 }
 
+/** All accounts (for the admin support screen), with status + enrolment count. */
+export async function listUsers(q?: string) {
+  const term = q?.trim();
+  const where = term
+    ? { OR: [{ email: { contains: term, mode: "insensitive" as const } }, { name: { contains: term, mode: "insensitive" as const } }] }
+    : {};
+  const now = new Date();
+  const users = await prisma.user.findMany({
+    where, orderBy: { createdAt: "desc" }, take: 500,
+    select: { id: true, name: true, email: true, role: true, emailVerifiedAt: true, disabledAt: true, lockedUntil: true, createdAt: true, _count: { select: { enrollments: true } } },
+  });
+  return users.map((u) => ({
+    id: u.id, name: u.name, email: u.email, role: u.role,
+    verified: u.emailVerifiedAt != null, disabled: u.disabledAt != null,
+    locked: u.lockedUntil != null && u.lockedUntil > now,
+    enrollments: u._count.enrollments, createdAt: u.createdAt,
+  }));
+}
+
 const SETS = { A: "ABCDEFGHJKLMNPQRSTUVWXYZ", a: "abcdefghijkmnpqrstuvwxyz", n: "23456789", s: "!@#$%&*" };
 
 /** A 12-char temp password with at least one of each class (crypto-random). */

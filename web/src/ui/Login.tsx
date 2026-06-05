@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, setIdentity } from "../lib/app";
 import { brand } from "../lib/brand";
 
-type Mode = "login" | "signup" | "verify";
+type Mode = "login" | "signup" | "verify" | "forgot" | "reset";
 
 export function Login({ onLogin }: { onLogin: () => void }) {
   const [mode, setMode] = useState<Mode>("login");
@@ -49,6 +49,19 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     finally { setBusy(false); }
   }
 
+  async function submitForgot(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { await api.forgotPassword(email.trim()); setMode("reset"); setInfo(`Si un compte existe pour ${email}, un code de réinitialisation a été envoyé.`); setPassword(""); }
+    finally { setBusy(false); }
+  }
+
+  async function submitReset(e: React.FormEvent) {
+    e.preventDefault(); setBusy(true); setError(null);
+    try { done(await api.resetPassword(email.trim(), code.trim(), password)); }
+    catch (err: any) { setError(err?.message || "Réinitialisation impossible"); }
+    finally { setBusy(false); }
+  }
+
   const card: React.CSSProperties = { maxWidth: 360, margin: "60px auto" };
 
   if (mode === "signup") {
@@ -85,6 +98,34 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     );
   }
 
+  if (mode === "forgot") {
+    return (
+      <form className="card" onSubmit={submitForgot} style={card}>
+        <h1>Mot de passe oublié</h1>
+        <p className="muted">Saisissez votre e-mail : nous vous enverrons un code pour définir un nouveau mot de passe.</p>
+        <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required /></label>
+        {error && <p className="ko">{error}</p>}
+        <button disabled={busy}>{busy ? "…" : "Envoyer le code"}</button>
+        <p className="muted" style={{ marginTop: 12, textAlign: "center" }}><a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setError(null); setInfo(null); }}>Retour</a></p>
+      </form>
+    );
+  }
+
+  if (mode === "reset") {
+    return (
+      <form className="card" onSubmit={submitReset} style={card}>
+        <h1>Nouveau mot de passe</h1>
+        {info && <p className="muted">{info}</p>}
+        <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" required /></label>
+        <label>Code reçu<input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" placeholder="6 chiffres" required /></label>
+        <label>Nouveau mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" minLength={10} placeholder="10 caractères minimum" required /></label>
+        {error && <p className="ko">{error}</p>}
+        <button disabled={busy}>{busy ? "…" : "Réinitialiser et se connecter"}</button>
+        <p className="muted" style={{ marginTop: 12, textAlign: "center" }}><a href="#" onClick={(e) => { e.preventDefault(); void api.forgotPassword(email.trim()); setInfo("Nouveau code envoyé."); }}>Renvoyer le code</a> · <a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setError(null); setInfo(null); }}>Retour</a></p>
+      </form>
+    );
+  }
+
   return (
     <form className="card" onSubmit={submitLogin} style={card}>
       <h1>{brand.name}</h1>
@@ -94,7 +135,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
       <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required /></label>
       {error && <p className="ko">{error}</p>}
       <button disabled={busy}>{busy ? "…" : "Se connecter"}</button>
-      <p className="muted" style={{ marginTop: 12, textAlign: "center" }}>Pas encore de compte ? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setError(null); setInfo(null); }}>Créer un compte</a></p>
+      <p className="muted" style={{ marginTop: 10, textAlign: "center" }}><a href="#" onClick={(e) => { e.preventDefault(); setMode("forgot"); setError(null); setInfo(null); }}>Mot de passe oublié ?</a></p>
+      <p className="muted" style={{ marginTop: 4, textAlign: "center" }}>Pas encore de compte ? <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setError(null); setInfo(null); }}>Créer un compte</a></p>
     </form>
   );
 }

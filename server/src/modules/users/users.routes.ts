@@ -5,7 +5,7 @@ import { prisma } from "../../db/prisma.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
-import { UserError, inviteUser, deleteUser } from "./users.service.js";
+import { UserError, inviteUser, deleteUser, listUsers } from "./users.service.js";
 
 const RoleEnum = z.enum([
   "LEARNER", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR",
@@ -16,6 +16,12 @@ const RoleEnum = z.enum([
 const publicUser = { id: true, email: true, name: true, role: true, createdAt: true, updatedAt: true } as const;
 
 export async function userRoutes(app: FastifyInstance) {
+  // List all accounts (staff) — incl. self-registered users not yet enrolled.
+  app.get("/users", { preHandler: guard("user:manage") }, async (req) => {
+    const { q } = z.object({ q: z.string().optional() }).parse(req.query ?? {});
+    return { data: await listUsers(q) };
+  });
+
   app.post("/users", { preHandler: guard("user:manage") }, async (req, reply) => {
     const body = z.object({
       email: z.string().email(),
