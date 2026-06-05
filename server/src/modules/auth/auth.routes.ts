@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification } from "./auth.service.js";
+import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword } from "./auth.service.js";
 import { publicJwks } from "../../lib/auth/keys.js";
 import { authenticate } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
@@ -56,6 +56,19 @@ export async function authRoutes(app: FastifyInstance) {
   app.post("/auth/resend-verification", authLimit, async (req, reply) => {
     const { email } = z.object({ email: z.string().email() }).parse(req.body);
     return { data: await resendVerification(email) };
+  });
+
+  // Forgot password → e-mail a reset code (always ok; no enumeration).
+  app.post("/auth/forgot-password", authLimit, async (req) => {
+    const { email } = z.object({ email: z.string().email() }).parse(req.body);
+    return { data: await forgotPassword(email) };
+  });
+
+  // Reset with the code → clears lockout + logs in.
+  app.post("/auth/reset-password", authLimit, async (req, reply) => {
+    const { email, code, password } = z.object({ email: z.string().email(), code: z.string().trim().min(4), password: z.string().min(10, "10 caractères minimum") }).parse(req.body);
+    try { return await resetPassword(email, code, password, req.ip); }
+    catch (err) { if (err instanceof AuthError) return reply.status(400).send({ error: err.code, message: err.message }); throw err; }
   });
 
   app.post("/auth/refresh", authLimit, async (req, reply) => {

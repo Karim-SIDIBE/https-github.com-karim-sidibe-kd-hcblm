@@ -187,6 +187,40 @@ export async function resendVerification(email: string) {
   return { ok: true };
 }
 
+/** Forgot password: send a reset code. Always returns ok (no enumeration). */
+export async function forgotPassword(email: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (user && user.passwordHash) {
+    const code = genOtp();
+    await prisma.verificationCode.create({
+      data: { userId: user.id, codeHash: sha256(code), purpose: "PASSWORD_RESET", expiresAt: new Date(Date.now() + OTP_TTL_MIN * 60_000) },
+    });
+    const m = otpMessage(code, OTP_TTL_MIN);
+    await sendMultichannel({ email: user.email, phone: user.phone, subject: m.subject, body: m.body, mobileBody: m.mobileBody });
+    await audit({ actorId: user.id, action: "auth.password.forgot" });
+  }
+  return { ok: true };
+}
+
+/** Reset the password with a valid code: clears lockout, verifies the e-mail,
+ *  and issues a session (auto-login). */
+export async function resetPassword(email: string, code: string, newPassword: string, ip?: string) {
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  const rec = await prisma.verificationCode.findFirst({
+    where: { userId: user.id, purpose: "PASSWORD_RESET", consumedAt: null, expiresAt: { gt: new Date() }, codeHash: sha256(code) },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.$transaction([
+    prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash, failedLoginCount: 0, lockedUntil: null, emailVerifiedAt: user.emailVerifiedAt ?? new Date() } }),
+  ]);
+  await audit({ actorId: user.id, action: "auth.password.reset", ip });
+  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+}
+
 /** Revoke the family of the presented refresh token (logout). */
 export async function logout(presented: string, ip?: string) {
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(presented) } });
