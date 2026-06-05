@@ -22,7 +22,6 @@ import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
 const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", D = "LEARNING_DESIGNER", R = "REVIEWER", EC = "ENTERPRISE_CLIENT", EM = "EMPLOYER";
-const ALL = [A, C, I, E, D, R, EC, EM];
 const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Pilotage", items: [
     { id: "dashboard", label: "Tableau de bord", Icon: IDash, roles: [A, C, I, E, EC, EM] },
@@ -43,7 +42,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Système", items: [
     { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
-    { id: "settings", label: "Réglages", Icon: ISettings, roles: ALL },
+    { id: "settings", label: "Réglages", Icon: ISettings, roles: [A, C] },
   ]},
 ];
 const TITLES: Record<string, string> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.id, i.label])));

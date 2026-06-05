@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { api, courseTitle, type LearnerRow } from "../lib/api";
+import { api, auth, courseTitle, type LearnerRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+
+const CAN_MANAGE = ["SUPER_ADMIN", "COURSE_ADMIN"];
 import type { CourseCtx } from "../App";
 
 function statusPill(l: LearnerRow) {
@@ -22,6 +24,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [filter, setFilter] = useState("Tous");
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const canManage = CAN_MANAGE.includes(auth.user()?.role ?? "");
 
   async function remove(l: LearnerRow) {
     if (!window.confirm(`Supprimer définitivement ${l.name} (${l.email}) ?\nCette action est irréversible et efface son compte, ses inscriptions et sa progression.`)) return;
@@ -57,7 +60,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
         <div className="filters">
           <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>{courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}</select>
-          <a href="#/enrol" className="btn btn--primary">+ Inscrire un apprenant</a>
+          {canManage && <a href="#/enrol" className="btn btn--primary">+ Inscrire un apprenant</a>}
         </div>
       </div>
 
@@ -72,7 +75,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th>{canManage && <th>Actions</th>}</tr></thead>
             <tbody>
               {rows.map((l) => (
                 <tr key={l.email}>
@@ -82,12 +85,14 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                   <td>{b4Pill(l)}</td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
                   <td>{statusPill(l)}</td>
-                  <td>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
-                      <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => remove(l)} title="Supprimer définitivement ce compte" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>🗑️</button>
-                    </div>
-                  </td>
+                  {canManage && (
+                    <td>
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
+                        <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => remove(l)} title="Supprimer définitivement ce compte" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>🗑️</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>

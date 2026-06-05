@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, auth, type ValidateResult, type ValidationIssue } from "../lib/api";
+import { DOMAINS } from "../lib/domains";
 
 const CAN_PUBLISH = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
@@ -133,9 +134,19 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
                 <div style={{ flex: 1 }}><label style={lbl}>Niveau</label><select style={field} value={content.level} onChange={(e) => set((c) => { c.level = Number(e.target.value); })}><option value={1}>Niveau 1</option><option value={2}>Niveau 2</option><option value={3}>Niveau 3</option></select></div>
                 <div style={{ flex: 1 }}><label style={lbl}>Seuil quiz final (%)</label><input style={field} type="number" min={0} max={100} value={content.passThreshold} onChange={(e) => set((c) => { c.passThreshold = Number(e.target.value); })} /></div>
               </div>
-              <div className="row" style={{ gap: 12 }}>
-                <div style={{ flex: 1 }}><label style={lbl}>Code domaine</label><input style={field} value={content.domain?.code ?? ""} onChange={(e) => set((c) => { c.domain.code = e.target.value; })} /></div>
-                <div style={{ flex: 2 }}><label style={lbl}>Libellé domaine</label><input style={field} value={content.domain?.label ?? ""} onChange={(e) => set((c) => { c.domain.label = e.target.value; })} /></div>
+              <div>
+                <label style={lbl}>Domaine de compétence <span className="muted" style={{ fontWeight: 400 }}>(référentiel KOMPETENCES AFRICA)</span></label>
+                <select style={field} value={content.domain?.code ?? ""} onChange={(e) => set((c) => {
+                  const d = DOMAINS.find((x) => x.code === e.target.value);
+                  if (!c.domain) c.domain = { code: "", label: "" };
+                  if (d) { c.domain.code = d.code; c.domain.label = d.label; }
+                })}>
+                  <option value="" disabled>— Choisir un domaine —</option>
+                  {DOMAINS.map((d) => <option key={d.code} value={d.code}>{d.code} · {d.label}</option>)}
+                  {content.domain?.code && !DOMAINS.some((d) => d.code === content.domain.code) && (
+                    <option value={content.domain.code}>{content.domain.code} · {content.domain.label} (hors référentiel)</option>
+                  )}
+                </select>
               </div>
             </div>
           </div>
