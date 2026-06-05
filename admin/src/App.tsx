@@ -20,28 +20,30 @@ import { Cours } from "./screens/Cours";
 import { Settings } from "./screens/Settings";
 import { Soon } from "./screens/Soon";
 
-type NavItem = { id: string; label: string; Icon: () => JSX.Element; soon?: boolean };
+type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
+const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", D = "LEARNING_DESIGNER", R = "REVIEWER", EC = "ENTERPRISE_CLIENT", EM = "EMPLOYER";
+const ALL = [A, C, I, E, D, R, EC, EM];
 const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Pilotage", items: [
-    { id: "dashboard", label: "Tableau de bord", Icon: IDash },
-    { id: "learners", label: "Apprenants", Icon: ILearners },
-    { id: "users", label: "Utilisateurs", Icon: ILearners },
-    { id: "enrol", label: "Inscriptions", Icon: IEnrol },
-    { id: "reeng", label: "Relances", Icon: IReeng },
+    { id: "dashboard", label: "Tableau de bord", Icon: IDash, roles: [A, C, I, E, EC, EM] },
+    { id: "learners", label: "Apprenants", Icon: ILearners, roles: [A, C, I, E] },
+    { id: "users", label: "Utilisateurs", Icon: ILearners, roles: [A, C] },
+    { id: "enrol", label: "Inscriptions", Icon: IEnrol, roles: [A, C] },
+    { id: "reeng", label: "Relances", Icon: IReeng, roles: [A, C] },
   ]},
   { group: "Pédagogie", items: [
-    { id: "courses", label: "Cours", Icon: ICourse },
-    { id: "eval", label: "Projets Bloc 4", Icon: IEval },
-    { id: "certs", label: "Certificats", Icon: ICert },
+    { id: "courses", label: "Cours", Icon: ICourse, roles: [A, C, D, R] },
+    { id: "eval", label: "Projets Bloc 4", Icon: IEval, roles: [A, C, E] },
+    { id: "certs", label: "Certificats", Icon: ICert, roles: [A, C] },
   ]},
   { group: "Organisation", items: [
-    { id: "entreprises", label: "Entreprises & licences", Icon: IOrg },
-    { id: "orgs", label: "Cohortes & clients", Icon: IOrg },
-    { id: "sessions", label: "Sessions live", Icon: ISession },
+    { id: "entreprises", label: "Entreprises & licences", Icon: IOrg, roles: [A, C] },
+    { id: "orgs", label: "Cohortes & clients", Icon: IOrg, roles: [A, C, I] },
+    { id: "sessions", label: "Sessions live", Icon: ISession, roles: [A, C, I] },
   ]},
   { group: "Système", items: [
-    { id: "audit", label: "Journal d'audit", Icon: IAudit },
-    { id: "settings", label: "Réglages", Icon: ISettings },
+    { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
+    { id: "settings", label: "Réglages", Icon: ISettings, roles: ALL },
   ]},
 ];
 const TITLES: Record<string, string> = Object.fromEntries(NAV.flatMap((g) => g.items.map((i) => [i.id, i.label])));
@@ -85,6 +87,16 @@ export function App() {
   }, [user]);
   const ctx = useMemo<CourseCtx>(() => ({ courses, courseId, setCourseId }), [courses, courseId]);
 
+  // Role-aware navigation: each role sees only its modules + a default landing.
+  const nav = useMemo(() => {
+    const r = user?.role ?? "";
+    return NAV.map((g) => ({ ...g, items: g.items.filter((it) => it.roles.includes(r)) })).filter((g) => g.items.length > 0);
+  }, [user]);
+  const allowedIds = useMemo(() => new Set(nav.flatMap((g) => g.items.map((i) => i.id))), [nav]);
+  const defaultId = nav[0]?.items[0]?.id ?? "settings";
+  const view = allowedIds.has(route) ? route : defaultId;
+  useEffect(() => { if (user && !allowedIds.has(route)) location.hash = `/${defaultId}`; }, [user, route, allowedIds, defaultId]);
+
   const logout = () => { auth.clear(); setUser(null); };
 
   if (!user) return <Login onDone={() => setUser(auth.user())} />;
@@ -94,11 +106,11 @@ export function App() {
       <aside className="sidebar">
         <Brand />
         <nav>
-          {NAV.map((g) => (
+          {nav.map((g) => (
             <div className="navgroup" key={g.group}>
               <div className="label">{g.group}</div>
               {g.items.map(({ id, label, Icon, soon }) => (
-                <button key={id} className={`navitem ${route === id ? "on" : ""}`} onClick={() => go(id)}>
+                <button key={id} className={`navitem ${view === id ? "on" : ""}`} onClick={() => go(id)}>
                   <Icon /> {label}{soon && <span className="soon">Bientôt</span>}
                 </button>
               ))}
@@ -114,26 +126,26 @@ export function App() {
 
       <div className="main">
         <header className="topbar">
-          <div className="crumbs">Administration <span style={{ margin: "0 6px", color: "var(--line-strong)" }}>/</span> <b>{TITLES[route] ?? "Tableau de bord"}</b></div>
+          <div className="crumbs">Administration <span style={{ margin: "0 6px", color: "var(--line-strong)" }}>/</span> <b>{TITLES[view] ?? "Tableau de bord"}</b></div>
           <div className="spacer" />
           <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
         </header>
-        {!courseId && route !== "settings" && route !== "entreprises" && route !== "users" ? (
+        {!courseId && view !== "settings" && view !== "entreprises" && view !== "users" && view !== "courses" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
-        ) : route === "dashboard" ? <Dashboard ctx={ctx} />
-          : route === "users" ? <Utilisateurs />
-          : route === "learners" ? <Learners ctx={ctx} />
-          : route === "enrol" ? <Enrol ctx={ctx} />
-          : route === "reeng" ? <Relances ctx={ctx} />
-          : route === "audit" ? <Audit />
-          : route === "entreprises" ? <Entreprises />
-          : route === "orgs" ? <Orgs />
-          : route === "sessions" ? <Sessions />
-          : route === "eval" ? <Evaluation />
-          : route === "certs" ? <Certificats />
-          : route === "courses" ? <Cours ctx={ctx} />
-          : route === "settings" ? <Settings />
-          : <Soon title={TITLES[route] ?? "Module"} />}
+        ) : view === "dashboard" ? <Dashboard ctx={ctx} />
+          : view === "users" ? <Utilisateurs />
+          : view === "learners" ? <Learners ctx={ctx} />
+          : view === "enrol" ? <Enrol ctx={ctx} />
+          : view === "reeng" ? <Relances ctx={ctx} />
+          : view === "audit" ? <Audit />
+          : view === "entreprises" ? <Entreprises />
+          : view === "orgs" ? <Orgs />
+          : view === "sessions" ? <Sessions />
+          : view === "eval" ? <Evaluation />
+          : view === "certs" ? <Certificats />
+          : view === "courses" ? <Cours ctx={ctx} />
+          : view === "settings" ? <Settings />
+          : <Soon title={TITLES[view] ?? "Module"} />}
       </div>
     </div>
   );

@@ -1,8 +1,10 @@
 import { useState } from "react";
-import { api, courseTitle, type CourseFull } from "../lib/api";
+import { api, auth, courseTitle, type CourseFull } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
 import { CourseEditor } from "./CourseEditor";
+
+const CAN_REVIEW = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
 const STATUS: Record<string, { cls: string; label: string }> = {
   DRAFT: { cls: "pill--warn", label: "Brouillon" },
@@ -37,9 +39,29 @@ function blockItems(p: Record<string, unknown> = {}): string[] {
 }
 
 function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onEdit: (content: unknown, courseId: string) => void }) {
-  const { data, loading, error } = useAsync<CourseFull>(() => api.course(id), [id]);
+  const [tick, setTick] = useState(0);
+  const { data, loading, error } = useAsync<CourseFull>(() => api.course(id), [id, tick]);
   const v = data?.versions?.[0];
   const blocks = v?.content?.blocks ?? [];
+  const [busy, setBusy] = useState("");
+  const [msg, setMsg] = useState<string | null>(null);
+  const canReview = CAN_REVIEW.includes(auth.user()?.role ?? "");
+
+  async function review(decision: "approve" | "request_changes") {
+    if (!v) return;
+    let notes: string | undefined;
+    if (decision === "request_changes") {
+      const n = window.prompt("Modifications demandées (note pour le concepteur) :", "");
+      if (n === null) return; notes = n;
+    }
+    setBusy(decision); setMsg(null);
+    try {
+      const r = await api.reviewVersion(v.id, decision, notes);
+      setMsg(decision === "approve" ? "✅ Approuvé et publié." : "↩︎ Modifications demandées — renvoyé au concepteur.");
+      void r; setTick((t) => t + 1);
+    } catch (e: any) { setMsg("Action refusée : " + (e?.message || "")); }
+    finally { setBusy(""); }
+  }
   return (
     <div className="content">
       <button className="btn btn--ghost btn--sm" style={{ marginBottom: 14 }} onClick={onBack}>← Catalogue</button>
@@ -55,9 +77,16 @@ function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onE
             </div>
             <div className="row" style={{ gap: 8 }}>
               <span className={`pill ${(STATUS[v.status] ?? { cls: "pill--soft" }).cls}`}>{(STATUS[v.status] ?? { label: v.status }).label}</span>
+              {v.status === "IN_REVIEW" && canReview && (
+                <>
+                  <button className="btn" disabled={!!busy} onClick={() => review("request_changes")}>{busy === "request_changes" ? "…" : "Demander des modifications"}</button>
+                  <button className="btn btn--primary" disabled={!!busy} onClick={() => review("approve")}>{busy === "approve" ? "…" : "Approuver & publier"}</button>
+                </>
+              )}
               <button className="btn btn--primary" onClick={() => onEdit(v.content, id)}>Éditer (nouvelle version)</button>
             </div>
           </div>
+          {msg && <div className="card" style={{ background: "var(--success-tint)", border: "none", padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>{msg}</div>}
           <div className="grid" style={{ gridTemplateColumns: "1fr 1fr" }}>
             {blocks.map((b) => (
               <div className="card" key={b.index}>
@@ -116,12 +145,16 @@ export function Cours({ ctx }: { ctx: CourseCtx }) {
         {ctx.courses.map((c) => {
           const v = c.versions.find((x) => x.status === "PUBLISHED") ?? c.versions[0];
           const st = STATUS[v?.status ?? ""] ?? { cls: "pill--soft", label: v?.status ?? "—" };
+          const inReview = c.versions.some((x) => x.status === "IN_REVIEW");
           return (
             <button key={c.id} className="card" style={{ textAlign: "left", cursor: "pointer", border: "1px solid var(--line)" }} onClick={() => setMode({ t: "structure", id: c.id })}>
               <div className="card-b">
                 <div className="row between" style={{ marginBottom: 10 }}>
                   <span className="pill pill--navy">{v?.level ?? "—"}</span>
-                  <span className={`pill ${st.cls}`}>{st.label}</span>
+                  <div className="row" style={{ gap: 6 }}>
+                    {inReview && v?.status !== "IN_REVIEW" && <span className="pill pill--info">En revue</span>}
+                    <span className={`pill ${st.cls}`}>{st.label}</span>
+                  </div>
                 </div>
                 <b style={{ fontSize: 15, color: "var(--navy-700)", fontFamily: "var(--font-display)", display: "block", lineHeight: 1.3 }}>{courseTitle(c)}</b>
                 <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{c.versions.length} version(s) · maj {v ? ago((v as { updatedAt?: string }).updatedAt ?? null) : "—"}</div>
