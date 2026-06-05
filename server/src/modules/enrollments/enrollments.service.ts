@@ -155,6 +155,17 @@ export async function enroll(userId: string, courseId: string, isEnterprise = fa
   }
 }
 
+/** B2C self-enrolment: a learner enrols THEMSELVES, restricted to platform
+ *  courses or courses of an org they belong to (tenant isolation). */
+export async function selfEnroll(userId: string, courseId: string, memberOrgIds: string[]) {
+  const course = await prisma.course.findUnique({ where: { id: courseId }, select: { organizationId: true } });
+  if (!course) throw new EngineError(404, "no_course", "Parcours introuvable");
+  if (course.organizationId && !memberOrgIds.includes(course.organizationId)) {
+    throw new EngineError(403, "course_forbidden", "Parcours non disponible");
+  }
+  return enroll(userId, courseId, false);
+}
+
 // --- Moment d'Ancrage -------------------------------------------------------
 
 export async function captureMomentAncrage(enrollmentId: string, text: string) {

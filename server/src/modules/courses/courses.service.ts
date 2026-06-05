@@ -75,6 +75,22 @@ export async function listCourses(visibleOrgIds: string[] | "all") {
   });
 }
 
+/**
+ * Learner-facing catalogue: published courses the learner can self-enrol into
+ * (platform courses + their member-org courses), with their enrolment status.
+ */
+export async function listCatalog(userId: string, memberOrgIds: string[]) {
+  const courses = await prisma.course.findMany({
+    where: { OR: [{ organizationId: null }, { organizationId: { in: memberOrgIds } }], versions: { some: { status: "PUBLISHED" } } },
+    orderBy: { updatedAt: "desc" },
+    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true } } },
+  });
+  const enrolled = new Set((await prisma.enrollment.findMany({ where: { userId }, select: { courseId: true } })).map((e) => e.courseId));
+  return courses
+    .filter((c) => c.versions.length > 0)
+    .map((c) => ({ courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level as string, enrolled: enrolled.has(c.id) }));
+}
+
 export async function getCourse(id: string) {
   return prisma.course.findUnique({
     where: { id },

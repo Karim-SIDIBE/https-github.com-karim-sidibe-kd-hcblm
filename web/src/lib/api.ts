@@ -15,6 +15,8 @@ export type EnrollmentSummary = {
   startedAt: string;
 };
 
+export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean };
+
 export function createApi(baseUrl: string, tokens: TokenBox) {
   async function refresh(): Promise<boolean> {
     const r = tokens.get().refresh;
@@ -97,6 +99,18 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     },
     async progress(enrollmentId: string) {
       return (await (await raw("GET", `/enrollments/${enrollmentId}`)).json()).data;
+    },
+    async catalog(): Promise<CatalogItem[]> {
+      const res = await raw("GET", "/catalog");
+      if (!res.ok) return [];
+      return ((await res.json()).data ?? []) as CatalogItem[];
+    },
+    /** Self-enrol the caller into a catalogue course; returns the new enrolment. */
+    async selfEnroll(courseId: string): Promise<{ id: string }> {
+      const res = await raw("POST", "/enrollments/self", { body: { courseId } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || "Inscription impossible");
+      return j.data as { id: string };
     },
   };
 }
