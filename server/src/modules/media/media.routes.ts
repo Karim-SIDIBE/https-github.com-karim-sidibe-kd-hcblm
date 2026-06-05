@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, getAsset, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { authenticate, guard } from "../../lib/auth.js";
 
@@ -30,6 +30,9 @@ async function sendObject(req: FastifyRequest, reply: FastifyReply, storageKey: 
 }
 
 export async function mediaRoutes(app: FastifyInstance) {
+  // Media library (authoring) — authors/admins.
+  app.get("/media", { preHandler: guard("media:manage") }, async () => ({ data: await listMedia() }));
+
   // Upload a media file (multipart). Authors only.
   app.post("/media", { preHandler: guard("media:manage") }, async (req, reply) => {
     const file = await req.file();

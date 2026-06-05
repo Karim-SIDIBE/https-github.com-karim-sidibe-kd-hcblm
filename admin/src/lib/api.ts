@@ -58,6 +58,7 @@ export type LearnerRow = {
 };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; enrollments: number; createdAt: string };
+export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; renditions: string[]; createdAt: string };
 export type Seats = { seats: number; used: number; available: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
@@ -96,6 +97,16 @@ export const api = {
   invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  media: () => req<MediaAsset[]>("GET", "/media"),
+  async uploadMedia(file: File): Promise<MediaAsset> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const t = auth.token();
+    const res = await fetch(`${BASE}/media`, { method: "POST", headers: t ? { authorization: `Bearer ${t}` } : {}, body: fd });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Téléversement échoué");
+    return j.data as MediaAsset;
+  },
   // organizations & licensing (platform provisioning)
   createOrg: (name: string, slug: string) => req<Org>("POST", "/organizations", { name, slug }),
   orgSeats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),

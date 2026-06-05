@@ -123,6 +123,19 @@ export async function registerExternal(params: { url: string; mime: string; dura
   });
 }
 
+/** Media library listing (authoring). Newest first, with available renditions. */
+export async function listMedia(limit = 200) {
+  const assets = await prisma.mediaAsset.findMany({
+    orderBy: { createdAt: "desc" }, take: limit,
+    include: { renditions: { select: { label: true, available: true } } },
+  });
+  return assets.map((a) => ({
+    id: a.id, kind: a.kind, filename: a.originalFilename, mime: a.mime,
+    sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, createdAt: a.createdAt,
+    renditions: a.renditions.filter((r) => r.available).map((r) => r.label),
+  }));
+}
+
 export async function getAsset(id: string) {
   const a = await prisma.mediaAsset.findUnique({ where: { id }, include: { renditions: true } });
   if (!a) throw new MediaError(404, "not_found", "Média introuvable");
