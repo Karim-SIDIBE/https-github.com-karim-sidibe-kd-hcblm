@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, auth, type ValidateResult, type ValidationIssue } from "../lib/api";
 import { DOMAINS } from "../lib/domains";
+import { ContentEditor } from "./ContentEditor";
 
 const CAN_PUBLISH = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
@@ -19,7 +20,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
 }) {
   const [content, setContent] = useState<Content>(() => structuredClone(initial));
   const [slug, setSlug] = useState("");
-  const [tab, setTab] = useState<"form" | "json">("form");
+  const [tab, setTab] = useState<"form" | "content" | "json">("form");
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(initial, null, 2));
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const [result, setResult] = useState<ValidateResult | null>(null);
@@ -120,10 +121,13 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
 
       <div className="row" style={{ gap: 6, marginBottom: 14 }}>
         <button className={`btn btn--sm ${tab === "form" ? "btn--primary" : ""}`} onClick={() => setTab("form")}>Formulaire</button>
+        <button className={`btn btn--sm ${tab === "content" ? "btn--primary" : ""}`} onClick={() => setTab("content")}>Contenu (micro-sessions)</button>
         <button className={`btn btn--sm ${tab === "json" ? "btn--primary" : ""}`} onClick={() => setTab("json")}>JSON (avancé)</button>
       </div>
 
-      {tab === "form" ? (
+      {tab === "content" ? (
+        <ContentEditor content={content as any} set={set as any} />
+      ) : tab === "form" ? (
         <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
           <div className="card">
             <div className="card-h"><h3>Métadonnées</h3></div>

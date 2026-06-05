@@ -3,9 +3,12 @@
 FROM node:22-slim
 
 WORKDIR /app
-# OpenSSL + CA certs are required by Prisma's query engine.
+# OpenSSL + CA certs are required by Prisma's query engine. ffmpeg powers the
+# adaptive rendition ladder (720p/480p/240p-lite/audio) so low-bandwidth learners
+# get a light stream and good connections get HD. Without it, only the source
+# rendition exists.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl ca-certificates wget \
+ && apt-get install -y --no-install-recommends openssl ca-certificates wget ffmpeg \
  && rm -rf /var/lib/apt/lists/*
 
 # 1) Install dependencies using the workspace manifests (better layer caching).

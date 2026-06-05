@@ -31,6 +31,7 @@ export type RenditionSpec = {
 
 /** Target ladder, lowest-bandwidth variants flagged downloadable for offline. */
 export const LADDER: { label: string; kind: MediaKindT; mime: string; height?: number; bitrateKbps: number; downloadable: boolean; ext: string }[] = [
+  { label: "720p", kind: "VIDEO", mime: "video/mp4", height: 720, bitrateKbps: 2000, downloadable: false, ext: "mp4" }, // HD tier (good connections)
   { label: "480p", kind: "VIDEO", mime: "video/mp4", height: 480, bitrateKbps: 800, downloadable: false, ext: "mp4" },
   { label: "240p-lite", kind: "VIDEO", mime: "video/mp4", height: 240, bitrateKbps: 300, downloadable: true, ext: "mp4" },
   { label: "audio", kind: "AUDIO", mime: "audio/mp4", bitrateKbps: 64, downloadable: true, ext: "m4a" },
