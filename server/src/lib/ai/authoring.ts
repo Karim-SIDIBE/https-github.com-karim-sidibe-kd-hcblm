@@ -57,6 +57,7 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
     domain: { code: brief.domainCode, label: brief.domainLabel },
     competencies,
     summary: `Parcours Niveau ${level} (brouillon généré — à compléter).`,
+    objective: "À la fin de ce parcours, vous saurez… (à compléter)",
     audience: brief.audience ?? "Public cible à préciser.",
     durationEstimate: "~8 h",
     passThreshold: threshold,

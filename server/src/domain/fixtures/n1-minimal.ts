@@ -51,6 +51,7 @@ export const n1Minimal: CourseContent = {
     { code: "D4.C4", label: "Performance durable" },
   ],
   summary: "Parcours Niveau 1 — Fondamentaux.",
+  objective: "À la fin, vous maîtriserez les fondamentaux du sujet.",
   audience: "Professionnels en environnements africains.",
   durationEstimate: "~8 h",
   passThreshold: 70,

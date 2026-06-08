@@ -17,6 +17,7 @@ type Step = "pam" | "profile" | "peer" | "done";
  */
 export function Onboarding({ eid }: { eid: string }) {
   const [payload, setPayload] = useState<Onboarding | null>(null);
+  const [objective, setObjective] = useState("");
   const [step, setStep] = useState<Step | null>(null);
   const [pam, setPam] = useState("");
   const [profileKey, setProfileKey] = useState("");
@@ -31,6 +32,7 @@ export function Onboarding({ eid }: { eid: string }) {
       const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
       const block0 = b?.content?.blocks?.find((x: any) => x.type === "ONBOARDING");
       if (alive && block0) setPayload(block0.payload);
+      if (alive) setObjective(b?.content?.objective ?? "");
       let pamDone = false, profileDone = false, triggerDone = false, peerDone = false;
       try {
         const d = await api.progress(eid);
@@ -74,6 +76,13 @@ export function Onboarding({ eid }: { eid: string }) {
         <div className="eyebrow">Bloc 0 · Étape {stepNo} sur 3</div>
         <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>
       </>)}
+
+      {step === "pam" && objective && (
+        <div className="hf-card hf-card--icy stack">
+          <div className="eyebrow">🎯 Objectif du parcours</div>
+          <p className="body" style={{ margin: 0 }}>{objective}</p>
+        </div>
+      )}
 
       {step === "pam" && (
         <div className="hf-card stack">
