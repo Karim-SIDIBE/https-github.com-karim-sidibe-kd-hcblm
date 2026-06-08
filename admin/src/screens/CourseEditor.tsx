@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, auth, type ValidateResult, type ValidationIssue } from "../lib/api";
-import { DOMAINS } from "../lib/domains";
+import { DOMAINS, competenciesFor } from "../lib/domains";
 import { ContentEditor } from "./ContentEditor";
 
 const CAN_PUBLISH = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
@@ -152,6 +152,31 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
                   )}
                 </select>
               </div>
+
+              {/* Compétences clés (référentiel), filtrées par le domaine */}
+              {(() => {
+                const selected: { code: string; label: string }[] = (content as any).competencies ?? [];
+                const avail = competenciesFor(content.domain?.code ?? "").filter((c) => !selected.some((s) => s.code === c.code));
+                return (
+                  <div>
+                    <label style={lbl}>Compétences clés <span className="muted" style={{ fontWeight: 400 }}>(référentiel — au moins une)</span></label>
+                    <select style={field} value="" onChange={(e) => { const c = competenciesFor(content.domain?.code ?? "").find((x) => x.code === e.target.value); if (c) set((k) => { const a = ((k as any).competencies ??= []); if (!a.some((s: any) => s.code === c.code)) a.push({ code: c.code, label: c.label }); }); }}>
+                      <option value="">{avail.length ? "+ Ajouter une compétence clé…" : (content.domain?.code ? "Toutes ajoutées" : "Choisissez d'abord un domaine")}</option>
+                      {avail.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
+                    </select>
+                    {selected.length > 0 && (
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                        {selected.map((s) => (
+                          <span key={s.code} className="pill pill--soft" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {s.code} · {s.label}
+                            <button type="button" onClick={() => set((k) => { (k as any).competencies = ((k as any).competencies ?? []).filter((x: any) => x.code !== s.code); })} style={{ border: 0, background: "none", cursor: "pointer", color: "var(--fg-3)", fontWeight: 700 }}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
