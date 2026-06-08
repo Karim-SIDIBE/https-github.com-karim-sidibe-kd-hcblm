@@ -370,6 +370,8 @@ export const n1Full: CourseContent = {
   ],
   summary:
     "Niveau 1 — Fondamentaux. De « occupé jamais productif » à « je contrôle mon temps dans un environnement africain à forte culture de l'urgence ».",
+  objective:
+    "À la fin de ce parcours, vous saurez organiser vos priorités, protéger votre temps des interruptions et installer des habitudes de productivité durables — directement applicables à la situation que vous venez de décrire.",
   audience:
     "Jeunes professionnels (0–5 ans) dans des organisations africaines, débordés par les interruptions et la culture de l'urgence.",
   durationEstimate: "~7 h 30 à 8 h · 23 micro-sessions",

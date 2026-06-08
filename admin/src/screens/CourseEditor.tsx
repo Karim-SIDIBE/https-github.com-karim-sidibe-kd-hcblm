@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, auth, type ValidateResult, type ValidationIssue } from "../lib/api";
-import { DOMAINS } from "../lib/domains";
+import { DOMAINS, competenciesFor } from "../lib/domains";
 import { ContentEditor } from "./ContentEditor";
+import { CoursePreview } from "./CoursePreview";
 
 const CAN_PUBLISH = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
@@ -21,6 +22,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
   const [content, setContent] = useState<Content>(() => structuredClone(initial));
   const [slug, setSlug] = useState("");
   const [tab, setTab] = useState<"form" | "content" | "json">("form");
+  const [preview, setPreview] = useState(false);
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(initial, null, 2));
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const [result, setResult] = useState<ValidateResult | null>(null);
@@ -96,12 +98,15 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn--ghost" onClick={onClose}>Annuler</button>
+          <button className={`btn ${preview ? "btn--primary" : ""}`} onClick={() => setPreview((v) => !v)}>{preview ? "← Retour à l'édition" : "👁 Voir comme apprenant"}</button>
           <button className="btn" disabled={busy === "validate"} onClick={validate}>{busy === "validate" ? "…" : "Valider"}</button>
           <button className="btn btn--primary" disabled={busy === "save"} onClick={save}>{busy === "save" ? "…" : "Enregistrer (brouillon)"}</button>
         </div>
       </div>
 
-      {(result || msg) && (
+      {preview && <CoursePreview content={content as any} />}
+
+      {!preview && (result || msg) && (
         <div className="card" style={{ marginBottom: 16 }}>
           <div className="card-b" style={{ paddingTop: 14 }}>
             {msg && <p style={{ margin: "0 0 8px", fontWeight: 600, color: "var(--navy-700)", fontSize: 13.5 }}>{msg}{versionId && !isNew ? "" : ""}</p>}
@@ -119,13 +124,15 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
         </div>
       )}
 
+      {!preview && (
       <div className="row" style={{ gap: 6, marginBottom: 14 }}>
         <button className={`btn btn--sm ${tab === "form" ? "btn--primary" : ""}`} onClick={() => setTab("form")}>Formulaire</button>
         <button className={`btn btn--sm ${tab === "content" ? "btn--primary" : ""}`} onClick={() => setTab("content")}>Contenu (micro-sessions)</button>
         <button className={`btn btn--sm ${tab === "json" ? "btn--primary" : ""}`} onClick={() => setTab("json")}>JSON (avancé)</button>
       </div>
+      )}
 
-      {tab === "content" ? (
+      {!preview && (tab === "content" ? (
         <ContentEditor content={content as any} set={set as any} />
       ) : tab === "form" ? (
         <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
@@ -134,6 +141,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
             <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {isNew && <div><label style={lbl}>Identifiant (slug)</label><input style={field} value={slug} onChange={(e) => setSlug(e.target.value)} placeholder="gestion-du-stress-n1" /></div>}
               <div><label style={lbl}>Titre du parcours</label><input style={field} value={content.title} onChange={(e) => set((c) => { c.title = e.target.value; })} /></div>
+              <div><label style={lbl}>Objectif <span className="muted" style={{ fontWeight: 400 }}>(en bénéfice, relié au Moment d'Ancrage — « à la fin, vous saurez… »)</span></label><textarea style={{ ...field, minHeight: 50 }} value={(content as any).objective ?? ""} onChange={(e) => set((c) => { (c as any).objective = e.target.value; })} placeholder="À la fin de ce parcours, vous saurez…" /></div>
               <div className="row" style={{ gap: 12 }}>
                 <div style={{ flex: 1 }}><label style={lbl}>Niveau</label><select style={field} value={content.level} onChange={(e) => set((c) => { c.level = Number(e.target.value); })}><option value={1}>Niveau 1</option><option value={2}>Niveau 2</option><option value={3}>Niveau 3</option></select></div>
                 <div style={{ flex: 1 }}><label style={lbl}>Seuil quiz final (%)</label><input style={field} type="number" min={0} max={100} value={content.passThreshold} onChange={(e) => set((c) => { c.passThreshold = Number(e.target.value); })} /></div>
@@ -152,6 +160,31 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
                   )}
                 </select>
               </div>
+
+              {/* Compétences clés (référentiel), filtrées par le domaine */}
+              {(() => {
+                const selected: { code: string; label: string }[] = (content as any).competencies ?? [];
+                const avail = competenciesFor(content.domain?.code ?? "").filter((c) => !selected.some((s) => s.code === c.code));
+                return (
+                  <div>
+                    <label style={lbl}>Compétences clés <span className="muted" style={{ fontWeight: 400 }}>(référentiel — au moins une)</span></label>
+                    <select style={field} value="" onChange={(e) => { const c = competenciesFor(content.domain?.code ?? "").find((x) => x.code === e.target.value); if (c) set((k) => { const a = ((k as any).competencies ??= []); if (!a.some((s: any) => s.code === c.code)) a.push({ code: c.code, label: c.label }); }); }}>
+                      <option value="">{avail.length ? "+ Ajouter une compétence clé…" : (content.domain?.code ? "Toutes ajoutées" : "Choisissez d'abord un domaine")}</option>
+                      {avail.map((c) => <option key={c.code} value={c.code}>{c.code} · {c.label}</option>)}
+                    </select>
+                    {selected.length > 0 && (
+                      <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                        {selected.map((s) => (
+                          <span key={s.code} className="pill pill--soft" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                            {s.code} · {s.label}
+                            <button type="button" onClick={() => set((k) => { (k as any).competencies = ((k as any).competencies ?? []).filter((x: any) => x.code !== s.code); })} style={{ border: 0, background: "none", cursor: "pointer", color: "var(--fg-3)", fontWeight: 700 }}>✕</button>
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
             </div>
           </div>
 
@@ -191,7 +224,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
             <span className="muted" style={{ fontSize: 11.5 }}>Édition fine de tous les champs (micro-sessions, questions, scénarios…). Cliquez « Appliquer » pour répercuter dans le formulaire.</span>
           </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

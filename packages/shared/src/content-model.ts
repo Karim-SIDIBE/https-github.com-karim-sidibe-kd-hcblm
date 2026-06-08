@@ -372,6 +372,10 @@ export const CourseContent = z.object({
     .array(z.object({ code: nonEmpty("code"), label: nonEmpty("libellé") }))
     .min(1),
   summary: z.string().default(""),
+  /// Course objective, framed as a benefit and tied to the Moment d'Ancrage
+  /// ("à la fin, vous saurez…"). Shown in Bloc 0 BEFORE the structure (KD-HCBLM
+  /// v2.1, Correction 1). Optional for backward compatibility.
+  objective: z.string().default(""),
   audience: z.string().default(""),
   durationEstimate: z.string().default(""),
   passThreshold: z.number().int().min(0).max(100), // Bloc 3 final quiz
