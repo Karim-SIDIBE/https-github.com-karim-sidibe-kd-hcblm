@@ -24,6 +24,28 @@ function Card({ title, action, children }: { title: string; action?: React.React
   return <div className="card"><div className="card-h"><h3 style={{ fontSize: 14 }}>{title}</h3>{action}</div><div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 11 }}>{children}</div></div>;
 }
 
+/* ---------------- drag-and-drop reordering (native HTML5) ---------------- */
+function move<T>(a: T[], from: number, to: number): T[] { const b = a.slice(); const [x] = b.splice(from, 1); b.splice(to, 0, x); return b; }
+function useDnd(onMove: (from: number, to: number) => void) {
+  const [from, setFrom] = useState<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+  return {
+    over,
+    row: (i: number) => ({
+      onDragOver: (e: React.DragEvent) => { e.preventDefault(); if (over !== i) setOver(i); },
+      onDrop: (e: React.DragEvent) => { e.preventDefault(); if (from != null && from !== i) onMove(from, i); setFrom(null); setOver(null); },
+    }),
+    handleProps: (i: number) => ({
+      draggable: true,
+      onDragStart: (e: React.DragEvent) => { setFrom(i); e.dataTransfer.effectAllowed = "move"; },
+      onDragEnd: () => { setFrom(null); setOver(null); },
+      title: "Glisser pour réordonner",
+      style: { cursor: "grab", userSelect: "none" as const, color: "var(--fg-3)", fontSize: 15, lineHeight: 1, padding: "0 2px" },
+    }),
+  };
+}
+const Grip = (p: any) => <span {...p}>⠿</span>;
+
 /* ---------------- options editor (shared) ---------------- */
 function Options({ opts, correctKey, scored, path, set }: { opts: Opt[]; correctKey?: string; scored: boolean; path: (c: Content) => { options: Opt[]; correctKey?: string }; set: Set }) {
   return (
@@ -43,12 +65,13 @@ function Options({ opts, correctKey, scored, path, set }: { opts: Opt[]; correct
 
 /* ---------------- scored questions (diagnostic / interblock / final) ---------------- */
 function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: Content) => SQ[]; set: Set }) {
+  const dnd = useDnd((from, to) => set((c) => { const a = path(c); a.splice(0, a.length, ...move(a, from, to)); }));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {questions.map((q, qi) => (
-        <div key={qi} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 11 }}>
+        <div key={qi} {...dnd.row(qi)} style={{ border: `1px solid ${dnd.over === qi ? "var(--orange-400)" : "var(--line)"}`, borderRadius: 8, padding: 11 }}>
           <div className="row between" style={{ marginBottom: 8 }}>
-            <b style={{ fontSize: 12.5 }}>Question {qi + 1}</b>
+            <span className="row" style={{ gap: 6, alignItems: "center" }}><Grip {...dnd.handleProps(qi)} /><b style={{ fontSize: 12.5 }}>Question {qi + 1}</b></span>
             <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} disabled={questions.length <= 1} onClick={() => set((c) => { path(c).splice(qi, 1); })}>🗑️</button>
           </div>
           <div className="row" style={{ gap: 8 }}>
@@ -69,11 +92,12 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
 
 /* ---------------- trigger questions (Bloc 0, non scored) ---------------- */
 function TriggerQuestions({ questions, path, set }: { questions: TQ[]; path: (c: Content) => TQ[]; set: Set }) {
+  const dnd = useDnd((from, to) => set((c) => { const a = path(c); a.splice(0, a.length, ...move(a, from, to)); }));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {questions.map((q, qi) => (
-        <div key={qi} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 11 }}>
-          <div className="row between" style={{ marginBottom: 8 }}><b style={{ fontSize: 12.5 }}>Question {qi + 1}</b>
+        <div key={qi} {...dnd.row(qi)} style={{ border: `1px solid ${dnd.over === qi ? "var(--orange-400)" : "var(--line)"}`, borderRadius: 8, padding: 11 }}>
+          <div className="row between" style={{ marginBottom: 8 }}><span className="row" style={{ gap: 6, alignItems: "center" }}><Grip {...dnd.handleProps(qi)} /><b style={{ fontSize: 12.5 }}>Question {qi + 1}</b></span>
             <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} disabled={questions.length <= 1} onClick={() => set((c) => { path(c).splice(qi, 1); })}>🗑️</button></div>
           <div><label style={lbl}>Question</label><input style={field} value={q.text} onChange={(e) => set((c) => { path(c)[qi].text = e.target.value; })} /></div>
           <div style={{ marginTop: 8 }}><label style={lbl}>Réponses possibles</label>
@@ -139,14 +163,14 @@ function MediaPicker({ media, onPick }: { media: MediaAsset[]; onPick: (m: Media
 }
 
 /* ---------------- micro-session card ---------------- */
-function SessionCard({ s, si, total, ri, media, set }: { s: Session; si: number; total: number; ri: number; media: MediaAsset[]; set: Set }) {
+function SessionCard({ s, si, total, ri, media, set, handleProps }: { s: Session; si: number; total: number; ri: number; media: MediaAsset[]; set: Set; handleProps?: any }) {
   const arr = (c: Content) => c.blocks[ri].payload.microSessions as Session[];
   const onS = (fn: (x: Session) => void) => set((c) => fn(arr(c)[si]));
   const bound = s.video?.mediaId ? media.find((m) => m.id === s.video.mediaId) : null;
   return (
     <div className="card">
       <div className="card-h" style={{ alignItems: "center" }}>
-        <h3 style={{ fontSize: 13.5 }}>Micro-session {s.id}</h3>
+        <h3 className="row" style={{ fontSize: 13.5, gap: 7, alignItems: "center" }}>{handleProps && <Grip {...handleProps} />}Micro-session {s.id}{s.title ? <span className="muted" style={{ fontWeight: 400 }}>— {s.title}</span> : null}</h3>
         <div className="row" style={{ gap: 5 }}>
           <button className="btn btn--sm" disabled={si === 0} onClick={() => set((c) => { const a = arr(c); [a[si - 1], a[si]] = [a[si], a[si - 1]]; })}>↑</button>
           <button className="btn btn--sm" disabled={si === total - 1} onClick={() => set((c) => { const a = arr(c); [a[si + 1], a[si]] = [a[si], a[si + 1]]; })}>↓</button>
@@ -199,11 +223,12 @@ function StringList({ items, path, set, ph }: { items: string[]; path: (c: Conte
 /* ---------------- guided scenarios (Bloc 2) ---------------- */
 function GuidedScenarios({ scenarios, ri, set }: { scenarios: any[]; ri: number; set: Set }) {
   const arr = (c: Content) => c.blocks[ri].payload.guidedScenarios as any[];
+  const dnd = useDnd((from, to) => set((c) => { const a = arr(c); a.splice(0, a.length, ...move(a, from, to)); }));
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {scenarios.map((sc, i) => (
-        <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 11 }}>
-          <div className="row between" style={{ marginBottom: 8 }}><b style={{ fontSize: 12.5 }}>Scénario {i + 1}</b>
+        <div key={i} {...dnd.row(i)} style={{ border: `1px solid ${dnd.over === i ? "var(--orange-400)" : "var(--line)"}`, borderRadius: 8, padding: 11 }}>
+          <div className="row between" style={{ marginBottom: 8 }}><span className="row" style={{ gap: 6, alignItems: "center" }}><Grip {...dnd.handleProps(i)} /><b style={{ fontSize: 12.5 }}>Scénario {i + 1}</b></span>
             <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { arr(c).splice(i, 1); })}>🗑️</button></div>
           <div><label style={lbl}>Titre</label><input style={field} value={sc.title ?? ""} onChange={(e) => set((c) => { arr(c)[i].title = e.target.value; })} /></div>
           <div style={{ marginTop: 8 }}><label style={lbl}>Contexte africain</label><input style={field} value={sc.contextAfricain ?? ""} onChange={(e) => set((c) => { arr(c)[i].contextAfricain = e.target.value; })} /></div>
@@ -260,11 +285,13 @@ function CountBadges({ units }: { units?: Unit[] }) {
 function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
   const units: Unit[] = block.units ?? [];
   const arr = (c: Content) => ((c.blocks[ri] as any).units ??= []);
+  const dnd = useDnd((from, to) => set((c) => { const a = arr(c); a.splice(0, a.length, ...move(a, from, to)); }));
   return (
     <Card title="Unités auditables du bloc" action={<CountBadges units={units} />}>
       {units.length === 0 && <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucune unité déclarée. Pré-remplissez depuis le contenu, puis ajustez les types (auditabilité v2.1).</p>}
       {units.map((u, i) => (
-        <div className="row" key={i} style={{ gap: 8, alignItems: "center" }}>
+        <div className="row" key={i} {...dnd.row(i)} style={{ gap: 8, alignItems: "center", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none" }}>
+          <Grip {...dnd.handleProps(i)} />
           <input style={{ ...field, flex: 1 }} value={u.label} placeholder="Intitulé de l'unité" onChange={(e) => set((c) => { arr(c)[i].label = e.target.value; })} />
           <select style={{ ...field, width: 165 }} value={u.type} onChange={(e) => set((c) => { arr(c)[i].type = e.target.value; })}>{UNIT_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
           <input style={{ ...field, width: 80 }} type="number" min={1} value={u.durationMin ?? 0} onChange={(e) => set((c) => { arr(c)[i].durationMin = Number(e.target.value); })} title="minutes" />
@@ -280,14 +307,33 @@ function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
 }
 
 /* ---------------- per-block editor ---------------- */
-function BlockEditor({ block, ri, media, set }: { block: Block; ri: number; media: MediaAsset[]; set: Set }) {
+function ImportedNote({ text, onClear }: { text: string; onClear?: () => void }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="card" style={{ borderColor: "var(--orange-400)" }}>
+      <div className="card-h">
+        <h3 style={{ fontSize: 14 }}>📋 Texte importé du Word — à répartir</h3>
+        <div className="row" style={{ gap: 6 }}>
+          <button type="button" className="btn btn--sm" onClick={() => navigator.clipboard?.writeText(text)}>Copier</button>
+          <button type="button" className="btn btn--sm" onClick={() => setOpen((o) => !o)}>{open ? "Masquer" : "Afficher"}</button>
+          {onClear && <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={onClear} title="Fermer une fois le texte réparti">✓ Traité</button>}
+        </div>
+      </div>
+      {open && <div className="card-b"><textarea readOnly value={text} style={{ width: "100%", minHeight: 120, fontSize: 12.5, fontFamily: "inherit", border: "1px solid var(--line)", borderRadius: 8, padding: 10, background: "var(--bg-soft)", lineHeight: 1.5 }} /><span className="muted" style={{ fontSize: 11.5 }}>Copiez ce texte dans les bons champs ci-dessous (micro-sessions, quiz, étude de cas…), puis cliquez « ✓ Traité ».</span></div>}
+    </div>
+  );
+}
+
+function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Block; ri: number; media: MediaAsset[]; set: Set; note?: string; onClearNote?: () => void }) {
   const p = block.payload ?? {};
   const sessions: Session[] = p.microSessions ?? [];
   const addSession = () => set((c) => { const a = (c.blocks[ri].payload.microSessions ??= []); a.push(newSession(block.index, a.length + 1)); });
   const tv = p.triggerVideo;
+  const sdnd = useDnd((from, to) => set((c) => { const a = c.blocks[ri].payload.microSessions as Session[]; a.splice(0, a.length, ...move(a, from, to)); }));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      {note && <ImportedNote text={note} onClear={onClearNote} />}
       <UnitsCard block={block} ri={ri} set={set} />
 
       {/* ---- Bloc 0 ---- */}
@@ -339,7 +385,11 @@ function BlockEditor({ block, ri, media, set }: { block: Block; ri: number; medi
       {/* ---- micro-sessions (Blocs 1–3) ---- */}
       {["COMPREHENSION", "PRACTICE", "ANCHORING"].includes(block.type) && (
         <>
-          {sessions.map((s, si) => <SessionCard key={si} s={s} si={si} total={sessions.length} ri={ri} media={media} set={set} />)}
+          {sessions.map((s, si) => (
+            <div key={si} {...sdnd.row(si)} style={{ borderRadius: 12, outline: sdnd.over === si ? "2px solid var(--orange-400)" : "none" }}>
+              <SessionCard s={s} si={si} total={sessions.length} ri={ri} media={media} set={set} handleProps={sdnd.handleProps(si)} />
+            </div>
+          ))}
           <button className="btn btn--primary" style={{ alignSelf: "flex-start" }} onClick={addSession}>+ Ajouter une micro-session</button>
         </>
       )}
@@ -439,7 +489,7 @@ function BlockEditor({ block, ri, media, set }: { block: Block; ri: number; medi
 }
 
 
-export function ContentEditor({ content, set }: { content: Content; set: Set }) {
+export function ContentEditor({ content, set, blockNotes, onClearNote }: { content: Content; set: Set; blockNotes?: Record<number, string>; onClearNote?: (index: number) => void }) {
   const [media, setMedia] = useState<MediaAsset[]>([]);
   const [bi, setBi] = useState(0);
   useEffect(() => { api.media().then(setMedia).catch(() => {}); }, []);
@@ -465,7 +515,7 @@ export function ContentEditor({ content, set }: { content: Content; set: Set }) 
       <div className="row" style={{ gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
         {blocks.map((b, i) => <button key={b.index} className={`btn btn--sm ${i === bi ? "btn--primary" : ""}`} onClick={() => setBi(i)}>Bloc {b.index} · {TYPE_FR[b.type] ?? b.type}</button>)}
       </div>
-      <BlockEditor block={block} ri={ri} media={media} set={set} />
+      <BlockEditor block={block} ri={ri} media={media} set={set} note={blockNotes?.[block.index]} onClearNote={onClearNote ? () => onClearNote(block.index) : undefined} />
     </div>
   );
 }

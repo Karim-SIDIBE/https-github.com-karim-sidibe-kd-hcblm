@@ -8,6 +8,7 @@ import {
   createCourse,
   createNextVersion,
   draftCourse,
+  importCourseFromDoc,
   getCourse,
   listCatalog,
   listCourses,
@@ -96,6 +97,21 @@ export async function courseRoutes(app: FastifyInstance) {
     try {
       const result = await draftCourse(brief, req.principal?.id, ctx?.organizationId);
       return reply.status(201).send({ data: result });
+    } catch (err) { return mapErr(reply, err); }
+  });
+
+  // Import a Word (.docx) document → pre-filled DRAFT content (not persisted).
+  app.post("/courses/import-doc", { preHandler: guard("course:create") }, async (req, reply) => {
+    const file = await req.file();
+    if (!file) return reply.badRequest("Fichier manquant (champ multipart)");
+    const name = (file.filename ?? "").toLowerCase();
+    if (!name.endsWith(".docx")) return reply.status(415).send({ error: "unsupported_type", message: "Formats acceptés : .docx (Word). Le .doc ancien et le PDF ne sont pas pris en charge." });
+    try {
+      const buf = await file.toBuffer();
+      if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
+      const result = await importCourseFromDoc(buf);
+      await audit({ actorId: req.principal!.id, action: "course.import_doc", targetType: "Course", targetId: "draft", ip: req.ip, meta: { paragraphs: result.paragraphs, aiGenerated: result.aiGenerated } });
+      return reply.send({ data: result });
     } catch (err) { return mapErr(reply, err); }
   });
 

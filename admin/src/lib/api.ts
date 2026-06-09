@@ -60,6 +60,7 @@ export type InviteResult = { tempPassword: string; delivered: boolean; channels:
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; enrollments: number; createdAt: string };
 export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; renditions: string[]; createdAt: string };
 export type Seats = { seats: number; used: number; available: number };
+export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
 export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string };
@@ -106,6 +107,15 @@ export const api = {
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Téléversement échoué");
     return j.data as MediaAsset;
+  },
+  async importCourseDoc(file: File): Promise<ImportDocResult> {
+    const fd = new FormData();
+    fd.append("file", file);
+    const t = auth.token();
+    const res = await fetch(`${BASE}/courses/import-doc`, { method: "POST", headers: t ? { authorization: `Bearer ${t}` } : {}, body: fd });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Import du document échoué");
+    return j.data as ImportDocResult;
   },
   // organizations & licensing (platform provisioning)
   createOrg: (name: string, slug: string) => req<Org>("POST", "/organizations", { name, slug }),

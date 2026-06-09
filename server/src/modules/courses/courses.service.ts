@@ -11,7 +11,8 @@ import { validateShape, validatePolicy } from "../../domain/validation.js";
 import type { CourseContent } from "../../domain/content-model.js";
 import { randomBytes } from "node:crypto";
 import { indexCourseVersion } from "../search/search.service.js";
-import { draftCourseContent, type CourseBrief } from "../../lib/ai/authoring.js";
+import { draftCourseContent, draftCourseFromDoc, type CourseBrief } from "../../lib/ai/authoring.js";
+import { docxToParagraphs } from "../../lib/docx.js";
 
 function slugify(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -142,6 +143,20 @@ export async function draftCourse(brief: CourseBrief, authorId?: string, organiz
     include: { versions: true },
   });
   return { course, draft: { aiGenerated, provider }, policy: validatePolicy(shape.content) };
+}
+
+/**
+ * Import a Word (.docx) document into a DRAFT course content (NOT persisted).
+ * Returns the pre-filled content + per-block raw-text notes for the editor; the
+ * designer reviews, links videos, then saves through the normal create flow.
+ */
+export async function importCourseFromDoc(buf: Buffer) {
+  const paras = docxToParagraphs(buf);
+  if (paras.length === 0) throw new ContentInvalidError([{ level: "error", rule: "import", path: "document", message: "Document vide ou illisible." }] as never);
+  const { content, blockNotes, aiGenerated, provider } = await draftCourseFromDoc(paras);
+  const shape = validateShape(content);
+  if (!shape.ok) throw new ContentInvalidError(shape.issues as never); // scaffold should never fail
+  return { content: shape.content, blockNotes, aiGenerated, provider, paragraphs: paras.length };
 }
 
 /** Save edits to an existing DRAFT version (shape-validated). */

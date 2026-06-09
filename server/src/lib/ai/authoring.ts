@@ -10,6 +10,7 @@
 import { env } from "../../config/env.js";
 import { aiAvailable, callClaudeText, extractJson, type ClaudeRequest } from "./client.js";
 import { CourseContent, LEVEL_PASS_THRESHOLD, MOMENT_ANCRAGE_TOKEN, type CourseContent as CourseContentT } from "../../domain/content-model.js";
+import { segmentImportedDoc, type DocParagraph } from "../../domain/authoring/import-doc.js";
 
 const T = MOMENT_ANCRAGE_TOKEN;
 
@@ -174,4 +175,65 @@ export async function draftCourseContent(brief: CourseBrief): Promise<DraftResul
   } catch {
     return { content: scaffold, aiGenerated: false, provider: "scaffold (ai-fallback)" };
   }
+}
+
+// --- import from a Word document --------------------------------------------
+
+export type ImportResult = DraftResult & { blockNotes: Record<number, string> };
+
+const FROM_DOC_SYSTEM =
+  "Tu es ingénieur pédagogique. On te donne (1) un SQUELETTE JSON de parcours (5 blocs fixes) et " +
+  "(2) le TEXTE BRUT d'un document de cours. Répartis le contenu du texte dans les bons champs du squelette " +
+  "(titres, micro-sessions, points clés, énoncés de quiz, options, feedbacks, étude de cas, plan d'action, journal). " +
+  "Tu NE changes NI la structure, NI les clés, NI les seuils, NI les jetons {{moment_ancrage}}. " +
+  "N'invente pas de vidéos (laisse url et mediaId vides). Réponds UNIQUEMENT en JSON.";
+
+function buildFromDocRequest(scaffold: CourseContentT, rawText: string): ClaudeRequest {
+  return {
+    model: env.AI_MODEL,
+    max_tokens: 8000,
+    system: [{ type: "text", text: FROM_DOC_SYSTEM, cache_control: { type: "ephemeral" } }],
+    messages: [{ role: "user", content: `Squelette:\n${JSON.stringify(scaffold)}\n\nTexte du document:\n${rawText.slice(0, 24000)}` }],
+  };
+}
+
+/** Default neutral brief for an import — the designer sets the real domain after. */
+const IMPORT_BRIEF: CourseBrief = { domainCode: "D1", domainLabel: "À définir", level: 1 };
+
+/**
+ * Build a DRAFT course from imported paragraphs.
+ * Deterministic backbone: a valid scaffold whose title/objective/block titles
+ * are overridden from the document, plus a per-block bucket of raw text
+ * (`blockNotes`) for manual dispatch. When an AI key is configured, the raw
+ * text is additionally mapped into the structured fields; otherwise the
+ * scaffold stands and the designer dispatches the notes by hand.
+ */
+export async function draftCourseFromDoc(paras: DocParagraph[]): Promise<ImportResult> {
+  const seg = segmentImportedDoc(paras);
+  const scaffold = buildScaffold(IMPORT_BRIEF);
+  if (seg.title) scaffold.title = seg.title;
+  if (seg.objective) scaffold.objective = seg.objective;
+  for (const b of scaffold.blocks) {
+    const t = seg.blockTitles[b.index];
+    if (t) b.title = t;
+  }
+
+  let content = scaffold;
+  let aiGenerated = false;
+  let provider = "scaffold (import)";
+  if (aiAvailable()) {
+    try {
+      const rawText = paras.map((p) => p.text).join("\n");
+      const text = await callClaudeText(buildFromDocRequest(scaffold, rawText));
+      const parsed = CourseContent.parse(extractJson(text)); // must satisfy the gate
+      // keep the document-derived title/objective if the model dropped them
+      if (!parsed.objective && seg.objective) parsed.objective = seg.objective;
+      content = parsed;
+      aiGenerated = true;
+      provider = env.AI_MODEL;
+    } catch {
+      provider = "scaffold (import · ai-fallback)";
+    }
+  }
+  return { content, blockNotes: seg.blockNotes, aiGenerated, provider };
 }
