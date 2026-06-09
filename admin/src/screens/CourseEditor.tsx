@@ -29,6 +29,30 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
   const [busy, setBusy] = useState<string>("");
   const [msg, setMsg] = useState<string | null>(null);
   const [versionId, setVersionId] = useState<string | null>(null);
+  const [blockNotes, setBlockNotes] = useState<Record<number, string>>({});
+
+  async function importDoc(file: File) {
+    setBusy("import"); setMsg(null); setResult(null);
+    try {
+      const r = await api.importCourseDoc(file);
+      setContent(r.content);
+      setBlockNotes(r.blockNotes ?? {});
+      setTab("content");
+      setMsg(r.aiGenerated
+        ? `Document importé (${r.paragraphs} paragraphes) — réparti par l'IA. Relisez chaque bloc, ajustez et liez les vidéos.`
+        : `Document importé (${r.paragraphs} paragraphes). Titre, objectif et titres de blocs pré-remplis ; le texte de chaque bloc est déposé dans « Texte importé » à répartir. Liez ensuite les vidéos.`);
+    } catch (e: any) { setMsg(e?.message || "Import échoué"); } finally { setBusy(""); }
+  }
+  function exportJson() {
+    const blob = new Blob([JSON.stringify(content, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${(slug || (content.title || "parcours")).toString().toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+  const clearNote = (index: number) => setBlockNotes((m) => { const n = { ...m }; delete n[index]; return n; });
 
   // Keep the JSON view in sync when the form mutates content.
   useEffect(() => { setJsonDraft(JSON.stringify(content, null, 2)); }, [content]);
@@ -98,6 +122,11 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
         </div>
         <div className="row" style={{ gap: 8 }}>
           <button className="btn btn--ghost" onClick={onClose}>Annuler</button>
+          <label className="btn" style={{ cursor: "pointer" }} title="Charger un parcours depuis un document Word (.docx). Pré-remplit les champs ; les vidéos se lient ensuite.">
+            {busy === "import" ? "…" : "⬆ Importer (Word)"}
+            <input type="file" accept=".docx" style={{ display: "none" }} disabled={busy === "import"} onChange={(e) => { const f = e.target.files?.[0]; if (f) importDoc(f); e.currentTarget.value = ""; }} />
+          </label>
+          <button className="btn" onClick={exportJson} title="Télécharger ce parcours en JSON (sauvegarde / gabarit réimportable)">⬇ Exporter</button>
           <button className={`btn ${preview ? "btn--primary" : ""}`} onClick={() => setPreview((v) => !v)}>{preview ? "← Retour à l'édition" : "👁 Voir comme apprenant"}</button>
           <button className="btn" disabled={busy === "validate"} onClick={validate}>{busy === "validate" ? "…" : "Valider"}</button>
           <button className="btn btn--primary" disabled={busy === "save"} onClick={save}>{busy === "save" ? "…" : "Enregistrer (brouillon)"}</button>
@@ -133,7 +162,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
       )}
 
       {!preview && (tab === "content" ? (
-        <ContentEditor content={content as any} set={set as any} />
+        <ContentEditor content={content as any} set={set as any} blockNotes={blockNotes} onClearNote={clearNote} />
       ) : tab === "form" ? (
         <div className="grid" style={{ gridTemplateColumns: "1fr 1fr", alignItems: "start" }}>
           <div className="card">
