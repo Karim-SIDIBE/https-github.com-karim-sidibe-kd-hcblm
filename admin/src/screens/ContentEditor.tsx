@@ -225,6 +225,60 @@ function GuidedScenarios({ scenarios, ri, set }: { scenarios: any[]; ri: number;
   );
 }
 
+/* ---------------- auditable units (v2.1 typology) ---------------- */
+type Unit = { label: string; type: string; durationMin?: number };
+const UNIT_TYPES = [{ v: "micro-session", l: "Micro-session" }, { v: "long-activity", l: "Activité longue" }, { v: "micro-task", l: "Micro-tâche" }];
+function counts(units?: Unit[]) { const c = { ms: 0, la: 0, mt: 0 }; for (const u of units ?? []) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; } return c; }
+function genUnits(block: any): Unit[] {
+  const p = block.payload ?? {}; const u: Unit[] = [];
+  const push = (label: string, type: string, durationMin: number) => u.push({ label, type, durationMin });
+  if (block.type === "ONBOARDING") { push("Onboarding & ancrage", "micro-session", 10); push("Vidéo déclencheur + quiz", "micro-session", 15); }
+  if (p.diagnosticQuiz) push("Quiz diagnostique", "micro-session", 15);
+  (p.microSessions ?? []).forEach((s: any) => push(`Micro-session ${s.id} — ${s.title}`, "micro-session", 20));
+  if (p.caseStudy) push(`Étude de cas — ${p.caseStudy.title}`, "long-activity", 25);
+  if (p.guidedScenarios?.length) push("Mises en situation guidées", "long-activity", 40);
+  if (p.fieldApplication) push("Application terrain", "long-activity", 35);
+  if (p.selfAssessment) push("Auto-évaluation", "micro-session", 15);
+  if (p.actionPlan30d) push("Plan d'action 30 jours", "micro-session", 20);
+  if (p.finalQuiz) push("Quiz final", "micro-session", 15);
+  if (block.type === "CERTIFICATION") {
+    (p.sections ?? []).forEach((s: any, i: number) => push(`Section ${i + 1} — ${s.title}`, "micro-session", 15));
+    if (p.journal?.entries) { push("Journal de pratique (2 semaines)", "long-activity", 30); (p.journal.entries).forEach((e: any) => push(`Journal J+${e.day}`, "micro-task", 5)); }
+  }
+  return u;
+}
+function CountBadges({ units }: { units?: Unit[] }) {
+  const c = counts(units);
+  return (
+    <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+      <span className="pill pill--green">{c.ms} micro-session{c.ms > 1 ? "s" : ""}</span>
+      <span className="pill pill--warn">{c.la} activité{c.la > 1 ? "s" : ""} longue{c.la > 1 ? "s" : ""}</span>
+      <span className="pill pill--soft">{c.mt} micro-tâche{c.mt > 1 ? "s" : ""}</span>
+    </div>
+  );
+}
+function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
+  const units: Unit[] = block.units ?? [];
+  const arr = (c: Content) => ((c.blocks[ri] as any).units ??= []);
+  return (
+    <Card title="Unités auditables du bloc" action={<CountBadges units={units} />}>
+      {units.length === 0 && <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucune unité déclarée. Pré-remplissez depuis le contenu, puis ajustez les types (auditabilité v2.1).</p>}
+      {units.map((u, i) => (
+        <div className="row" key={i} style={{ gap: 8, alignItems: "center" }}>
+          <input style={{ ...field, flex: 1 }} value={u.label} placeholder="Intitulé de l'unité" onChange={(e) => set((c) => { arr(c)[i].label = e.target.value; })} />
+          <select style={{ ...field, width: 165 }} value={u.type} onChange={(e) => set((c) => { arr(c)[i].type = e.target.value; })}>{UNIT_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
+          <input style={{ ...field, width: 80 }} type="number" min={1} value={u.durationMin ?? 0} onChange={(e) => set((c) => { arr(c)[i].durationMin = Number(e.target.value); })} title="minutes" />
+          <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c).splice(i, 1); })}>✕</button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 8, marginTop: 6 }}>
+        <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c).push({ label: "", type: "micro-session", durationMin: 20 }); })}>+ Unité</button>
+        <button type="button" className="btn btn--sm btn--primary" onClick={() => { if (units.length && !confirm("Remplacer les unités déclarées par celles générées depuis le contenu ?")) return; set((c) => { (c.blocks[ri] as any).units = genUnits(c.blocks[ri]); }); }}>⟳ Pré-remplir depuis le contenu</button>
+      </div>
+    </Card>
+  );
+}
+
 /* ---------------- per-block editor ---------------- */
 function BlockEditor({ block, ri, media, set }: { block: Block; ri: number; media: MediaAsset[]; set: Set }) {
   const p = block.payload ?? {};
@@ -234,6 +288,8 @@ function BlockEditor({ block, ri, media, set }: { block: Block; ri: number; medi
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <UnitsCard block={block} ri={ri} set={set} />
+
       {/* ---- Bloc 0 ---- */}
       {block.type === "ONBOARDING" && (
         <>
@@ -393,8 +449,19 @@ export function ContentEditor({ content, set }: { content: Content; set: Set }) 
   const block = blocks[Math.min(bi, blocks.length - 1)];
   const ri = content.blocks.findIndex((b) => b.index === block.index);
 
+  const totals = counts(blocks.flatMap((b: any) => b.units ?? []));
   return (
     <div>
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="card-b row between" style={{ paddingTop: 12, flexWrap: "wrap", gap: 8 }}>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--fg-1)" }}>Total auditable du parcours</span>
+          <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+            <span className="pill pill--green">{totals.ms} micro-sessions</span>
+            <span className="pill pill--warn">{totals.la} activités longues</span>
+            <span className="pill pill--soft">{totals.mt} micro-tâches</span>
+          </div>
+        </div>
+      </div>
       <div className="row" style={{ gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
         {blocks.map((b, i) => <button key={b.index} className={`btn btn--sm ${i === bi ? "btn--primary" : ""}`} onClick={() => setBi(i)}>Bloc {b.index} · {TYPE_FR[b.type] ?? b.type}</button>)}
       </div>

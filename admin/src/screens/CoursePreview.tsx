@@ -9,6 +9,13 @@ type Block = { index: number; type: string; title: string; objective?: string; p
 type Content = { title: string; level?: number; objective?: string; summary?: string; durationEstimate?: string; domain?: { code: string; label: string }; competencies?: { code: string; label: string }[]; blocks: Block[]; [k: string]: unknown };
 
 const TYPE_FR: Record<string, string> = { ONBOARDING: "Bloc 0 · Onboarding", COMPREHENSION: "Bloc 1 · Compréhension", PRACTICE: "Bloc 2 · Pratique", ANCHORING: "Bloc 3 · Ancrage", CERTIFICATION: "Bloc 4 · Certification" };
+type Unit = { type: string };
+const cnt = (units?: Unit[]) => { const c = { ms: 0, la: 0, mt: 0 }; for (const u of units ?? []) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; } return c; };
+function CountLine({ units, dark }: { units?: Unit[]; dark?: boolean }) {
+  if (!units?.length) return null;
+  const c = cnt(units);
+  return <div style={{ fontSize: 11, opacity: dark ? .85 : 1, color: dark ? "#fff" : "var(--fg-3)", marginTop: 4 }}>{c.ms} micro-session{c.ms > 1 ? "s" : ""} · {c.la} activité{c.la > 1 ? "s" : ""} longue{c.la > 1 ? "s" : ""} · {c.mt} micro-tâche{c.mt > 1 ? "s" : ""}</div>;
+}
 
 const phone: React.CSSProperties = { maxWidth: 430, margin: "0 auto", background: "var(--bg-soft)", borderRadius: 22, border: "1px solid var(--line)", padding: 16, boxShadow: "var(--shadow-md)" };
 const card: React.CSSProperties = { background: "#fff", border: "1px solid var(--line)", borderRadius: 12, padding: 14, marginBottom: 12 };
@@ -61,7 +68,8 @@ function BlockView({ b }: { b: Block }) {
     <div style={card}>
       <div style={eye}>{TYPE_FR[b.type] ?? b.type}</div>
       <h3 style={{ ...h, fontSize: 16 }}>{b.title}</h3>
-      {b.objective && <div style={{ fontSize: 12.5, color: "var(--fg-2)", marginBottom: 8 }}>{b.objective}</div>}
+      <CountLine units={(b as any).units} />
+      {b.objective && <div style={{ fontSize: 12.5, color: "var(--fg-2)", marginTop: 4, marginBottom: 8 }}>{b.objective}</div>}
 
       {b.type === "ONBOARDING" && (<>
         {p.momentAncrage && <div style={{ ...card, background: "var(--orange-50)" }}><div style={eye}>🎯 Moment d'Ancrage</div><div style={{ fontSize: 12.5 }}>{p.momentAncrage.promptText}</div></div>}
@@ -99,6 +107,7 @@ function BlockView({ b }: { b: Block }) {
 }
 
 export function CoursePreview({ content }: { content: Content }) {
+  const allUnits = (content.blocks ?? []).flatMap((b: any) => b.units ?? []);
   return (
     <div style={phone}>
       <div style={{ ...card, background: "linear-gradient(135deg,var(--navy-700),var(--navy-500))", color: "#fff" }}>
@@ -106,6 +115,7 @@ export function CoursePreview({ content }: { content: Content }) {
         <h2 style={{ ...h, color: "#fff", fontSize: 18, margin: "6px 0" }}>{content.title}</h2>
         {content.domain && <div style={{ fontSize: 11.5, opacity: .85 }}>{content.domain.code} · {content.domain.label}{content.competencies?.length ? ` — ${content.competencies.length} compétence(s) clé(s)` : ""}</div>}
         {content.durationEstimate && <div style={{ fontSize: 11.5, opacity: .85 }}>⏱ {content.durationEstimate}</div>}
+        <CountLine units={allUnits} dark />
       </div>
       {content.objective && <div style={{ ...card, background: "var(--orange-50)" }}><div style={eye}>🎯 Objectif</div><div style={{ fontSize: 13 }}>{content.objective}</div></div>}
       {(content.blocks ?? []).map((b) => <BlockView key={b.index} b={b} />)}
