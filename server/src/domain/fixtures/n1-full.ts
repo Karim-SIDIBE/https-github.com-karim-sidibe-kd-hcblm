@@ -371,7 +371,7 @@ export const n1Full: CourseContent = {
   summary:
     "Niveau 1 — Fondamentaux. De « occupé jamais productif » à « je contrôle mon temps dans un environnement africain à forte culture de l'urgence ».",
   objective:
-    "À la fin de ce parcours, vous saurez organiser vos priorités, protéger votre temps des interruptions et installer des habitudes de productivité durables — directement applicables à la situation que vous venez de décrire.",
+    "À la fin de ce parcours, vous saurez reprendre le contrôle de votre temps dans votre organisation africaine : distinguer l'urgent de l'important, protéger vos priorités réelles, déléguer et dire non avec élégance, et tenir des rituels adaptés à votre réalité. Concrètement, la journée que vous venez de décrire ne se reproduira plus de la même façon.",
   audience:
     "Jeunes professionnels (0–5 ans) dans des organisations africaines, débordés par les interruptions et la culture de l'urgence.",
   durationEstimate: "~7 h 30 à 8 h · 23 micro-sessions",
@@ -389,6 +389,10 @@ export const n1Full: CourseContent = {
       title: "Onboarding & Déclencheur",
       objective: "Créer un engagement personnel immédiat dans les 5 premières minutes via le Moment d'Ancrage et le profil de gestion du temps.",
       durationEstimate: "~25 min · 2 micro-sessions",
+      units: [
+        { label: "MS 0.1 — Onboarding (Moment d'Ancrage, profil, objectif, pair)", type: "micro-session", durationMin: 10 },
+        { label: "MS 0.2 — Déclencheur (Vidéo 1 + quiz)", type: "micro-session", durationMin: 15 },
+      ],
       badge: {
         type: "ENTRY",
         label: "Badge d'Entrée",
@@ -482,7 +486,16 @@ export const n1Full: CourseContent = {
       type: "COMPREHENSION",
       title: "Comprendre les dynamiques du temps en contexte africain",
       objective: "Identifier les mécanismes qui détruisent la productivité, comprendre sa relation au temps, poser les bases d'une gestion du temps adaptée.",
-      durationEstimate: "~2 h · 6 micro-sessions",
+      durationEstimate: "~2 h · 7 micro-sessions",
+      units: [
+        { label: "MS 1.0 — Quiz diagnostique", type: "micro-session", durationMin: 15 },
+        { label: "MS 1.1 — Vidéo 2 + micro-exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 1.2 — Vidéo 3 + micro-exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 1.3 — Vidéo 4 + micro-exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 1.4 — Vidéo 5 + micro-exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 1.5 — Vidéo 6 + micro-exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 1.6 — Étude de cas Nadia", type: "micro-session", durationMin: 25 },
+      ],
       badge: {
         type: "COMPREHENSION",
         label: "Badge Compréhension",
@@ -577,7 +590,14 @@ export const n1Full: CourseContent = {
       type: "PRACTICE",
       title: "Pratiquer et progresser",
       objective: "Mettre en pratique les outils dans des situations africaines réalistes, en tenant compte des codes culturels et des dynamiques hiérarchiques.",
-      durationEstimate: "~2 h à 2 h 30 · 5 micro-sessions",
+      durationEstimate: "~2 h à 2 h 30 · 3 micro-sessions + 2 activités longues",
+      units: [
+        { label: "MS 2.1 — Vidéo 7 + exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 2.2 — Vidéo 8 + exercice", type: "micro-session", durationMin: 20 },
+        { label: "MS 2.3 — Vidéo 9 + exercice", type: "micro-session", durationMin: 20 },
+        { label: "Mises en situation guidées + quiz interbloc", type: "long-activity", durationMin: 40 },
+        { label: "Application terrain (obligatoire)", type: "long-activity", durationMin: 35 },
+      ],
       badge: {
         type: "PRACTICE",
         label: "Badge Pratique",
@@ -698,7 +718,13 @@ export const n1Full: CourseContent = {
       type: "ANCHORING",
       title: "Installer des habitudes durables",
       objective: "Ancrer des habitudes durables adaptées aux réalités africaines, mesurer sa progression et finaliser un plan d'action de 30 jours.",
-      durationEstimate: "~1 h 30 · 4 micro-sessions",
+      durationEstimate: "~1 h 30 · 3 micro-sessions + 1 activité longue",
+      units: [
+        { label: "MS 3.1 — Vidéo 10 + auto-évaluation", type: "micro-session", durationMin: 20 },
+        { label: "Vidéo 11 + cas transversal de synthèse", type: "long-activity", durationMin: 30 },
+        { label: "MS 3.3 — Plan d'action 30 jours", type: "micro-session", durationMin: 20 },
+        { label: "MS 3.4 — Quiz final (noté · seuil 70 %)", type: "micro-session", durationMin: 15 },
+      ],
       badge: {
         type: "ANCHORING",
         label: "Badge Ancrage",
@@ -786,7 +812,20 @@ export const n1Full: CourseContent = {
       type: "CERTIFICATION",
       title: "Mini-projet d'application certifiant",
       objective: "Démontrer l'acquisition des fondamentaux en appliquant les apprentissages à une situation réelle dans son contexte professionnel africain.",
-      durationEstimate: "~1 h 30 · 6 micro-entrées journal",
+      durationEstimate: "~1 h 30 · 4 micro-sessions + 1 activité longue (6 micro-tâches)",
+      units: [
+        { label: "MS 4.1 — Section 1 : description de la situation", type: "micro-session", durationMin: 15 },
+        { label: "MS 4.2 — Section 2 : solution mise en œuvre", type: "micro-session", durationMin: 15 },
+        { label: "MS 4.3 — Section 3 : résultat observé", type: "micro-session", durationMin: 15 },
+        { label: "MS 4.4 — Section 4 : apprentissage personnel", type: "micro-session", durationMin: 15 },
+        { label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: 30 },
+        { label: "Journal J+1", type: "micro-task", durationMin: 5 },
+        { label: "Journal J+3", type: "micro-task", durationMin: 5 },
+        { label: "Journal J+5", type: "micro-task", durationMin: 5 },
+        { label: "Journal J+7", type: "micro-task", durationMin: 5 },
+        { label: "Journal J+10", type: "micro-task", durationMin: 5 },
+        { label: "Journal J+14", type: "micro-task", durationMin: 5 },
+      ],
       badge: {
         type: "CERTIFICATE",
         label: "Certificat de Niveau 1",
