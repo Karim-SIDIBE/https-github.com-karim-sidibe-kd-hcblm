@@ -7,7 +7,7 @@ import { navigate, routes } from "../lib/router";
 import { VideoPlayer } from "./VideoPlayer";
 import { Exercise, type ExerciseMeta, type ExerciseSpec } from "./Exercise";
 
-type Session = { id: string; title: string; video: any; exercise?: ExerciseSpec; summaryPoints?: string[] };
+type Session = { id: string; title: string; video: any; exercise?: ExerciseSpec; summaryPoints?: string[]; durationEstimate?: string };
 type Bundle = { content: { blocks: any[] }; mediaAssets?: { mediaId: string; renditions: Rendition[] }[] };
 
 export function SessionScreen({ eid, block, item }: { eid: string; block: number; item: string }) {
@@ -79,6 +79,10 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
   return (
     <div className="stack">
       <button className="ghost" onClick={() => navigate(routes.course(eid))}>← {session.title}</button>
+
+      {session.durationEstimate && (
+        <div className="meta" style={{ marginTop: -4 }}>⏱️ Cette micro-session : {session.durationEstimate}</div>
+      )}
 
       {phase === "video" && (
         <>

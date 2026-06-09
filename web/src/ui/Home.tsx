@@ -46,6 +46,7 @@ export function Home({ eid }: { eid: string }) {
   const stateOf = (i: number) => progress?.blocks.find((b) => b.index === i)?.state ?? (i === 0 ? "available" : "locked");
   const blocksDone = doneIdx.size;
   const pct = Math.round((blocksDone / blocks.length) * 100);
+  const prod = progress?.productivity;
 
   const allSessions: Session[] = blocks.flatMap((b) => {
     const done = new Set(progress?.blocks.find((x) => x.index === b.index)?.completedKeys ?? []);
@@ -77,6 +78,16 @@ export function Home({ eid }: { eid: string }) {
         <div className="hf-prog" style={{ margin: "12px 0" }}><i style={{ width: `${pct}%` }} /></div>
         <div className="row between meta"><span>{blocksDone} / {blocks.length} blocs</span>{remaining && <span>⏱️ {remaining}</span>}</div>
       </div>
+
+      {prod && (
+        <div className="hf-card hf-card--peach">
+          <div className="row between">
+            <div><div className="eyebrow">Score de productivité africaine</div><div className="meta" style={{ marginTop: 2 }}>Monte à chaque exercice complété</div></div>
+            <span className="num accent" style={{ fontSize: 30 }}>{prod.score}<span style={{ fontSize: 15 }}>/100</span></span>
+          </div>
+          <div className="hf-prog" style={{ margin: "12px 0 0" }}><i style={{ width: `${prod.score}%` }} /></div>
+        </div>
+      )}
 
       <div>
         <div className="eyebrow" style={{ marginBottom: 8 }}>Votre parcours</div>
