@@ -200,22 +200,57 @@ function buildFromDocRequest(scaffold: CourseContentT, rawText: string): ClaudeR
 /** Default neutral brief for an import — the designer sets the real domain after. */
 const IMPORT_BRIEF: CourseBrief = { domainCode: "D1", domainLabel: "À définir", level: 1 };
 
+const MS_BLOCK_TYPES = new Set(["COMPREHENSION", "PRACTICE", "ANCHORING"]);
+
 /**
  * Build a DRAFT course from imported paragraphs.
- * Deterministic backbone: a valid scaffold whose title/objective/block titles
- * are overridden from the document, plus a per-block bucket of raw text
- * (`blockNotes`) for manual dispatch. When an AI key is configured, the raw
- * text is additionally mapped into the structured fields; otherwise the
- * scaffold stands and the designer dispatches the notes by hand.
+ * Deterministic backbone: a valid scaffold enriched from the document. The
+ * coarse pass fills title/objective/block titles + a per-block bucket of raw
+ * text (`blockNotes`). The fine pass maps KD-HCBLM house conventions
+ * (MICRO-SESSION X.Y, Vidéo N, MESSAGE CLÉ, EXEMPLE AFRICAIN, ERREUR À ÉVITER,
+ * durations) into real micro-session + video fields — no AI. When an AI key is
+ * configured it additionally maps the rest; otherwise the scaffold stands and
+ * the designer dispatches the leftover notes by hand. The PAM exercise
+ * touchpoint is preserved (first Comprehension micro-session).
  */
 export async function draftCourseFromDoc(paras: DocParagraph[]): Promise<ImportResult> {
   const seg = segmentImportedDoc(paras);
   const scaffold = buildScaffold(IMPORT_BRIEF);
   if (seg.title) scaffold.title = seg.title;
   if (seg.objective) scaffold.objective = seg.objective;
+
   for (const b of scaffold.blocks) {
     const t = seg.blockTitles[b.index];
     if (t) b.title = t;
+    const obj = seg.blockObjectives[b.index];
+    if (obj) b.objective = obj;
+    const pl = b.payload as any;
+
+    // Fine pass: rebuild micro-sessions from the document (skip X.0 = quiz/diagnostic).
+    const parsed = (seg.blockSessions[b.index] ?? []).filter((s) => s.minor > 0);
+    if (MS_BLOCK_TYPES.has(b.type) && parsed.length && Array.isArray(pl.microSessions)) {
+      pl.microSessions = parsed.map((s, i) => {
+        const withPam = b.type === "COMPREHENSION" && i === 0; // preserve the PAM exercise touchpoint
+        const sess = ms(s.id, s.video.title || s.title || `Micro-session ${s.id}`, withPam) as any;
+        if (s.durationEstimate) sess.durationEstimate = s.durationEstimate;
+        if (s.video.title) sess.video.title = s.video.title;
+        if (s.video.keyMessage) sess.video.keyMessage = s.video.keyMessage;
+        if (s.video.africanExample) sess.video.africanExample = s.video.africanExample;
+        if (s.video.errorToAvoid) sess.video.errorToAvoid = s.video.errorToAvoid;
+        return sess;
+      });
+    }
+
+    // Bloc 0: map the "déclencheur" session's video into the trigger video.
+    if (b.type === "ONBOARDING" && pl.triggerVideo) {
+      const trig = (seg.blockSessions[b.index] ?? []).find((s) => s.video.title || s.video.keyMessage);
+      if (trig) {
+        if (trig.video.title) pl.triggerVideo.title = trig.video.title;
+        if (trig.video.keyMessage) pl.triggerVideo.keyMessage = trig.video.keyMessage;
+        if (trig.video.africanExample) pl.triggerVideo.africanExample = trig.video.africanExample;
+        if (trig.video.errorToAvoid) pl.triggerVideo.errorToAvoid = trig.video.errorToAvoid;
+      }
+    }
   }
 
   let content = scaffold;
