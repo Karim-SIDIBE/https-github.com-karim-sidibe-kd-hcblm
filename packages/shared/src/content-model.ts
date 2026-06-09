@@ -340,10 +340,28 @@ const CertificationPayload = z.object({
 // Block — discriminated by type/index, payload keyed under `payload`
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Unit typology (KD-HCBLM v2.1, Corrections 2-4) — auditable per-block counts.
+// Designer-declared so the totals never mix unit types and stay auditable.
+// ---------------------------------------------------------------------------
+
+export const UnitType = z.enum(["micro-session", "long-activity", "micro-task"]);
+export type UnitType = z.infer<typeof UnitType>;
+
+export const BlockUnit = z.object({
+  label: nonEmpty("intitulé de l'unité"),
+  type: UnitType,
+  durationMin: z.number().int().positive().optional(),
+});
+export type BlockUnit = z.infer<typeof BlockUnit>;
+
 const BlockBase = z.object({
   title: nonEmpty("titre du bloc"),
   objective: z.string().default(""),
   durationEstimate: z.string().default(""),
+  /// Explicit, designer-declared units for auditable counting (v2.1). Optional
+  /// for backward compatibility; when absent the block shows no breakdown.
+  units: z.array(BlockUnit).optional(),
   badge: BlockBadge,
 });
 
@@ -355,6 +373,24 @@ export const Block = z.discriminatedUnion("type", [
   BlockBase.extend({ index: z.literal(4), type: z.literal("CERTIFICATION"), payload: CertificationPayload }),
 ]);
 export type Block = z.infer<typeof Block>;
+
+/** Per-block / whole-course unit counts, kept strictly separated by type. */
+export type UnitCounts = { microSessions: number; longActivities: number; microTasks: number };
+export function blockUnitCounts(units?: { type: string }[] | null): UnitCounts {
+  const c: UnitCounts = { microSessions: 0, longActivities: 0, microTasks: 0 };
+  for (const u of units ?? []) {
+    if (u.type === "micro-session") c.microSessions++;
+    else if (u.type === "long-activity") c.longActivities++;
+    else if (u.type === "micro-task") c.microTasks++;
+  }
+  return c;
+}
+export function courseUnitTotals(blocks: { units?: { type: string }[] | null }[]): UnitCounts {
+  return blocks.reduce<UnitCounts>((acc, b) => {
+    const c = blockUnitCounts(b.units);
+    return { microSessions: acc.microSessions + c.microSessions, longActivities: acc.longActivities + c.longActivities, microTasks: acc.microTasks + c.microTasks };
+  }, { microSessions: 0, longActivities: 0, microTasks: 0 });
+}
 
 // ---------------------------------------------------------------------------
 // Course (the full content document)

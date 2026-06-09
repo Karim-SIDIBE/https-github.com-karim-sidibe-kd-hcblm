@@ -121,6 +121,14 @@ export function Course({ eid }: { eid: string }) {
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
             <div className="row between"><h3 style={{ margin: 0 }}>{b.index}. {b.title}</h3>{STATE(st)}</div>
+            {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
+              const c = { ms: 0, la: 0, mt: 0 };
+              for (const u of (b as any).units) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; }
+              const parts = [`${c.ms} micro-session${c.ms > 1 ? "s" : ""}`];
+              if (c.la) parts.push(`${c.la} activité${c.la > 1 ? "s" : ""} longue${c.la > 1 ? "s" : ""}`);
+              if (c.mt) parts.push(`${c.mt} micro-tâche${c.mt > 1 ? "s" : ""}`);
+              return <div className="meta" style={{ marginTop: 4 }}>{parts.join(" · ")}</div>;
+            })()}
             <div className="stack" style={{ marginTop: 12 }}>
               {items.map((it) => {
                 const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");
