@@ -13,6 +13,26 @@ test("fresh enrolment: Bloc 0 available, others locked", () => {
   assert.equal(p.courseCompleted, false);
 });
 
+test("productivity score (dispositif #2): 0 fresh, rises with completion, reflects quiz scores", () => {
+  // Fresh enrolment → no units earned.
+  assert.equal(computeProgress(content, [], false).productivity.score, 0);
+
+  // Capturing the Moment d'Ancrage alone already moves the score (Pilier 6.5).
+  const pamOnly = computeProgress(content, [], true).productivity;
+  assert.ok(pamOnly.score > 0, "PAM should move the score off zero");
+
+  // A scored item earns only its score fraction, not a full unit.
+  const lowQuiz: CompletionRecord[] = [{ blockIndex: 0, itemKey: "trigger", scorePct: null }];
+  const half = computeProgress(content, [...lowQuiz, { blockIndex: 1, itemKey: "diagnostic", scorePct: 50 }], true).productivity;
+  const full = computeProgress(content, [...lowQuiz, { blockIndex: 1, itemKey: "diagnostic", scorePct: 100 }], true).productivity;
+  assert.ok(full.earned > half.earned, "higher quiz score earns more");
+
+  // Fully completing every required item with perfect scores → 100.
+  const all: CompletionRecord[] = content.blocks.flatMap((b) =>
+    blockRequirements(b).map((r) => ({ blockIndex: b.index, itemKey: r.key, scorePct: r.minScore != null ? 100 : null })));
+  assert.equal(computeProgress(content, all, true).productivity.score, 100);
+});
+
 test("Bloc 0 needs the Moment d'Ancrage even with items done", () => {
   const recs: CompletionRecord[] = [
     { blockIndex: 0, itemKey: "profile", scorePct: null },

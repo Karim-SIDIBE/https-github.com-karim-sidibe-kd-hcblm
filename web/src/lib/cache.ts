@@ -10,6 +10,7 @@ export type ProgressSnapshot = {
   completedBlockIndexes: number[];
   currentBlockIndex: number;
   courseCompleted: boolean;
+  productivity?: { score: number; earned: number; total: number };
 };
 export type ResumeSnapshot = { blockIndex: number; itemKey: string; positionSec: number; durationSec: number | null } | null;
 

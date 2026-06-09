@@ -115,6 +115,15 @@ export type ProgressResult = {
   /** Index of the furthest unlocked block. */
   currentBlockIndex: number;
   courseCompleted: boolean;
+  /**
+   * Dynamic "score de productivité africaine" (Pilier 6.1, dispositif #2):
+   * 0–100, rising as required items are completed and quizzes scored.
+   * Deterministic — every required item across the 5 blocks carries one unit;
+   * a completed non-scored item earns its full unit, a scored item earns a
+   * fraction equal to its score. The Moment d'Ancrage is the very first unit
+   * (Pilier 6.5) so the score moves within the first 5 minutes.
+   */
+  productivity: { score: number; earned: number; total: number };
 };
 
 /**
@@ -130,12 +139,24 @@ export function computeProgress(
   const blocks: BlockProgress[] = [];
   const completedBlockIndexes: number[] = [];
   let previousCompleted = true; // Bloc 0 is always reachable.
+  let prodEarned = 0; // dynamic productivity score (dispositif #2)
+  let prodTotal = 0;
 
   for (const block of content.blocks) {
     const required = blockRequirements(block);
     const recs = completions.filter((c) => c.blockIndex === block.index);
     const byKey = new Map(recs.map((c) => [c.itemKey, c]));
     const completedKeys = recs.map((c) => c.itemKey);
+
+    // Productivity score: one unit per required item; a recorded scored item
+    // earns its score fraction, any other recorded item earns its full unit.
+    for (const r of required) {
+      prodTotal++;
+      const rec = byKey.get(r.key);
+      if (rec) prodEarned += rec.scorePct != null ? Math.max(0, Math.min(1, rec.scorePct / 100)) : 1;
+    }
+    // The Moment d'Ancrage is the very first productivity unit (Pilier 6.5).
+    if (block.type === "ONBOARDING") { prodTotal++; if (hasMomentAncrage) prodEarned++; }
 
     const missing = required.filter((r) => !isSatisfied(r, byKey));
 
@@ -169,8 +190,13 @@ export function computeProgress(
   const currentBlockIndex = blocks.find((b) => b.state === "available")?.index
     ?? blocks[blocks.length - 1]!.index;
   const courseCompleted = completedBlockIndexes.length === content.blocks.length;
+  const productivity = {
+    score: prodTotal === 0 ? 0 : Math.round((prodEarned / prodTotal) * 100),
+    earned: Math.round(prodEarned * 100) / 100,
+    total: prodTotal,
+  };
 
-  return { blocks, completedBlockIndexes, currentBlockIndex, courseCompleted };
+  return { blocks, completedBlockIndexes, currentBlockIndex, courseCompleted, productivity };
 }
 
 /** Score a quiz: answers map questionId → chosen option key. */
