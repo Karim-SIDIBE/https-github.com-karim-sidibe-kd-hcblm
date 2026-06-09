@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CourseContent } from "@kd/shared";
-import { api, engine, store } from "../lib/app";
+import { api, engine, store, getIdentity } from "../lib/app";
 import { rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
@@ -15,7 +15,7 @@ export function Home({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
   const [resume, setResume] = useState<ResumeSnapshot>(() => getCachedResume(eid));
-  const [name, setName] = useState("");
+  const [name, setName] = useState(() => getIdentity()?.name?.trim().split(" ")[0] ?? "");
   const [peer, setPeer] = useState<{ name: string; notified: boolean } | null>(null);
 
   const refresh = useCallback(async () => {

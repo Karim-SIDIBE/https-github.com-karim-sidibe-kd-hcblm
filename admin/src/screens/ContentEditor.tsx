@@ -348,16 +348,6 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
               </div>
             </Card>
           )}
-          {tv && (
-            <Card title="🎬 Vidéo déclencheur" action={<MediaPicker media={media} onPick={(m) => set((c) => { const v = c.blocks[ri].payload.triggerVideo; v.mediaId = m.id; if (m.durationSec) v.durationSec = m.durationSec; if (!v.title || v.title === "Vidéo") v.title = m.filename ?? v.title; })} />}>
-              <div className="row between"><span className="muted" style={{ fontSize: 12 }}>{tv.mediaId ? `Liée : ${media.find((m) => m.id === tv.mediaId)?.filename ?? tv.mediaId}` : "Aucune vidéo liée"}</span>{tv.mediaId && <button className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.triggerVideo.mediaId = undefined; })}>Délier</button>}</div>
-              <div className="row" style={{ gap: 10 }}>
-                <div style={{ flex: 1 }}><label style={lbl}>Titre</label><input style={field} value={tv.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.title = e.target.value; })} /></div>
-                <div style={{ width: 120 }}><label style={lbl}>Durée (sec)</label><input style={field} type="number" min={1} value={tv.durationSec ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.durationSec = Number(e.target.value); })} /></div>
-              </div>
-              <div><label style={lbl}>Message clé</label><input style={field} value={tv.keyMessage ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.keyMessage = e.target.value; })} /></div>
-            </Card>
-          )}
           {p.profileChoices && (
             <Card title="Profils d'auto-identification">
               {p.profileChoices.map((pc: any, i: number) => (
@@ -369,6 +359,16 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
                 </div>
               ))}
               <button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.profileChoices.push({ key: KEYS[c.blocks[ri].payload.profileChoices.length] ?? "X", name: "", description: "" }); })}>+ Profil</button>
+            </Card>
+          )}
+          {tv && (
+            <Card title="🎬 Vidéo déclencheur" action={<MediaPicker media={media} onPick={(m) => set((c) => { const v = c.blocks[ri].payload.triggerVideo; v.mediaId = m.id; if (m.durationSec) v.durationSec = m.durationSec; if (!v.title || v.title === "Vidéo") v.title = m.filename ?? v.title; })} />}>
+              <div className="row between"><span className="muted" style={{ fontSize: 12 }}>{tv.mediaId ? `Liée : ${media.find((m) => m.id === tv.mediaId)?.filename ?? tv.mediaId}` : "Aucune vidéo liée"}</span>{tv.mediaId && <button className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.triggerVideo.mediaId = undefined; })}>Délier</button>}</div>
+              <div className="row" style={{ gap: 10 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Titre</label><input style={field} value={tv.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.title = e.target.value; })} /></div>
+                <div style={{ width: 120 }}><label style={lbl}>Durée (sec)</label><input style={field} type="number" min={1} value={tv.durationSec ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.durationSec = Number(e.target.value); })} /></div>
+              </div>
+              <div><label style={lbl}>Message clé</label><input style={field} value={tv.keyMessage ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.keyMessage = e.target.value; })} /></div>
             </Card>
           )}
           {p.triggerQuiz && <Card title="Quiz déclencheur (non noté)"><TriggerQuestions questions={p.triggerQuiz.questions} path={(c) => c.blocks[ri].payload.triggerQuiz.questions} set={set} /></Card>}
@@ -513,7 +513,7 @@ export function ContentEditor({ content, set, blockNotes, onClearNote }: { conte
         </div>
       </div>
       <div className="row" style={{ gap: 6, marginBottom: 14, flexWrap: "wrap" }}>
-        {blocks.map((b, i) => <button key={b.index} className={`btn btn--sm ${i === bi ? "btn--primary" : ""}`} onClick={() => setBi(i)}>Bloc {b.index} · {TYPE_FR[b.type] ?? b.type}</button>)}
+        {blocks.map((b, i) => <button key={b.index} className={`btn btn--sm ${i === bi ? "btn--primary" : ""}`} onClick={() => setBi(i)} title={b.title}>Bloc {b.index} · {b.title || TYPE_FR[b.type] || b.type}</button>)}
       </div>
       <BlockEditor block={block} ri={ri} media={media} set={set} note={blockNotes?.[block.index]} onClearNote={onClearNote ? () => onClearNote(block.index) : undefined} />
     </div>

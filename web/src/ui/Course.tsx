@@ -120,7 +120,7 @@ export function Course({ eid }: { eid: string }) {
         const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b);
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
-            <div className="row between"><h3 style={{ margin: 0 }}>{b.index}. {b.title}</h3>{STATE(st)}</div>
+            <div className="row between"><h3 style={{ margin: 0 }}>Bloc {b.index} · {b.title}</h3>{STATE(st)}</div>
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
               for (const u of (b as any).units) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; }
