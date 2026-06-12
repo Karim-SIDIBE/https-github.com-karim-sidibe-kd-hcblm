@@ -1,0 +1,12 @@
+# Décisions d'architecture (ADR)
+
+Notes de décision d'architecture du projet. **Documentation seule** — ces fichiers
+ne modifient pas le code et servent à tracer les choix structurants.
+
+| # | Sujet | Statut |
+|---|-------|--------|
+| [0001](./0001-lms-foundation-build-vs-buy.md) | Socle LMS : construire (custom) ou acheter (Moodle) ? | Proposé — en exploration |
+| [0002](./0002-moodle-poc-plan.md) | Plan de PoC Moodle headless (borné, jetable, critères go/no-go) | Proposé — non démarré |
+
+> Branche d'exploration : `feat/moodle-exploration`. `main` et le point de
+> restauration `checkpoint-20260612-studio-pilier6-import` restent intouchés.
