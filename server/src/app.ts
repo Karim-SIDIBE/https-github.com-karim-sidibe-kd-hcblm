@@ -87,7 +87,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Uniform validation-error shape for Zod failures raised inside handlers.
-  app.setErrorHandler((err, _req, reply) => {
+  // Fastify v5 types the error as `unknown`; narrow before use.
+  app.setErrorHandler((err: unknown, _req, reply) => {
     if (err instanceof ZodError) {
       return reply.status(400).send({
         error: "validation_error",
@@ -95,11 +96,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
     app.log.error({ err }, "unhandled error");
-    const status = err.statusCode ?? 500;
+    const e = err as { statusCode?: number; name?: string; message?: string };
+    const status = e.statusCode ?? 500;
     // Don't leak internal error details on 5xx in production (info disclosure).
     // 4xx messages (validation, not-found, conflicts…) stay informative.
-    const message = status >= 500 && env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
-    return reply.status(status).send({ error: err.name ?? "internal_error", message });
+    const message = status >= 500 && env.NODE_ENV === "production" ? "Erreur interne du serveur" : e.message;
+    return reply.status(status).send({ error: e.name ?? "internal_error", message });
   });
 
   await app.register(
