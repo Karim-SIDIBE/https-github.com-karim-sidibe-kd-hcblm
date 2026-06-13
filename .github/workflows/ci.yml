@@ -42,3 +42,18 @@ jobs:
         run: npm -w web run build
         env:
           VITE_API_URL: https://api.declick.digital/api/v1
+
+  # Dé-risquage (ADR 0001/0003) : visibilité continue sur les vulnérabilités de
+  # dépendances. N'échoue pas le build tant que la montée fastify v5 /
+  # fast-xml-parser v5 n'est pas planifiée — sert d'alerte, pas de blocage.
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: npm audit (prod dependencies)
+        run: npm audit --omit=dev || true

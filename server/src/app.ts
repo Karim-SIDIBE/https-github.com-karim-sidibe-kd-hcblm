@@ -75,7 +75,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
     app.log.error({ err }, "unhandled error");
-    return reply.status(err.statusCode ?? 500).send({ error: err.name ?? "internal_error", message: err.message });
+    const status = err.statusCode ?? 500;
+    // Don't leak internal error details on 5xx in production (info disclosure).
+    // 4xx messages (validation, not-found, conflicts…) stay informative.
+    const message = status >= 500 && env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
+    return reply.status(status).send({ error: err.name ?? "internal_error", message });
   });
 
   await app.register(
