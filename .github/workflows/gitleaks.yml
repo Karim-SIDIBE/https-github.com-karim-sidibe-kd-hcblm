@@ -1,0 +1,18 @@
+# Détection de secrets commités (clés, tokens, mots de passe) — Lot 1bis.
+# Complète CodeQL (SAST) : gitleaks scanne l'historique et les diffs.
+name: gitleaks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # historique complet pour scanner les commits
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

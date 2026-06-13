@@ -85,6 +85,9 @@ const EnvSchema = z.object({
   LOGIN_LOCK_MINUTES: z.coerce.number().int().positive().default(15),
   RATE_LIMIT_MAX: z.coerce.number().int().positive().default(300), // per IP per minute (global)
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10), // per IP per minute (auth)
+  /// Reject passwords found in known breaches (HIBP, k-anonymity). Opt-out for
+  /// air-gapped / strict-no-egress deployments; graceful if HIBP is unreachable.
+  PASSWORD_BREACH_CHECK: z.coerce.boolean().default(true),
   /// Dev-only `x-user-id` escape hatch. Defaults on outside production.
   AUTH_DEV_HEADER: z
     .enum(["true", "false"]).transform((s) => s === "true").optional(),
