@@ -104,6 +104,12 @@ function newBackupCodes(n = 10): { clear: string[]; hashes: string[] } {
   return { clear, hashes: clear.map(hashCode) };
 }
 
+/** Whether 2FA is currently active for a user. */
+export async function twoFactorStatus(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { totpEnabledAt: true } });
+  return { enabled: !!user?.totpEnabledAt };
+}
+
 /** Begin 2FA enrolment: store a pending secret, return it + the otpauth URI. */
 export async function setupTotp(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });

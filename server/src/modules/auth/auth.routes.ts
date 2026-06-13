@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin } from "./auth.service.js";
+import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin, twoFactorStatus } from "./auth.service.js";
 import { publicJwks } from "../../lib/auth/keys.js";
 import { authenticate } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
@@ -87,6 +87,9 @@ export async function authRoutes(app: FastifyInstance) {
     const { challenge, code } = z.object({ challenge: z.string().min(1), code: z.string().trim().min(6) }).parse(req.body);
     try { return await verifyTwoFactorLogin(challenge, code, req.ip); } catch (err) { return mapErr(reply, err); }
   });
+
+  // Current 2FA status (to drive the settings UI).
+  app.get("/auth/2fa/status", { preHandler: authenticate }, async (req) => ({ data: await twoFactorStatus(req.principal!.id) }));
 
   // Begin enrolment → returns the secret + otpauth URI (render as a QR code).
   app.post("/auth/2fa/setup", { preHandler: authenticate }, async (req, reply) => {
