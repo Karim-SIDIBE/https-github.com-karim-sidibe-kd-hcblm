@@ -1,6 +1,7 @@
 /** Fastify app factory — wires plugins and route modules. */
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import sensible from "@fastify/sensible";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
@@ -43,6 +44,25 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(",").map((o) => o.trim()) : true,
   });
+
+  // Security headers (defense in depth, in addition to the edge proxy). LMS-aware
+  // config: we deliberately DO NOT enable the headers that break standard LMS
+  // flows, and enable the ones that are pure wins:
+  //   - CSP off here: the API serves JSON + the SAML ACS auto-POST HTML form and
+  //     LTI launch HTML; CSP belongs on the static front-ends (served by Caddy).
+  //   - frameguard off: an LTI *tool* launch is rendered inside the consumer LMS
+  //     iframe — X-Frame-Options: DENY would break it.
+  //   - CORP cross-origin: media is served to the PWA on a different sub-domain.
+  // Still emitted: X-Content-Type-Options=nosniff, Strict-Transport-Security,
+  // Referrer-Policy, X-DNS-Prefetch-Control, Origin-Agent-Cluster, no X-Powered-By.
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    frameguard: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+  });
+
   await app.register(sensible);
   // Global IP rate limit (per minute). Auth routes get a stricter cap below.
   await app.register(rateLimit, { global: true, max: env.RATE_LIMIT_MAX, timeWindow: "1 minute" });

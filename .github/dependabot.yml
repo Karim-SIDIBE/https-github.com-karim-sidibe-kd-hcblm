@@ -1,0 +1,21 @@
+# Veille et mises à jour de dépendances (dé-risquage, ADR 0003/0004).
+# Dependabot ouvre des PR groupées chaque semaine ; la CI (typecheck/tests/audit)
+# les valide. Cadence de patch = l'écart principal vs Moodle, ici automatisé.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 10
+    groups:
+      # Mises à jour mineures/patch regroupées pour limiter le bruit.
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    # Les montées majeures (ex. fastify v5) restent en PR séparées, à traiter
+    # comme des tâches dédiées et testées (cf. Lot 2).
+
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
