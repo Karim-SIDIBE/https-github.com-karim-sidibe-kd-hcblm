@@ -41,8 +41,28 @@ cp deploy/.env.example deploy/.env
 docker run --rm -v "$PWD":/app -w /app/server node:22-slim sh -c "npm i -g tsx >/dev/null 2>&1; npx tsx scripts/keygen.ts"
 # (ou, si Node 22 est installé sur le VPS :  cd server && npm ci && npx tsx scripts/keygen.ts)
 
-nano deploy/.env   # remplir POSTGRES_PASSWORD + les 2 clés ; vérifier les URLs declick.digital
+# Clé de chiffrement au repos des champs sensibles (secret 2FA) — à générer UNE fois :
+openssl rand -base64 32        # copie le résultat dans FIELD_ENCRYPTION_KEY (deploy/.env)
+
+nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KEY ; vérifier les URLs
 ```
+
+> **Chiffrement au repos.** `FIELD_ENCRYPTION_KEY` chiffre les colonnes sensibles
+> (secret TOTP) au niveau applicatif : une fuite de la seule base ne les expose pas.
+> Garde la clé **hors base** et **sauvegarde-la** (la perdre rend les secrets 2FA
+> illisibles → les utilisateurs devront réactiver la 2FA). Pour le disque lui-même,
+> active le **chiffrement de volume** chez LWS (ou LUKS) — défense complémentaire.
+
+> **Antivirus des uploads (optionnel mais recommandé).** Sans configuration, les
+> uploads subissent un scan heuristique (signature de test EICAR + refus des
+> exécutables). Pour un vrai moteur, ajoute un service ClamAV au compose puis
+> `CLAMAV_HOST=clamav` dans `deploy/.env` :
+> ```yaml
+>   clamav:
+>     image: clamav/clamav:stable
+>     restart: unless-stopped
+>     mem_limit: 1536m
+> ```
 
 ## 4. Lancer la stack
 
