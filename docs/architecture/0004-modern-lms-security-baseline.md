@@ -19,7 +19,7 @@ Légende : ✅ en place · ⚠️ partiel / à valider · ❌ absent (à constru
 | Pas de fuite d'erreur (5xx) | ✅ | durci — **Lot 1 précédent** |
 | Scan de dépendances (CVE) | ✅ | CI `npm audit` + **Dependabot** — Lot 1 |
 | Analyse statique (SAST) | ✅ | **CodeQL** `security-extended` — Lot 1 |
-| Détection de secrets commités | ⚠️ | activer **gitleaks** / GitHub secret scanning — Lot 1bis |
+| Détection de secrets commités | ✅ | **gitleaks** en CI — Lot 1bis fait |
 | CSP sur les front-ends (Caddy) | ⚠️ | définir une CSP stricte côté PWA/admin (Caddyfile) — Lot 6 |
 
 ## B. Authentification
@@ -28,8 +28,8 @@ Légende : ✅ en place · ⚠️ partiel / à valider · ❌ absent (à constru
 |---|---|---|
 | Hash mots de passe mémoire-dur | ✅ | argon2 |
 | SSO entreprise (OIDC / SAML / SCIM) | ✅ | déjà présent |
-| **MFA / 2FA (TOTP)** | ❌ | **à construire** (standard LMS pro) — **Lot 3** |
-| Politique de mot de passe + **vérif. fuite (HIBP k-anonymity)** | ⚠️ | renforcer à l'inscription/màj — Lot 3 |
+| **MFA / 2FA (TOTP)** | ✅ | RFC 6238, pur Node, codes de secours — **Lot 3 fait** |
+| Politique de mot de passe + **vérif. fuite (HIBP k-anonymity)** | ✅ | inscription + reset — **Lot 3 fait** |
 | Verrouillage anti-bruteforce | ✅ | lockout |
 
 ## C. Autorisation
@@ -45,7 +45,7 @@ Légende : ✅ en place · ⚠️ partiel / à valider · ❌ absent (à constru
 | Contrôle | Statut | Action |
 |---|---|---|
 | Accès courte durée + refresh | ✅ | refresh tokens |
-| **Rotation + détection de réutilisation** du refresh | ⚠️ | valider/ajouter (anti-vol de jeton) — **Lot 3** |
+| **Rotation + détection de réutilisation** du refresh | ✅ | **déjà implémenté** (RFC 9700) — confirmé à l'audit |
 | Révocation / gestion des sessions & appareils | ❌ | écran « mes sessions » + révocation — Lot 4 |
 
 ## E. Protection des données
@@ -106,9 +106,9 @@ Légende : ✅ en place · ⚠️ partiel / à valider · ❌ absent (à constru
 | Lot | Contenu | Risque | Type |
 |---|---|---|---|
 | **1** | helmet · SECURITY.md · Dependabot · CodeQL · audit CI · 5xx durci | Faible | ✅ **fait (ce passage + précédent)** |
-| **1bis** | gitleaks / secret scanning · vérifier `CORS_ORIGINS` prod | Faible | Rapide |
-| **2** | Montée **fastify v5** + fast-xml-parser v5 (ferme G2 + durcit XML) | Moyen | Tâche dédiée testée |
-| **3** | **2FA TOTP** · rotation/détection refresh · politique mdp + HIBP | Moyen | Fonctionnalités |
+| **1bis** | gitleaks/secret scanning · garde `CORS_ORIGINS` en prod | Faible | ✅ **fait** |
+| **2** | Montée **fastify v5** + fast-xml-parser v5 (ferme les 6 CVE prod + durcit XML) | Moyen | ✅ **fait** |
+| **3** | **2FA TOTP** + codes de secours · politique mdp + HIBP (rotation refresh déjà en place) | Moyen | ✅ **fait** |
 | **4** | **RGPD** : effacement · rétention/purge · consentement · sessions/révocation | Moyen | Fonctionnalités |
 | **5** | Chiffrement au repos (volume + champs) · secrets manager · moindre privilège BD · restauration testée | Moyen-élevé | Infra + code |
 | **6** | AV upload (ClamAV) · CSP front (Caddy) · durcissement conteneur · supervision/alerting · WAF | Moyen | Infra + ops |

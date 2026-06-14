@@ -19,6 +19,7 @@ import { Certificats } from "./screens/Certificats";
 import { Cours } from "./screens/Cours";
 import { Medias } from "./screens/Medias";
 import { Settings } from "./screens/Settings";
+import { Security } from "./screens/Security";
 import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
@@ -44,6 +45,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Système", items: [
     { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
+    { id: "security", label: "Sécurité (2FA)", Icon: ISettings, roles: [A, C, I, E, D, R, EC, EM] },
     { id: "settings", label: "Réglages", Icon: ISettings, roles: [A, C] },
   ]},
 ];
@@ -131,7 +133,7 @@ export function App() {
           <div className="spacer" />
           <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
         </header>
-        {!courseId && view !== "settings" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" ? (
+        {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
           : view === "users" ? <Utilisateurs />
@@ -147,6 +149,7 @@ export function App() {
           : view === "courses" ? <Cours ctx={ctx} />
           : view === "medias" ? <Medias />
           : view === "settings" ? <Settings />
+          : view === "security" ? <Security />
           : <Soon title={TITLES[view] ?? "Module"} />}
       </div>
     </div>

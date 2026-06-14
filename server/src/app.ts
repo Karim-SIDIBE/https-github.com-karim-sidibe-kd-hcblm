@@ -41,6 +41,10 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Restrict CORS to the configured front-end origins in production; reflect any
   // origin when CORS_ORIGINS is unset (dev).
+  // Defense-in-depth: never silently reflect any origin in production.
+  if (env.NODE_ENV === "production" && !env.CORS_ORIGINS) {
+    app.log.warn("CORS_ORIGINS non défini en production — toutes les origines sont reflétées. Définissez CORS_ORIGINS dans deploy/.env.");
+  }
   await app.register(cors, {
     origin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(",").map((o) => o.trim()) : true,
   });

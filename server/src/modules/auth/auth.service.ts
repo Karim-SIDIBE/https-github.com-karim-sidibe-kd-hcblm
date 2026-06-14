@@ -10,7 +10,9 @@ import { createHash, randomBytes, randomUUID, randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import { verifyPassword, hashPassword } from "../../lib/auth/password.js";
-import { signAccessToken } from "../../lib/auth/jwt.js";
+import { signAccessToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from "../../lib/auth/jwt.js";
+import { generateTotpSecret, verifyTotp, otpauthUrl } from "../../lib/auth/totp.js";
+import { isPasswordPwned } from "../../lib/auth/pwned.js";
 import { audit } from "../../lib/audit.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { otpMessage } from "../../lib/notify/templates.js";
@@ -81,7 +83,91 @@ export async function login(email: string, password: string, ip?: string) {
     await audit({ actorId: user.id, action: "auth.login.unverified", ip, meta: { email } });
     throw new AuthError("email_unverified", "E-mail non vérifié — saisissez le code reçu par e-mail");
   }
+  // Second factor: if 2FA is active, the password is not enough — return a
+  // short-lived challenge instead of tokens. The client then calls /auth/2fa/verify.
+  if (user.totpEnabledAt) {
+    await audit({ actorId: user.id, action: "auth.login.2fa_required", ip });
+    return { twoFactorRequired: true as const, challenge: await signTwoFactorChallenge(user.id) };
+  }
+
   await audit({ actorId: user.id, action: "auth.login.success", ip });
+  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+}
+
+// --- two-factor (TOTP) -------------------------------------------------------
+
+const hashCode = (c: string) => sha256(c.replace(/\s+/g, ""));
+
+/** Generate fresh backup codes (returned once in clear; stored only as hashes). */
+function newBackupCodes(n = 10): { clear: string[]; hashes: string[] } {
+  const clear = Array.from({ length: n }, () => `${randomBytes(5).toString("hex")}`); // 10 hex chars
+  return { clear, hashes: clear.map(hashCode) };
+}
+
+/** Whether 2FA is currently active for a user. */
+export async function twoFactorStatus(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { totpEnabledAt: true } });
+  return { enabled: !!user?.totpEnabledAt };
+}
+
+/** Begin 2FA enrolment: store a pending secret, return it + the otpauth URI. */
+export async function setupTotp(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AuthError("not_found", "Utilisateur introuvable");
+  if (user.totpEnabledAt) throw new AuthError("already_enabled", "2FA déjà activée");
+  const secret = generateTotpSecret();
+  await prisma.user.update({ where: { id: userId }, data: { totpSecret: secret } });
+  return { secret, otpauthUrl: otpauthUrl(secret, user.email) };
+}
+
+/** Confirm enrolment: verify a code against the pending secret, then activate
+ *  2FA and issue one-time backup codes (shown once). */
+export async function enableTotp(userId: string, code: string, ip?: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) throw new AuthError("not_found", "Utilisateur introuvable");
+  if (user.totpEnabledAt) throw new AuthError("already_enabled", "2FA déjà activée");
+  if (!user.totpSecret) throw new AuthError("no_setup", "Démarrez d'abord la configuration 2FA");
+  if (!verifyTotp(user.totpSecret, code)) throw new AuthError("invalid_code", "Code 2FA invalide");
+  const { clear, hashes } = newBackupCodes();
+  await prisma.user.update({ where: { id: userId }, data: { totpEnabledAt: new Date(), totpBackupCodes: hashes } });
+  await audit({ actorId: userId, action: "auth.2fa.enabled", ip });
+  return { enabled: true as const, backupCodes: clear };
+}
+
+/** Disable 2FA after proving possession (TOTP code or a backup code). */
+export async function disableTotp(userId: string, code: string, ip?: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.totpEnabledAt || !user.totpSecret) throw new AuthError("not_enabled", "2FA non activée");
+  const okTotp = verifyTotp(user.totpSecret, code);
+  const okBackup = user.totpBackupCodes.includes(hashCode(code));
+  if (!okTotp && !okBackup) throw new AuthError("invalid_code", "Code 2FA invalide");
+  await prisma.user.update({ where: { id: userId }, data: { totpSecret: null, totpEnabledAt: null, totpBackupCodes: [] } });
+  await audit({ actorId: userId, action: "auth.2fa.disabled", ip });
+  return { disabled: true as const };
+}
+
+/** Complete login: validate the challenge + a TOTP or backup code → issue tokens. */
+export async function verifyTwoFactorLogin(challenge: string, code: string, ip?: string) {
+  let userId: string;
+  try { userId = await verifyTwoFactorChallenge(challenge); }
+  catch { throw new AuthError("invalid_challenge", "Défi 2FA invalide ou expiré"); }
+
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.totpEnabledAt || !user.totpSecret) throw new AuthError("not_enabled", "2FA non activée");
+  if (user.disabledAt) throw new AuthError("account_disabled", "Compte désactivé");
+
+  const okTotp = verifyTotp(user.totpSecret, code);
+  const usedBackup = !okTotp && user.totpBackupCodes.includes(hashCode(code));
+  if (!okTotp && !usedBackup) {
+    await audit({ actorId: user.id, action: "auth.2fa.failure", ip });
+    throw new AuthError("invalid_code", "Code 2FA invalide");
+  }
+  if (usedBackup) {
+    // Consume the backup code (single use).
+    await prisma.user.update({ where: { id: user.id }, data: { totpBackupCodes: user.totpBackupCodes.filter((h) => h !== hashCode(code)) } });
+    await audit({ actorId: user.id, action: "auth.2fa.backup_used", ip, meta: { remaining: user.totpBackupCodes.length - 1 } });
+  }
+  await audit({ actorId: user.id, action: "auth.login.success", ip, meta: { via: "2fa" } });
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
@@ -154,6 +240,7 @@ export async function registerLearner(params: { name: string; email: string; pas
     if (!existing.emailVerifiedAt) { await issueOtpAndSend(existing); return { verificationRequired: true as const, email: existing.email }; }
     throw new AuthError("email_taken", "Un compte existe déjà avec cet e-mail");
   }
+  if (await isPasswordPwned(params.password)) throw new AuthError("password_breached", "Ce mot de passe figure dans des fuites de données connues — choisissez-en un autre.");
   const user = await prisma.user.create({
     data: { name: params.name, email: params.email, role: "LEARNER", phone: params.phone ?? null, passwordHash: await hashPassword(params.password) },
   });
@@ -212,6 +299,7 @@ export async function resetPassword(email: string, code: string, newPassword: st
     orderBy: { createdAt: "desc" },
   });
   if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  if (await isPasswordPwned(newPassword)) throw new AuthError("password_breached", "Ce mot de passe figure dans des fuites de données connues — choisissez-en un autre.");
   const passwordHash = await hashPassword(newPassword);
   await prisma.$transaction([
     prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
