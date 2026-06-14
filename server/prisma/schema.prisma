@@ -114,6 +114,12 @@ model User {
   /// unverified → first-party login is blocked. Staff/SSO-created accounts are
   /// set verified at creation; existing accounts were backfilled at migration.
   emailVerifiedAt  DateTime?
+  /// 2FA TOTP (RFC 6238). `totpSecret` is the base32 secret (set at setup);
+  /// `totpEnabledAt` non-null = 2FA active (login requires a code). Backup codes
+  /// are stored as SHA-256 hashes and consumed on use.
+  totpSecret       String?
+  totpEnabledAt    DateTime?
+  totpBackupCodes  String[]  @default([])
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
