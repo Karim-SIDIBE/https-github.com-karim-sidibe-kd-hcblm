@@ -92,6 +92,13 @@ const EnvSchema = z.object({
   RGPD_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),     // restore window before a scheduled erasure is purged
   AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),  // audit-log (incl. IP) retention
   TOKEN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),   // keep spent/expired refresh tokens this long, then purge
+  // --- encryption at rest (application-level field encryption) ---
+  FIELD_ENCRYPTION_KEY: z.string().optional(),  // base64 32-byte key; encrypts sensitive columns (TOTP secret). Generate: openssl rand -base64 32
+  // --- upload antivirus ---
+  CLAMAV_HOST: z.string().optional(),           // clamd host (blank = heuristic-only scan)
+  CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
+  AV_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  AV_FAIL_CLOSED: z.coerce.boolean().default(false), // if clamd is unreachable: false = allow (heuristic still applied), true = block
   /// Dev-only `x-user-id` escape hatch. Defaults on outside production.
   AUTH_DEV_HEADER: z
     .enum(["true", "false"]).transform((s) => s === "true").optional(),

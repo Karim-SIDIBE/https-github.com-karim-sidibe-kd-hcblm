@@ -21,6 +21,7 @@ import {
 import { guard, authenticate } from "../../lib/auth.js";
 import { resolveTenant, memberOrgIds } from "../../lib/tenant.js";
 import { audit } from "../../lib/audit.js";
+import { scanUpload } from "../../lib/av/scan.js";
 
 const SlugSchema = z
   .string()
@@ -109,6 +110,8 @@ export async function courseRoutes(app: FastifyInstance) {
     try {
       const buf = await file.toBuffer();
       if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
+      const scan = await scanUpload(buf, { filename: file.filename, mime: file.mimetype });
+      if (!scan.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${scan.reason}` });
       const result = await importCourseFromDoc(buf);
       await audit({ actorId: req.principal!.id, action: "course.import_doc", targetType: "Course", targetId: "draft", ip: req.ip, meta: { paragraphs: result.paragraphs, aiGenerated: result.aiGenerated } });
       return reply.send({ data: result });

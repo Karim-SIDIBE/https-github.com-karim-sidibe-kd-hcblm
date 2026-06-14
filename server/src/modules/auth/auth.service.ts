@@ -12,6 +12,7 @@ import { env } from "../../config/env.js";
 import { verifyPassword, hashPassword } from "../../lib/auth/password.js";
 import { signAccessToken, signTwoFactorChallenge, verifyTwoFactorChallenge } from "../../lib/auth/jwt.js";
 import { generateTotpSecret, verifyTotp, otpauthUrl } from "../../lib/auth/totp.js";
+import { encryptField, decryptField } from "../../lib/crypto/field.js";
 import { isPasswordPwned } from "../../lib/auth/pwned.js";
 import { audit } from "../../lib/audit.js";
 import { summarizeSessions } from "../../domain/rgpd.js";
@@ -123,7 +124,7 @@ export async function setupTotp(userId: string) {
   if (!user) throw new AuthError("not_found", "Utilisateur introuvable");
   if (user.totpEnabledAt) throw new AuthError("already_enabled", "2FA déjà activée");
   const secret = generateTotpSecret();
-  await prisma.user.update({ where: { id: userId }, data: { totpSecret: secret } });
+  await prisma.user.update({ where: { id: userId }, data: { totpSecret: encryptField(secret) } });
   return { secret, otpauthUrl: otpauthUrl(secret, user.email) };
 }
 
@@ -134,7 +135,7 @@ export async function enableTotp(userId: string, code: string, ip?: string) {
   if (!user) throw new AuthError("not_found", "Utilisateur introuvable");
   if (user.totpEnabledAt) throw new AuthError("already_enabled", "2FA déjà activée");
   if (!user.totpSecret) throw new AuthError("no_setup", "Démarrez d'abord la configuration 2FA");
-  if (!verifyTotp(user.totpSecret, code)) throw new AuthError("invalid_code", "Code 2FA invalide");
+  if (!verifyTotp(decryptField(user.totpSecret), code)) throw new AuthError("invalid_code", "Code 2FA invalide");
   const { clear, hashes } = newBackupCodes();
   await prisma.user.update({ where: { id: userId }, data: { totpEnabledAt: new Date(), totpBackupCodes: hashes } });
   await audit({ actorId: userId, action: "auth.2fa.enabled", ip });
@@ -145,7 +146,7 @@ export async function enableTotp(userId: string, code: string, ip?: string) {
 export async function disableTotp(userId: string, code: string, ip?: string) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user || !user.totpEnabledAt || !user.totpSecret) throw new AuthError("not_enabled", "2FA non activée");
-  const okTotp = verifyTotp(user.totpSecret, code);
+  const okTotp = verifyTotp(decryptField(user.totpSecret), code);
   const okBackup = user.totpBackupCodes.includes(hashCode(code));
   if (!okTotp && !okBackup) throw new AuthError("invalid_code", "Code 2FA invalide");
   await prisma.user.update({ where: { id: userId }, data: { totpSecret: null, totpEnabledAt: null, totpBackupCodes: [] } });
@@ -163,7 +164,7 @@ export async function verifyTwoFactorLogin(challenge: string, code: string, ip?:
   if (!user || !user.totpEnabledAt || !user.totpSecret) throw new AuthError("not_enabled", "2FA non activée");
   if (user.disabledAt) throw new AuthError("account_disabled", "Compte désactivé");
 
-  const okTotp = verifyTotp(user.totpSecret, code);
+  const okTotp = verifyTotp(decryptField(user.totpSecret), code);
   const usedBackup = !okTotp && user.totpBackupCodes.includes(hashCode(code));
   if (!okTotp && !usedBackup) {
     await audit({ actorId: user.id, action: "auth.2fa.failure", ip });

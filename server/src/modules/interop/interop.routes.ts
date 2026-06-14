@@ -4,6 +4,7 @@ import {
   InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken,
 } from "./interop.service.js";
 import * as storage from "../../lib/storage/storage.js";
+import { scanUpload } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
 
 const MIME: Record<string, string> = {
@@ -43,6 +44,8 @@ export async function interopRoutes(app: FastifyInstance) {
     if (!file) return reply.badRequest("Fichier ZIP manquant");
     try {
       const buf = await file.toBuffer();
+      const scan = await scanUpload(buf, { filename: file.filename, mime: file.mimetype });
+      if (!scan.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${scan.reason}` });
       return reply.status(201).send({ data: await importPackage(buf, req.principal?.id) });
     } catch (err) { return handle(reply, err); }
   });

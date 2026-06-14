@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
+import { scanStreamHead } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
 
 function handle(reply: FastifyReply, err: unknown) {
@@ -38,7 +39,9 @@ export async function mediaRoutes(app: FastifyInstance) {
     const file = await req.file();
     if (!file) return reply.badRequest("Fichier manquant (champ multipart)");
     try {
-      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data: file.file, createdById: req.principal?.id });
+      const { result, body } = await scanStreamHead(file.file, { filename: file.filename, mime: file.mimetype });
+      if (!result.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${result.reason}` });
+      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data: body, createdById: req.principal?.id });
       if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
       return reply.status(201).send({ data: asset });
     } catch (err) { return handle(reply, err); }
