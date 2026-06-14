@@ -32,6 +32,17 @@ export function Settings() {
   const [pwd, setPwd] = useState(genPassword());
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [purgeBusy, setPurgeBusy] = useState(false);
+  const [purgeMsg, setPurgeMsg] = useState<string | null>(null);
+
+  async function runPurge() {
+    if (!window.confirm("Lancer la purge RGPD maintenant ?\nExécute les effacements arrivés à échéance et supprime tokens/journaux/codes expirés.")) return;
+    setPurgeBusy(true); setPurgeMsg(null);
+    try {
+      const r = await api.runRetention();
+      setPurgeMsg(`✅ ${r.erasuresExecuted} effacement(s) exécuté(s) — ${r.anonymized} anonymisé(s), ${r.deleted} supprimé(s) · ${r.tokensPurged} tokens · ${r.auditPurged} journaux · ${r.codesPurged} codes purgés.`);
+    } catch (e: any) { setPurgeMsg(e?.message || "Erreur"); } finally { setPurgeBusy(false); }
+  }
 
   async function createStaff(e: React.FormEvent) {
     e.preventDefault();
@@ -85,6 +96,11 @@ export function Settings() {
             <div className="card-b" style={{ paddingTop: 4 }}>
               <Row k="API" v={API} />
               <Row k="Console" v="DECLICK DIGITAL Admin v0.1" />
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+                <button className="btn btn--sm" disabled={purgeBusy} onClick={runPurge}>{purgeBusy ? "…" : "🧹 Lancer la purge RGPD"}</button>
+                <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0" }}>Exécute les effacements arrivés à échéance (délai de grâce écoulé) et purge les tokens/journaux/codes expirés. Normalement déclenché par un cron quotidien.</p>
+                {purgeMsg && <p style={{ fontSize: 12.5, margin: "8px 0 0", fontWeight: 600, color: purgeMsg.startsWith("✅") ? "var(--green)" : "var(--danger)" }}>{purgeMsg}</p>}
+              </div>
             </div>
           </div>
         </div>

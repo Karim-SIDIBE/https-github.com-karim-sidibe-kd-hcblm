@@ -5,6 +5,7 @@ import { randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import { hashPassword } from "../../lib/auth/password.js";
+import { daysUntilPurge } from "../../domain/rgpd.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { invitationMessage } from "../../lib/notify/templates.js";
 
@@ -21,12 +22,15 @@ export async function listUsers(q?: string) {
   const now = new Date();
   const users = await prisma.user.findMany({
     where, orderBy: { createdAt: "desc" }, take: 500,
-    select: { id: true, name: true, email: true, role: true, emailVerifiedAt: true, disabledAt: true, lockedUntil: true, createdAt: true, _count: { select: { enrollments: true } } },
+    select: { id: true, name: true, email: true, role: true, emailVerifiedAt: true, disabledAt: true, lockedUntil: true, anonymizedAt: true, deletionRequestedAt: true, createdAt: true, _count: { select: { enrollments: true } } },
   });
   return users.map((u) => ({
     id: u.id, name: u.name, email: u.email, role: u.role,
     verified: u.emailVerifiedAt != null, disabled: u.disabledAt != null,
     locked: u.lockedUntil != null && u.lockedUntil > now,
+    anonymized: u.anonymizedAt != null,
+    // Scheduled erasure (Art. 17): whole days left to restore before the purge.
+    deletionDaysLeft: u.deletionRequestedAt ? daysUntilPurge(u.deletionRequestedAt, now, env.RGPD_GRACE_DAYS) : null,
     enrollments: u._count.enrollments, createdAt: u.createdAt,
   }));
 }

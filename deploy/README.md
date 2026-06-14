@@ -144,6 +144,16 @@ deploy/backup.sh
 15 2 * * *  /home/<user>/kd-hcblm/deploy/backup.sh >> /var/log/kd-backup.log 2>&1
 ```
 
+**Purge RGPD (rétention)** — exécute les effacements arrivés à échéance (délai de
+grâce écoulé) et purge tokens/journaux d'audit/codes expirés. À planifier
+quotidiennement (ou déclencher manuellement depuis *Réglages → Système*) :
+
+```bash
+# token d'un compte staff avec la permission job:run, puis :
+curl -fsS -X POST https://api.declick.digital/api/v1/jobs/retention/run \
+  -H "authorization: Bearer $STAFF_TOKEN" >> /var/log/kd-retention.log 2>&1
+```
+
 > Pour l'hors-site : `apt install rclone` puis `rclone config` (S3/R2/Backblaze/
 > Google Drive…), et renseigne `BACKUP_RCLONE_REMOTE` (ex. `r2:declick-backups`).
 

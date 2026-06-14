@@ -28,6 +28,25 @@ export function anonymizedUserPatch(userId: string, now: Date = new Date()) {
   };
 }
 
+const DAY_MS = 86_400_000;
+
+/** Cut-off timestamp for retention: rows older than `now - days` are purgeable. */
+export function retentionCutoff(now: Date, days: number): Date {
+  return new Date(now.getTime() - days * DAY_MS);
+}
+
+/** Has a scheduled erasure passed its grace period (so the purge job must run it)? */
+export function isErasureDue(deletionRequestedAt: Date | null | undefined, now: Date, graceDays: number): boolean {
+  if (!deletionRequestedAt) return false;
+  return deletionRequestedAt.getTime() + graceDays * DAY_MS <= now.getTime();
+}
+
+/** Whole days left before a scheduled erasure is purged (0 once due). For the admin badge. */
+export function daysUntilPurge(deletionRequestedAt: Date, now: Date, graceDays: number): number {
+  const purgeAt = deletionRequestedAt.getTime() + graceDays * DAY_MS;
+  return Math.max(0, Math.ceil((purgeAt - now.getTime()) / DAY_MS));
+}
+
 /** A raw active-refresh-token row, as needed to summarise a session. */
 export type SessionRow = {
   familyId: string;

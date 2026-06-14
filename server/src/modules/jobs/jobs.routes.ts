@@ -1,12 +1,19 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "./jobs.service.js";
+import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
 import { flushPendingWebhooks } from "../../lib/webhooks/webhooks.js";
 import { guard } from "../../lib/auth.js";
 
 export async function jobRoutes(app: FastifyInstance) {
+  // RGPD retention/purge: execute due erasures + housekeep tokens/audit/codes.
+  app.post("/jobs/retention/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
+    return { data: await runRetentionPurge(now ? new Date(now) : new Date()) };
+  });
+
   // Run the inactivity scan. `now` (ISO) optional — useful for testing.
   app.post("/jobs/re-engagement/run", { preHandler: guard("job:run") }, async (req) => {
     const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});

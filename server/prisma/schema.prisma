@@ -124,6 +124,12 @@ model User {
   /// direct identifiers scrubbed and sessions revoked. Learning history is kept
   /// de-identified for analytics integrity. Distinct from a hard delete.
   anonymizedAt     DateTime?
+  /// Scheduled (reversible) erasure: when set, the account is disabled immediately
+  /// but data is destroyed only after the grace period, by the retention job —
+  /// `deletionMode` ("anonymize" | "delete") decides how. An admin can restore
+  /// (clearing these) any time before the purge runs.
+  deletionRequestedAt DateTime?
+  deletionMode        String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

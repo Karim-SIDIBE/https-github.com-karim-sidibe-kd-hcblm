@@ -88,6 +88,10 @@ const EnvSchema = z.object({
   /// Reject passwords found in known breaches (HIBP, k-anonymity). Opt-out for
   /// air-gapped / strict-no-egress deployments; graceful if HIBP is unreachable.
   PASSWORD_BREACH_CHECK: z.coerce.boolean().default(true),
+  // --- RGPD data lifecycle (retention / erasure grace period), in days ---
+  RGPD_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),     // restore window before a scheduled erasure is purged
+  AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),  // audit-log (incl. IP) retention
+  TOKEN_RETENTION_DAYS: z.coerce.number().int().positive().default(30),   // keep spent/expired refresh tokens this long, then purge
   /// Dev-only `x-user-id` escape hatch. Defaults on outside production.
   AUTH_DEV_HEADER: z
     .enum(["true", "false"]).transform((s) => s === "true").optional(),

@@ -1,6 +1,24 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { anonymizedUserPatch, summarizeSessions, describeDevice, ANON_EMAIL_DOMAIN } from "./rgpd.js";
+import { anonymizedUserPatch, summarizeSessions, describeDevice, ANON_EMAIL_DOMAIN, isErasureDue, daysUntilPurge, retentionCutoff } from "./rgpd.js";
+
+test("isErasureDue respects the grace period", () => {
+  const now = new Date("2026-06-14T00:00:00Z");
+  const req = new Date("2026-05-15T00:00:00Z"); // 30 days earlier
+  assert.equal(isErasureDue(req, now, 30), true);    // exactly due
+  assert.equal(isErasureDue(req, now, 31), false);   // one more day to wait
+  assert.equal(isErasureDue(null, now, 30), false);  // nothing scheduled
+});
+
+test("daysUntilPurge counts down then floors at 0", () => {
+  const now = new Date("2026-06-14T00:00:00Z");
+  assert.equal(daysUntilPurge(new Date("2026-06-04T00:00:00Z"), now, 30), 20);
+  assert.equal(daysUntilPurge(new Date("2026-04-01T00:00:00Z"), now, 30), 0); // already past
+});
+
+test("retentionCutoff subtracts the window", () => {
+  assert.equal(retentionCutoff(new Date("2026-06-14T00:00:00Z"), 365).toISOString(), "2025-06-14T00:00:00.000Z");
+});
 
 test("anonymizedUserPatch scrubs every direct identifier and neutralises auth", () => {
   const now = new Date("2026-06-14T10:00:00Z");
