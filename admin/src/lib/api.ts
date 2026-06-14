@@ -62,6 +62,22 @@ export const twofa = {
   disable: (code: string) => req<{ disabled: true }>("POST", "/auth/2fa/disable", { code }),
 };
 
+// Active sessions / devices.
+export type SessionInfo = { familyId: string; device: string; ip: string | null; lastUsedAt: string; createdAt: string; current: boolean };
+export const sessions = {
+  mine: () => req<SessionInfo[]>("GET", "/auth/sessions"),
+  revoke: (familyId: string) => req<{ revoked: number }>("POST", "/auth/sessions/revoke", { familyId }),
+  revokeAll: () => req<{ revoked: number }>("POST", "/auth/sessions/revoke-all", {}),
+};
+
+// RGPD data-rights (admin): export, erasure, and a user's sessions.
+export const rgpd = {
+  exportUser: (userId: string) => req<unknown>("GET", `/users/${userId}/export`),
+  erase: (userId: string, mode: "anonymize" | "delete") => req<{ mode: string; userId: string }>("POST", `/users/${userId}/erase`, { mode }),
+  userSessions: (userId: string) => req<SessionInfo[]>("GET", `/users/${userId}/sessions`),
+  revokeUserSessions: (userId: string) => req<{ revoked: number }>("POST", `/users/${userId}/sessions/revoke-all`, {}),
+};
+
 // --- types (mirror the backend responses) ---
 export type CourseSummary = { id: string; slug: string; versions: { version: number; status: string; title: string; level: string }[] };
 export type CourseReport = {

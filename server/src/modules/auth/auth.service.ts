@@ -14,6 +14,7 @@ import { signAccessToken, signTwoFactorChallenge, verifyTwoFactorChallenge } fro
 import { generateTotpSecret, verifyTotp, otpauthUrl } from "../../lib/auth/totp.js";
 import { isPasswordPwned } from "../../lib/auth/pwned.js";
 import { audit } from "../../lib/audit.js";
+import { summarizeSessions } from "../../domain/rgpd.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { otpMessage } from "../../lib/notify/templates.js";
 
@@ -24,17 +25,22 @@ export class AuthError extends Error {
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 const newOpaque = () => randomBytes(32).toString("base64url");
 
-async function issueRefresh(userId: string, familyId?: string) {
+/** Connection context captured on the refresh token for "my active sessions". */
+export type SessionMeta = { ip?: string | null; userAgent?: string | null };
+
+async function issueRefresh(userId: string, familyId?: string, meta?: SessionMeta) {
   const token = newOpaque();
   const fam = familyId ?? randomUUID();
   const expiresAt = new Date(Date.now() + env.REFRESH_TTL_DAYS * 86_400_000);
-  const row = await prisma.refreshToken.create({ data: { userId, familyId: fam, tokenHash: sha256(token), expiresAt } });
+  const row = await prisma.refreshToken.create({
+    data: { userId, familyId: fam, tokenHash: sha256(token), expiresAt, ip: meta?.ip ?? null, userAgent: meta?.userAgent ?? null, lastUsedAt: new Date() },
+  });
   return { token, id: row.id, familyId: fam, expiresAt };
 }
 
-async function tokensFor(user: { id: string; role: string; name: string }, familyId?: string) {
+async function tokensFor(user: { id: string; role: string; name: string }, familyId?: string, meta?: SessionMeta) {
   const accessToken = await signAccessToken({ sub: user.id, role: user.role, name: user.name });
-  const refresh = await issueRefresh(user.id, familyId);
+  const refresh = await issueRefresh(user.id, familyId, meta);
   return { accessToken, refreshToken: refresh.token, tokenType: "Bearer", expiresIn: env.ACCESS_TTL, refreshExpiresAt: refresh.expiresAt };
 }
 
@@ -42,7 +48,7 @@ async function tokensFor(user: { id: string; role: string; name: string }, famil
  * Verify credentials and issue tokens. Account lockout after N failures (OWASP),
  * uniform `invalid_credentials` error to avoid user enumeration, full audit.
  */
-export async function login(email: string, password: string, ip?: string) {
+export async function login(email: string, password: string, ip?: string, userAgent?: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   const now = new Date();
 
@@ -91,7 +97,7 @@ export async function login(email: string, password: string, ip?: string) {
   }
 
   await audit({ actorId: user.id, action: "auth.login.success", ip });
-  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  return { ...(await tokensFor(user, undefined, { ip, userAgent })), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
 // --- two-factor (TOTP) -------------------------------------------------------
@@ -147,7 +153,7 @@ export async function disableTotp(userId: string, code: string, ip?: string) {
 }
 
 /** Complete login: validate the challenge + a TOTP or backup code → issue tokens. */
-export async function verifyTwoFactorLogin(challenge: string, code: string, ip?: string) {
+export async function verifyTwoFactorLogin(challenge: string, code: string, ip?: string, userAgent?: string) {
   let userId: string;
   try { userId = await verifyTwoFactorChallenge(challenge); }
   catch { throw new AuthError("invalid_challenge", "Défi 2FA invalide ou expiré"); }
@@ -168,7 +174,7 @@ export async function verifyTwoFactorLogin(challenge: string, code: string, ip?:
     await audit({ actorId: user.id, action: "auth.2fa.backup_used", ip, meta: { remaining: user.totpBackupCodes.length - 1 } });
   }
   await audit({ actorId: user.id, action: "auth.login.success", ip, meta: { via: "2fa" } });
-  return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  return { ...(await tokensFor(user, undefined, { ip, userAgent })), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
 /**
@@ -194,7 +200,7 @@ export async function federatedLogin(params: { email: string; name?: string | nu
 }
 
 /** Rotate a refresh token; detect reuse of an already-rotated token. */
-export async function refresh(presented: string, ip?: string) {
+export async function refresh(presented: string, ip?: string, userAgent?: string) {
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(presented) } });
   if (!row) throw new AuthError("invalid_token", "Refresh token invalide");
 
@@ -213,10 +219,37 @@ export async function refresh(presented: string, ip?: string) {
     throw new AuthError("account_disabled", "Compte désactivé");
   }
 
-  const next = await issueRefresh(user.id, row.familyId);
+  // Carry the family forward but refresh device context (so "last activity" tracks).
+  const next = await issueRefresh(user.id, row.familyId, { ip, userAgent });
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date(), replacedById: next.id } });
   const accessToken = await signAccessToken({ sub: user.id, role: user.role, name: user.name });
   return { accessToken, refreshToken: next.token, tokenType: "Bearer", expiresIn: env.ACCESS_TTL, refreshExpiresAt: next.expiresAt };
+}
+
+// --- session management (RGPD/security transparency) ------------------------
+
+/** Active sessions for a user, summarised one line per device (newest first). */
+export async function listSessions(userId: string, currentFamilyId?: string) {
+  const rows = await prisma.refreshToken.findMany({
+    where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
+    select: { familyId: true, userAgent: true, ip: true, lastUsedAt: true, createdAt: true },
+  });
+  return summarizeSessions(rows, currentFamilyId);
+}
+
+/** Revoke one device (a whole rotation family). Returns how many tokens were cut. */
+export async function revokeSession(userId: string, familyId: string, ip?: string) {
+  const r = await prisma.refreshToken.updateMany({ where: { userId, familyId, revokedAt: null }, data: { revokedAt: new Date() } });
+  if (r.count > 0) await audit({ actorId: userId, action: "auth.session.revoked", ip, meta: { familyId } });
+  return { revoked: r.count };
+}
+
+/** Revoke every active session for a user, optionally keeping one family (e.g. the caller's). */
+export async function revokeAllSessions(userId: string, opts?: { exceptFamilyId?: string; actorId?: string; ip?: string }) {
+  const where = { userId, revokedAt: null, ...(opts?.exceptFamilyId ? { familyId: { not: opts.exceptFamilyId } } : {}) };
+  const r = await prisma.refreshToken.updateMany({ where, data: { revokedAt: new Date() } });
+  await audit({ actorId: opts?.actorId ?? userId, action: "auth.session.revoked_all", ip: opts?.ip, meta: { userId, kept: opts?.exceptFamilyId ?? null, revoked: r.count } });
+  return { revoked: r.count };
 }
 
 // --- B2C self-registration + e-mail verification (OTP) ----------------------
