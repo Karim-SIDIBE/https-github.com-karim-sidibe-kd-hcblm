@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import { guard } from "../../lib/auth.js";
-import { RgpdError, exportUserData, eraseUser } from "./rgpd.service.js";
+import { RgpdError, exportUserData, scheduleErasure, restoreUser } from "./rgpd.service.js";
 import { listSessions, revokeAllSessions } from "../auth/auth.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
@@ -21,11 +21,19 @@ export async function rgpdRoutes(app: FastifyInstance) {
     } catch (err) { return handle(reply, err); }
   });
 
-  // Art. 17 — erase a user, by anonymisation (default) or hard delete.
+  // Art. 17 — schedule an erasure (anonymise or hard delete). Reversible until
+  // the grace period elapses and the retention job purges it.
   app.post("/users/:id/erase", { preHandler: guard("user:manage") }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const { mode } = z.object({ mode: z.enum(["anonymize", "delete"]) }).parse(req.body);
-    try { return { data: await eraseUser(req.principal?.id, id, mode, req.ip) }; }
+    try { return { data: await scheduleErasure(req.principal?.id, id, mode, req.ip) }; }
+    catch (err) { return handle(reply, err); }
+  });
+
+  // Cancel a scheduled erasure (restore the account) before it is purged.
+  app.post("/users/:id/restore", { preHandler: guard("user:manage") }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    try { return { data: await restoreUser(req.principal?.id, id, req.ip) }; }
     catch (err) { return handle(reply, err); }
   });
 

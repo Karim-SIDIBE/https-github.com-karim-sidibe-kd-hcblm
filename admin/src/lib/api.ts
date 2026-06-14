@@ -73,10 +73,12 @@ export const sessions = {
 // RGPD data-rights (admin): export, erasure, and a user's sessions.
 export const rgpd = {
   exportUser: (userId: string) => req<unknown>("GET", `/users/${userId}/export`),
-  erase: (userId: string, mode: "anonymize" | "delete") => req<{ mode: string; userId: string }>("POST", `/users/${userId}/erase`, { mode }),
+  erase: (userId: string, mode: "anonymize" | "delete") => req<{ scheduled: true; mode: string; userId: string; purgeAt: string }>("POST", `/users/${userId}/erase`, { mode }),
+  restore: (userId: string) => req<{ restored: true; userId: string }>("POST", `/users/${userId}/restore`, {}),
   userSessions: (userId: string) => req<SessionInfo[]>("GET", `/users/${userId}/sessions`),
   revokeUserSessions: (userId: string) => req<{ revoked: number }>("POST", `/users/${userId}/sessions/revoke-all`, {}),
 };
+export type RetentionResult = { erasuresExecuted: number; anonymized: number; deleted: number; tokensPurged: number; auditPurged: number; codesPurged: number };
 
 // --- types (mirror the backend responses) ---
 export type CourseSummary = { id: string; slug: string; versions: { version: number; status: string; title: string; level: string }[] };
@@ -94,7 +96,7 @@ export type LearnerRow = {
   lastActivity: string | null; startedAt: string | null; completedAt: string | null;
 };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
-export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; enrollments: number; createdAt: string };
+export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; anonymized: boolean; deletionDaysLeft: number | null; enrollments: number; createdAt: string };
 export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; renditions: string[]; createdAt: string };
 export type Seats = { seats: number; used: number; available: number };
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
@@ -162,6 +164,7 @@ export const api = {
   addOrgMember: (orgId: string, userId: string, orgRole: "OWNER" | "ADMIN" | "MEMBER") => req<unknown>("POST", `/organizations/${orgId}/members`, { userId, orgRole }),
   audit: (limit = 80) => req<AuditRow[]>("GET", `/audit?limit=${limit}`),
   runReEngagement: () => req<ReEngagementResult>("POST", "/jobs/re-engagement/run", {}),
+  runRetention: () => req<RetentionResult>("POST", "/jobs/retention/run", {}),
   organizations: () => req<Org[]>("GET", "/organizations"),
   cohorts: () => req<Cohort[]>("GET", "/cohorts"),
   sessions: () => req<Session[]>("GET", "/sessions"),

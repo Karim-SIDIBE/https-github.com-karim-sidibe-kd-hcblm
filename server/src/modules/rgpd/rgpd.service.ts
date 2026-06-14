@@ -4,8 +4,11 @@
  * comes later. Every action is written to the audit log for accountability.
  */
 import { prisma } from "../../db/prisma.js";
+import { env } from "../../config/env.js";
 import { audit } from "../../lib/audit.js";
-import { anonymizedUserPatch } from "../../domain/rgpd.js";
+import { anonymizedUserPatch, retentionCutoff } from "../../domain/rgpd.js";
+
+const DAY_MS = 86_400_000;
 
 export class RgpdError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -53,26 +56,69 @@ export async function exportUserData(userId: string) {
 }
 
 /**
- * Erase a user (Art. 17). `anonymize` scrubs direct identifiers and revokes
- * sessions but keeps the de-identified row + learning history; `delete` cascades
- * a hard delete. Self-erasure is refused (an admin acts on another account).
+ * Schedule an erasure (Art. 17), reversibly. The account is blocked at once
+ * (disabled + sessions revoked) but data is destroyed only after the grace
+ * period, by the retention job. `mode` is remembered for that moment. An admin
+ * can restore until then. Self-erasure is refused (an admin acts on another).
  */
-export async function eraseUser(actorId: string | undefined, userId: string, mode: EraseMode, ip?: string) {
+export async function scheduleErasure(actorId: string | undefined, userId: string, mode: EraseMode, ip?: string) {
   if (actorId && actorId === userId) throw new RgpdError(400, "self_erase", "Vous ne pouvez pas effacer votre propre compte ici");
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, anonymizedAt: true } });
   if (!user) throw new RgpdError(404, "not_found", "Utilisateur introuvable");
+  if (user.anonymizedAt) throw new RgpdError(409, "already_purged", "Compte déjà anonymisé");
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } }),
+    prisma.user.update({ where: { id: userId }, data: { deletionRequestedAt: now, deletionMode: mode, disabledAt: now } }),
+  ]);
+  await audit({ actorId, action: "rgpd.erase.scheduled", ip, targetType: "user", targetId: userId, meta: { mode, graceDays: env.RGPD_GRACE_DAYS } });
+  return { scheduled: true, mode, userId, purgeAt: new Date(now.getTime() + env.RGPD_GRACE_DAYS * DAY_MS) };
+}
 
-  if (mode === "delete") {
-    await prisma.user.delete({ where: { id: userId } }); // cascades sessions/enrolments; authored content → SetNull
-    await audit({ actorId, action: "rgpd.erase.delete", ip, targetType: "user", targetId: userId });
-    return { mode, userId };
+/** Cancel a scheduled erasure before it is purged (un-block the account). */
+export async function restoreUser(actorId: string | undefined, userId: string, ip?: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, deletionRequestedAt: true, anonymizedAt: true } });
+  if (!user) throw new RgpdError(404, "not_found", "Utilisateur introuvable");
+  if (user.anonymizedAt) throw new RgpdError(409, "already_purged", "Compte déjà anonymisé — restauration impossible");
+  if (!user.deletionRequestedAt) throw new RgpdError(400, "not_scheduled", "Aucune suppression programmée pour ce compte");
+  await prisma.user.update({ where: { id: userId }, data: { deletionRequestedAt: null, deletionMode: null, disabledAt: null } });
+  await audit({ actorId, action: "rgpd.erase.restored", ip, targetType: "user", targetId: userId });
+  return { restored: true, userId };
+}
+
+/**
+ * Retention/purge job (cron-driven). Executes due erasures (grace period over),
+ * then housekeeps spent tokens, stale audit logs (which hold IPs) and expired
+ * verification codes. Windows are configurable via env. Idempotent and safe to
+ * run repeatedly. Returns per-category counts.
+ */
+export async function runRetentionPurge(now: Date = new Date()) {
+  // 1) Carry out scheduled erasures whose grace period has elapsed.
+  const due = await prisma.user.findMany({
+    where: { deletionRequestedAt: { lte: retentionCutoff(now, env.RGPD_GRACE_DAYS) } },
+    select: { id: true, deletionMode: true },
+  });
+  let anonymized = 0, deleted = 0;
+  for (const u of due) {
+    if (u.deletionMode === "delete") {
+      await prisma.user.delete({ where: { id: u.id } });
+      deleted++;
+    } else {
+      await prisma.$transaction([
+        prisma.refreshToken.updateMany({ where: { userId: u.id, revokedAt: null }, data: { revokedAt: now } }),
+        prisma.user.update({ where: { id: u.id }, data: { ...anonymizedUserPatch(u.id, now), deletionRequestedAt: null, deletionMode: null } }),
+      ]);
+      anonymized++;
+    }
+    await audit({ action: "rgpd.erase.executed", targetType: "user", targetId: u.id, meta: { mode: u.deletionMode ?? "anonymize" } });
   }
 
-  // anonymize: revoke sessions + scrub identifiers + mark anonymised, atomically.
-  await prisma.$transaction([
-    prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } }),
-    prisma.user.update({ where: { id: userId }, data: anonymizedUserPatch(userId) }),
-  ]);
-  await audit({ actorId, action: "rgpd.erase.anonymize", ip, targetType: "user", targetId: userId });
-  return { mode, userId };
+  // 2) Housekeeping.
+  const tokens = await prisma.refreshToken.deleteMany({
+    where: { createdAt: { lt: retentionCutoff(now, env.TOKEN_RETENTION_DAYS) }, OR: [{ revokedAt: { not: null } }, { expiresAt: { lt: now } }] },
+  });
+  const audits = await prisma.auditLog.deleteMany({ where: { at: { lt: retentionCutoff(now, env.AUDIT_RETENTION_DAYS) } } });
+  const codes = await prisma.verificationCode.deleteMany({ where: { expiresAt: { lt: now } } });
+
+  return { erasuresExecuted: due.length, anonymized, deleted, tokensPurged: tokens.count, auditPurged: audits.count, codesPurged: codes.count };
 }

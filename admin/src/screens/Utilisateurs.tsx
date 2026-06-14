@@ -44,14 +44,21 @@ export function Utilisateurs() {
     } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
-  // RGPD — erasure (Art. 17): anonymise (keep aggregate history) or hard delete.
+  // RGPD — erasure (Art. 17): schedule it (reversible during the grace period).
   async function erase(u: UserRow, mode: "anonymize" | "delete") {
     const what = mode === "anonymize"
-      ? `Anonymiser ${u.email} ?\nLes données personnelles sont effacées ; l'historique d'apprentissage agrégé est conservé.`
-      : `SUPPRIMER définitivement ${u.email} ?\nIrréversible : compte, inscriptions et progression effacés en cascade.`;
+      ? `Programmer l'anonymisation de ${u.email} ?\nLe compte est bloqué immédiatement ; les données personnelles seront effacées après le délai de grâce (l'historique agrégé est conservé). Restaurable d'ici là.`
+      : `Programmer la SUPPRESSION de ${u.email} ?\nLe compte est bloqué immédiatement ; suppression définitive en cascade après le délai de grâce. Restaurable d'ici là.`;
     if (!window.confirm(what)) return;
     setBusyId(u.id); setEraseId(null); setNote(null);
-    try { await rgpd.erase(u.id, mode); setNote(`🗑️ ${u.email} — ${mode === "anonymize" ? "anonymisé" : "supprimé"}.`); load(); }
+    try { const r = await rgpd.erase(u.id, mode); setNote(`🗑️ ${u.email} — effacement programmé (purge le ${new Date(r.purgeAt).toLocaleDateString("fr-FR")}). Restaurable jusque-là.`); load(); }
+    catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
+  // Cancel a scheduled erasure.
+  async function restore(u: UserRow) {
+    setBusyId(u.id); setNote(null);
+    try { await rgpd.restore(u.id); setNote(`✅ ${u.email} restauré.`); load(); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
@@ -91,16 +98,25 @@ export function Utilisateurs() {
                   <td><span className="pill pill--soft">{ROLE_FR[u.role] ?? u.role}</span></td>
                   <td>
                     <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
-                      {u.disabled ? <span className="pill pill--red">Désactivé</span> : u.verified ? <span className="pill pill--green">Vérifié</span> : <span className="pill pill--warn">Non vérifié</span>}
+                      {u.anonymized ? <span className="pill pill--soft">Anonymisé</span>
+                        : u.deletionDaysLeft != null ? <span className="pill pill--warn" title="Effacement programmé">🕑 Suppression — restaurable {u.deletionDaysLeft} j</span>
+                        : u.disabled ? <span className="pill pill--red">Désactivé</span> : u.verified ? <span className="pill pill--green">Vérifié</span> : <span className="pill pill--warn">Non vérifié</span>}
                       {u.locked && <span className="pill pill--red">Verrouillé</span>}
                     </div>
                   </td>
                   <td><span className="num">{u.enrollments}</span></td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(u.createdAt)}</span></td>
                   <td>
-                    {eraseId === u.id ? (
+                    {u.anonymized ? (
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}><span className="muted" style={{ fontSize: 12.5 }}>Compte anonymisé</span></div>
+                    ) : u.deletionDaysLeft != null ? (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => exportData(u)} title="Exporter les données (RGPD Art. 15/20)">⬇ Données</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => restore(u)} title="Annuler l'effacement programmé et réactiver le compte" style={{ color: "var(--green)", borderColor: "var(--green)" }}>{busyId === u.id ? "…" : "↩ Restaurer"}</button>
+                      </div>
+                    ) : eraseId === u.id ? (
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
-                        <span className="muted" style={{ fontSize: 12 }}>Effacer :</span>
+                        <span className="muted" style={{ fontSize: 12 }}>Programmer :</span>
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => erase(u, "anonymize")} title="Effacer les données personnelles, garder l'historique agrégé">Anonymiser</button>
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => erase(u, "delete")} title="Suppression dure en cascade" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Supprimer</button>
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => setEraseId(null)}>Annuler</button>
@@ -110,7 +126,7 @@ export function Utilisateurs() {
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => resend(u)} title="Réinitialise le mot de passe, déverrouille et envoie l'invitation">{busyId === u.id ? "…" : "↻ Réinitialiser"}</button>
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => exportData(u)} title="Exporter les données (RGPD Art. 15/20)">⬇ Données</button>
                         <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => forceLogout(u)} title="Déconnecter tous les appareils">⎋</button>
-                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => setEraseId(u.id)} title="Effacement RGPD (Art. 17)" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Effacer</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => setEraseId(u.id)} title="Effacement RGPD (Art. 17) — programmé, restaurable" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Effacer</button>
                       </div>
                     )}
                   </td>
