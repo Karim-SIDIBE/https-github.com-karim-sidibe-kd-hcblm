@@ -9,6 +9,7 @@ export type QuizKind = "diagnostic" | "interblock" | "final";
 
 export type Route =
   | { name: "enrollments" }
+  | { name: "account" }
   | { name: "course"; eid: string }
   | { name: "cours"; eid: string }
   | { name: "journal"; eid: string }
@@ -24,6 +25,7 @@ export type Route =
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#/, "").replace(/^\/+/, "").replace(/\/+$/, "");
   const seg = path ? path.split("/") : [];
+  if (seg[0] === "account") return { name: "account" };
   if (seg[0] === "c" && seg[1]) {
     const eid = decodeURIComponent(seg[1]);
     if (seg[2] === "cours") return { name: "cours", eid };
@@ -49,6 +51,7 @@ export function navigate(path: string) {
 /** Build hrefs for the known routes. */
 export const routes = {
   enrollments: () => "#/",
+  account: () => "#/account",
   course: (eid: string) => `#/c/${encodeURIComponent(eid)}`,
   cours: (eid: string) => `#/c/${encodeURIComponent(eid)}/cours`,
   journal: (eid: string) => `#/c/${encodeURIComponent(eid)}/journal`,

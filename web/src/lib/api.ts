@@ -17,6 +17,8 @@ export type EnrollmentSummary = {
 
 export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean };
 
+export type ConsentState = { type: string; label: string; required: boolean; currentVersion: string; granted: boolean; acceptedVersion: string | null; grantedAt: string | null };
+
 export function createApi(baseUrl: string, tokens: TokenBox) {
   async function refresh(): Promise<boolean> {
     const r = tokens.get().refresh;
@@ -52,7 +54,7 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return j.user as { id: string; name: string; email: string; role: string };
     },
     /** B2C self-registration → sends an OTP; no session yet. */
-    async register(body: { name: string; email: string; password: string; phone?: string }) {
+    async register(body: { name: string; email: string; password: string; phone?: string; acceptTerms?: boolean; marketingOptIn?: boolean }) {
       const res = await fetch(`${baseUrl}/auth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(j.message || "Inscription impossible"), { code: j.error as string | undefined });
@@ -81,6 +83,20 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return j.user as { id: string; name: string; email: string; role: string };
     },
     async me() { return (await (await raw("GET", "/auth/me")).json()).data; },
+    // --- RGPD self-service ---
+    async consents(): Promise<ConsentState[]> { return (await (await raw("GET", "/me/consents")).json()).data as ConsentState[]; },
+    async setConsent(type: string, granted: boolean) {
+      const res = await raw("POST", "/me/consents", { body: { type, granted } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || "Erreur"); return j.data;
+    },
+    /** Raw JSON text of my data, for a client-side download. */
+    async exportMyData(): Promise<string> { return (await raw("GET", "/me/export")).text(); },
+    async deleteAccount(mode: "anonymize" | "delete" = "anonymize") {
+      const res = await raw("POST", "/me/delete-account", { body: { mode } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || "Erreur"); return j.data as { purgeAt: string };
+    },
     /** Authenticated fetch of an arbitrary (media) URL for offline caching. */
     async cacheFetch(url: string): Promise<Response> {
       const abs = new URL(url, baseUrl).href;

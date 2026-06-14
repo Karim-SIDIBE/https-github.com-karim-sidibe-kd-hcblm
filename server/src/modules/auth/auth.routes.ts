@@ -33,10 +33,14 @@ export async function authRoutes(app: FastifyInstance) {
       email: z.string().email(),
       password: z.string().min(10, "10 caractères minimum"),
       phone: z.string().trim().min(1).optional(),
+      acceptTerms: z.boolean().optional(),
+      marketingOptIn: z.boolean().optional(),
       website: z.string().optional(),
     }).parse(req.body);
     if (body.website) return reply.status(400).send({ error: "rejected", message: "Requête invalide" });
-    try { return reply.status(201).send({ data: await registerLearner(body) }); }
+    // RGPD: terms + privacy acceptance is mandatory to create an account.
+    if (!body.acceptTerms) return reply.status(400).send({ error: "consent_required", message: "Vous devez accepter les conditions d'utilisation et la politique de confidentialité." });
+    try { return reply.status(201).send({ data: await registerLearner(body, req.ip) }); }
     catch (err) {
       if (err instanceof AuthError) return reply.status(409).send({ error: err.code, message: err.message });
       throw err;

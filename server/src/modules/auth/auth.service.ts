@@ -15,6 +15,7 @@ import { generateTotpSecret, verifyTotp, otpauthUrl } from "../../lib/auth/totp.
 import { isPasswordPwned } from "../../lib/auth/pwned.js";
 import { audit } from "../../lib/audit.js";
 import { summarizeSessions } from "../../domain/rgpd.js";
+import { recordRegistrationConsents } from "../consent/consent.service.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { otpMessage } from "../../lib/notify/templates.js";
 
@@ -267,7 +268,7 @@ async function issueOtpAndSend(user: { id: string; email: string; phone: string 
 }
 
 /** Public self-registration: create an unverified LEARNER and send an OTP. */
-export async function registerLearner(params: { name: string; email: string; password: string; phone?: string }) {
+export async function registerLearner(params: { name: string; email: string; password: string; phone?: string; marketingOptIn?: boolean }, ip?: string) {
   const existing = await prisma.user.findUnique({ where: { email: params.email } });
   if (existing) {
     if (!existing.emailVerifiedAt) { await issueOtpAndSend(existing); return { verificationRequired: true as const, email: existing.email }; }
@@ -277,8 +278,10 @@ export async function registerLearner(params: { name: string; email: string; pas
   const user = await prisma.user.create({
     data: { name: params.name, email: params.email, role: "LEARNER", phone: params.phone ?? null, passwordHash: await hashPassword(params.password) },
   });
+  // RGPD: record the terms + privacy acceptance (required) and optional marketing opt-in.
+  await recordRegistrationConsents(user.id, !!params.marketingOptIn, ip);
   await issueOtpAndSend(user);
-  await audit({ actorId: user.id, action: "auth.register", meta: { email: user.email } });
+  await audit({ actorId: user.id, action: "auth.register", ip, meta: { email: user.email, marketingOptIn: !!params.marketingOptIn } });
   return { verificationRequired: true as const, email: user.email };
 }
 

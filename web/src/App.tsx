@@ -16,6 +16,7 @@ const Deliverable = lazy(() => import("./ui/Deliverable").then((m) => ({ default
 const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Project })));
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
+const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Account })));
 
 /** The eid of a course-scoped route (null on the enrolments list). */
 function eidOf(route: Route): string | null {
@@ -44,6 +45,7 @@ function Screen({ route }: { route: Route }) {
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
     case "block": return <Course eid={route.eid} />;
+    case "account": return <Account />;
     default: return <Enrollments />;
   }
 }
@@ -96,7 +98,7 @@ export function App() {
     return (
       <div className="shell">
         <div className="main">
-          <div className="appbar appbar--standalone"><Brand /><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div>
+          <div className="appbar appbar--standalone"><Brand /><div className="tools"><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>Mon compte</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div></div>
           <main className="screen"><Banner sync={sync} /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
@@ -114,6 +116,7 @@ export function App() {
           </button>
         ))}
         <div className="spacer" />
+        <button className="navitem" onClick={() => navigate(routes.account())}>Mon compte</button>
         <button className="navitem" onClick={onLogout}>Déconnexion</button>
       </aside>
 
@@ -123,6 +126,7 @@ export function App() {
           <Brand />
           <div className="tools">
             <span className="iconbtn" aria-label="Notifications"><IconBell size={18} /></span>
+            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>Mon compte</button>
             <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={onLogout}>Déconnexion</button>
           </div>
         </header>

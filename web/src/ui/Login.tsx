@@ -11,6 +11,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState(""); // honeypot — must stay empty
+  const [acceptTerms, setAcceptTerms] = useState(false);
+  const [marketingOptIn, setMarketingOptIn] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -28,9 +30,11 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   }
 
   async function submitSignup(e: React.FormEvent) {
-    e.preventDefault(); setBusy(true); setError(null);
+    e.preventDefault();
+    if (!acceptTerms) { setError("Vous devez accepter les conditions d'utilisation et la politique de confidentialité."); return; }
+    setBusy(true); setError(null);
     try {
-      await api.register({ name: name.trim(), email: email.trim(), password, phone: phone.trim() || undefined, ...(website ? { website } as any : {}) });
+      await api.register({ name: name.trim(), email: email.trim(), password, phone: phone.trim() || undefined, acceptTerms, marketingOptIn, ...(website ? { website } as any : {}) });
       setMode("verify"); setInfo(`Un code de vérification a été envoyé à ${email}.`);
     } catch (err: any) { setError(err?.message || "Inscription impossible"); }
     finally { setBusy(false); }
@@ -75,8 +79,16 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         <label>Mot de passe<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" minLength={10} placeholder="10 caractères minimum" required /></label>
         {/* honeypot: hidden from users, tab-skipped */}
         <input value={website} onChange={(e) => setWebsite(e.target.value)} name="website" tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: "-9999px", width: 1, height: 1 }} />
+        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
+          <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
+          <span>J'accepte les <a href="/legal/cgu" target="_blank" rel="noreferrer">conditions d'utilisation</a> et la <a href="/legal/confidentialite" target="_blank" rel="noreferrer">politique de confidentialité</a>. <span style={{ color: "var(--ko, #c0392b)" }}>*</span></span>
+        </label>
+        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
+          <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
+          <span>J'accepte de recevoir des informations sur les offres et nouveautés <span className="muted">(optionnel)</span>.</span>
+        </label>
         {error && <p className="ko">{error}</p>}
-        <button disabled={busy}>{busy ? "…" : "Créer mon compte"}</button>
+        <button disabled={busy || !acceptTerms}>{busy ? "…" : "Créer mon compte"}</button>
         <p className="muted" style={{ marginTop: 12, textAlign: "center" }}>Déjà inscrit ? <a href="#" onClick={(e) => { e.preventDefault(); setMode("login"); setError(null); setInfo(null); }}>Se connecter</a></p>
       </form>
     );
