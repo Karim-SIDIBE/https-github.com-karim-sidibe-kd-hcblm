@@ -61,8 +61,7 @@ export async function exportUserData(userId: string) {
  * period, by the retention job. `mode` is remembered for that moment. An admin
  * can restore until then. Self-erasure is refused (an admin acts on another).
  */
-export async function scheduleErasure(actorId: string | undefined, userId: string, mode: EraseMode, ip?: string) {
-  if (actorId && actorId === userId) throw new RgpdError(400, "self_erase", "Vous ne pouvez pas effacer votre propre compte ici");
+async function doSchedule(actorId: string | undefined, userId: string, mode: EraseMode, ip: string | undefined, action: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, anonymizedAt: true } });
   if (!user) throw new RgpdError(404, "not_found", "Utilisateur introuvable");
   if (user.anonymizedAt) throw new RgpdError(409, "already_purged", "Compte déjà anonymisé");
@@ -71,8 +70,19 @@ export async function scheduleErasure(actorId: string | undefined, userId: strin
     prisma.refreshToken.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: now } }),
     prisma.user.update({ where: { id: userId }, data: { deletionRequestedAt: now, deletionMode: mode, disabledAt: now } }),
   ]);
-  await audit({ actorId, action: "rgpd.erase.scheduled", ip, targetType: "user", targetId: userId, meta: { mode, graceDays: env.RGPD_GRACE_DAYS } });
+  await audit({ actorId, action, ip, targetType: "user", targetId: userId, meta: { mode, graceDays: env.RGPD_GRACE_DAYS } });
   return { scheduled: true, mode, userId, purgeAt: new Date(now.getTime() + env.RGPD_GRACE_DAYS * DAY_MS) };
+}
+
+/** Admin schedules another account's erasure (self-erasure refused — use the self route). */
+export async function scheduleErasure(actorId: string | undefined, userId: string, mode: EraseMode, ip?: string) {
+  if (actorId && actorId === userId) throw new RgpdError(400, "self_erase", "Vous ne pouvez pas effacer votre propre compte ici");
+  return doSchedule(actorId, userId, mode, ip, "rgpd.erase.scheduled");
+}
+
+/** Learner self-service: request erasure of one's own account (Art. 17). */
+export async function requestOwnErasure(userId: string, mode: EraseMode, ip?: string) {
+  return doSchedule(userId, userId, mode, ip, "rgpd.erase.self_requested");
 }
 
 /** Cancel a scheduled erasure before it is purged (un-block the account). */

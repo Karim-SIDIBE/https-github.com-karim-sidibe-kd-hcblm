@@ -14,6 +14,7 @@ import { samlRoutes } from "./modules/auth/saml.routes.js";
 import { ltiRoutes } from "./modules/lti/lti.routes.js";
 import { userRoutes } from "./modules/users/users.routes.js";
 import { rgpdRoutes } from "./modules/rgpd/rgpd.routes.js";
+import { meRoutes } from "./modules/me/me.routes.js";
 import { organizationRoutes } from "./modules/organizations/organizations.routes.js";
 import { scimRoutes } from "./modules/scim/scim.routes.js";
 import { enrollmentRoutes } from "./modules/enrollments/enrollments.routes.js";
@@ -118,6 +119,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await courseRoutes(api);
       await userRoutes(api);
       await rgpdRoutes(api);
+      await meRoutes(api);
       await organizationRoutes(api);
       await scimRoutes(api);
       await enrollmentRoutes(api);

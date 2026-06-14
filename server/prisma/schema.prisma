@@ -145,6 +145,7 @@ model User {
   authoredPosts    ForumPost[]           @relation("PostAuthor")
   evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
   verificationCodes VerificationCode[]
+  consents          Consent[]
 
   @@index([role])
 }
@@ -162,6 +163,22 @@ model VerificationCode {
   createdAt  DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// RGPD consent ledger (Art. 6/7). One row per grant; revoking sets `revokedAt`
+/// (history is kept). `version` records which policy text was accepted. Current
+/// state per type = the most recent row, granted iff `revokedAt` is null.
+model Consent {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String    // "terms" | "privacy" | "marketing"
+  version   String    // policy version accepted, e.g. "2026-06"
+  grantedAt DateTime  @default(now())
+  revokedAt DateTime?
+  ip        String?
+
+  @@index([userId, type])
 }
 
 /// Rotating refresh tokens with reuse detection (OAuth 2.0 Security BCP, RFC 9700).
