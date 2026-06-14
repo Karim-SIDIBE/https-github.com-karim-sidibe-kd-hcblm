@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { twofa } from "../lib/api";
+import { twofa, sessions, type SessionInfo } from "../lib/api";
 
 type Phase = "loading" | "off" | "setup" | "backup" | "on";
 
@@ -96,6 +96,47 @@ export function Security() {
 
           {err && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0, fontWeight: 600 }}>{err}</p>}
         </div>
+      </div>
+
+      <SessionsCard />
+    </div>
+  );
+}
+
+/** "My active sessions" — device list + sign-out-everywhere (RGPD/security transparency). */
+function SessionsCard() {
+  const [rows, setRows] = useState<SessionInfo[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = () => sessions.mine().then(setRows).catch((e) => setErr(e?.message || "Erreur"));
+  useEffect(() => { load(); }, []);
+
+  async function revokeAll() {
+    if (!confirm("Déconnecter TOUS les appareils, y compris celui-ci ? Vous devrez vous reconnecter.")) return;
+    setBusy(true); setErr(null);
+    try { await sessions.revokeAll(); location.reload(); }
+    catch (e: any) { setErr(e?.message || "Erreur"); setBusy(false); }
+  }
+
+  const fmt = (s: string) => new Date(s).toLocaleString("fr-FR", { dateStyle: "short", timeStyle: "short" });
+
+  return (
+    <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+      <div className="card-h"><h3>Mes sessions actives</h3>{rows && <span className="pill pill--soft">{rows.length}</span>}</div>
+      <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <p className="muted" style={{ margin: 0 }}>Les appareils actuellement connectés à votre compte. En cas de doute, déconnectez tout.</p>
+        {!rows ? <p className="muted">Chargement…</p> : rows.length === 0 ? <p className="muted">Aucune session active.</p> : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {rows.map((s) => (
+              <div key={s.familyId} className="row" style={{ justifyContent: "space-between", alignItems: "center", border: "1px solid var(--line)", borderRadius: 10, padding: "9px 12px" }}>
+                <div><b style={{ fontSize: 13.5 }}>{s.device}</b><div className="muted" style={{ fontSize: 12 }}>{s.ip || "IP inconnue"} · activité {fmt(s.lastUsedAt)}</div></div>
+              </div>
+            ))}
+          </div>
+        )}
+        <button className="btn btn--sm" disabled={busy || !rows?.length} style={{ alignSelf: "flex-start", color: "var(--danger)", borderColor: "var(--danger)" }} onClick={revokeAll}>{busy ? "…" : "Déconnexion de tous les appareils"}</button>
+        {err && <p style={{ color: "var(--danger)", fontSize: 13, margin: 0, fontWeight: 600 }}>{err}</p>}
       </div>
     </div>
   );

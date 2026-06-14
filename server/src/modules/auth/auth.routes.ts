@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin, twoFactorStatus } from "./auth.service.js";
+import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin, twoFactorStatus, listSessions, revokeSession, revokeAllSessions } from "./auth.service.js";
 import { publicJwks } from "../../lib/auth/keys.js";
 import { authenticate } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
@@ -22,7 +22,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/auth/login", authLimit, async (req, reply) => {
     const { email, password } = z.object({ email: z.string().email(), password: z.string().min(1) }).parse(req.body);
-    try { return await login(email, password, req.ip); } catch (err) { return mapErr(reply, err); }
+    try { return await login(email, password, req.ip, req.headers["user-agent"]); } catch (err) { return mapErr(reply, err); }
   });
 
   // B2C self-registration → creates an unverified LEARNER + sends an OTP.
@@ -73,7 +73,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post("/auth/refresh", authLimit, async (req, reply) => {
     const { refreshToken } = z.object({ refreshToken: z.string().min(1) }).parse(req.body);
-    try { return await refresh(refreshToken, req.ip); } catch (err) { return mapErr(reply, err); }
+    try { return await refresh(refreshToken, req.ip, req.headers["user-agent"]); } catch (err) { return mapErr(reply, err); }
   });
 
   app.post("/auth/logout", async (req, reply) => {
@@ -85,8 +85,21 @@ export async function authRoutes(app: FastifyInstance) {
   // Complete a login that returned { twoFactorRequired: true, challenge }.
   app.post("/auth/2fa/verify", authLimit, async (req, reply) => {
     const { challenge, code } = z.object({ challenge: z.string().min(1), code: z.string().trim().min(6) }).parse(req.body);
-    try { return await verifyTwoFactorLogin(challenge, code, req.ip); } catch (err) { return mapErr(reply, err); }
+    try { return await verifyTwoFactorLogin(challenge, code, req.ip, req.headers["user-agent"]); } catch (err) { return mapErr(reply, err); }
   });
+
+  // --- active sessions (self-service: "my devices") ---
+  app.get("/auth/sessions", { preHandler: authenticate }, async (req) => ({ data: await listSessions(req.principal!.id) }));
+
+  // Revoke one device (rotation family).
+  app.post("/auth/sessions/revoke", { preHandler: authenticate }, async (req) => {
+    const { familyId } = z.object({ familyId: z.string().min(1) }).parse(req.body);
+    return { data: await revokeSession(req.principal!.id, familyId, req.ip) };
+  });
+
+  // Log out of every device (the current one included — the client then re-authenticates).
+  app.post("/auth/sessions/revoke-all", { preHandler: authenticate }, async (req) =>
+    ({ data: await revokeAllSessions(req.principal!.id, { ip: req.ip }) }));
 
   // Current 2FA status (to drive the settings UI).
   app.get("/auth/2fa/status", { preHandler: authenticate }, async (req) => ({ data: await twoFactorStatus(req.principal!.id) }));

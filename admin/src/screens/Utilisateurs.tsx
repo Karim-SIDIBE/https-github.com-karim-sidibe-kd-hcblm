@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, type UserRow } from "../lib/api";
+import { api, rgpd, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago } from "../lib/ui";
 
 const ROLE_FR: Record<string, string> = {
@@ -12,6 +12,7 @@ export function Utilisateurs() {
   const [rows, setRows] = useState<UserRow[] | null>(null);
   const [q, setQ] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [eraseId, setEraseId] = useState<string | null>(null); // row showing the erase choice
   const [note, setNote] = useState<string | null>(null);
 
   async function load() {
@@ -31,10 +32,33 @@ export function Utilisateurs() {
     } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
-  async function remove(u: UserRow) {
-    if (!window.confirm(`Supprimer définitivement ${u.name} (${u.email}) ?\nIrréversible : compte, inscriptions et progression effacés.`)) return;
+  // RGPD — export (Art. 15/20): download everything we hold as JSON.
+  async function exportData(u: UserRow) {
     setBusyId(u.id); setNote(null);
-    try { await api.deleteUser(u.id); setNote(`🗑️ ${u.email} supprimé.`); load(); }
+    try {
+      const data = await rgpd.exportUser(u.id);
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `rgpd-export-${u.email}.json`; a.click();
+      URL.revokeObjectURL(a.href);
+      setNote(`✅ Données de ${u.email} exportées (JSON).`);
+    } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
+  // RGPD — erasure (Art. 17): anonymise (keep aggregate history) or hard delete.
+  async function erase(u: UserRow, mode: "anonymize" | "delete") {
+    const what = mode === "anonymize"
+      ? `Anonymiser ${u.email} ?\nLes données personnelles sont effacées ; l'historique d'apprentissage agrégé est conservé.`
+      : `SUPPRIMER définitivement ${u.email} ?\nIrréversible : compte, inscriptions et progression effacés en cascade.`;
+    if (!window.confirm(what)) return;
+    setBusyId(u.id); setEraseId(null); setNote(null);
+    try { await rgpd.erase(u.id, mode); setNote(`🗑️ ${u.email} — ${mode === "anonymize" ? "anonymisé" : "supprimé"}.`); load(); }
+    catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
+  // Force log-out of all the user's devices (offboarding / security).
+  async function forceLogout(u: UserRow) {
+    setBusyId(u.id); setNote(null);
+    try { const r = await rgpd.revokeUserSessions(u.id); setNote(`✅ ${u.email} déconnecté de ${r.revoked} session(s).`); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
@@ -74,10 +98,21 @@ export function Utilisateurs() {
                   <td><span className="num">{u.enrollments}</span></td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(u.createdAt)}</span></td>
                   <td>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
-                      <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => resend(u)} title="Réinitialise le mot de passe, déverrouille et envoie l'invitation">{busyId === u.id ? "…" : "↻ Réinitialiser"}</button>
-                      <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => remove(u)} title="Supprimer définitivement" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>🗑️</button>
-                    </div>
+                    {eraseId === u.id ? (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end", alignItems: "center" }}>
+                        <span className="muted" style={{ fontSize: 12 }}>Effacer :</span>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => erase(u, "anonymize")} title="Effacer les données personnelles, garder l'historique agrégé">Anonymiser</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => erase(u, "delete")} title="Suppression dure en cascade" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Supprimer</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => setEraseId(null)}>Annuler</button>
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => resend(u)} title="Réinitialise le mot de passe, déverrouille et envoie l'invitation">{busyId === u.id ? "…" : "↻ Réinitialiser"}</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => exportData(u)} title="Exporter les données (RGPD Art. 15/20)">⬇ Données</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => forceLogout(u)} title="Déconnecter tous les appareils">⎋</button>
+                        <button className="btn btn--sm" disabled={busyId === u.id} onClick={() => setEraseId(u.id)} title="Effacement RGPD (Art. 17)" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>Effacer</button>
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

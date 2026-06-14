@@ -120,6 +120,10 @@ model User {
   totpSecret       String?
   totpEnabledAt    DateTime?
   totpBackupCodes  String[]  @default([])
+  /// RGPD Art. 17 (right to erasure): set when the account has been anonymised —
+  /// direct identifiers scrubbed and sessions revoked. Learning history is kept
+  /// de-identified for analytics integrity. Distinct from a hard delete.
+  anonymizedAt     DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -166,6 +170,11 @@ model RefreshToken {
   expiresAt    DateTime
   revokedAt    DateTime?
   replacedById String? // next token in the rotation chain
+  /// Device transparency (RGPD/security): captured at issuance, refreshed on
+  /// rotation so "my active sessions" can show device + last activity.
+  userAgent    String?
+  ip           String?
+  lastUsedAt   DateTime?
   createdAt    DateTime  @default(now())
 
   @@index([userId])
