@@ -1,6 +1,7 @@
 /** Fastify app factory — wires plugins and route modules. */
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
+import helmet from "@fastify/helmet";
 import sensible from "@fastify/sensible";
 import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
@@ -43,6 +44,25 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cors, {
     origin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(",").map((o) => o.trim()) : true,
   });
+
+  // Security headers (defense in depth, in addition to the edge proxy). LMS-aware
+  // config: we deliberately DO NOT enable the headers that break standard LMS
+  // flows, and enable the ones that are pure wins:
+  //   - CSP off here: the API serves JSON + the SAML ACS auto-POST HTML form and
+  //     LTI launch HTML; CSP belongs on the static front-ends (served by Caddy).
+  //   - frameguard off: an LTI *tool* launch is rendered inside the consumer LMS
+  //     iframe — X-Frame-Options: DENY would break it.
+  //   - CORP cross-origin: media is served to the PWA on a different sub-domain.
+  // Still emitted: X-Content-Type-Options=nosniff, Strict-Transport-Security,
+  // Referrer-Policy, X-DNS-Prefetch-Control, Origin-Agent-Cluster, no X-Powered-By.
+  await app.register(helmet, {
+    contentSecurityPolicy: false,
+    frameguard: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    crossOriginEmbedderPolicy: false,
+    crossOriginOpenerPolicy: false,
+  });
+
   await app.register(sensible);
   // Global IP rate limit (per minute). Auth routes get a stricter cap below.
   await app.register(rateLimit, { global: true, max: env.RATE_LIMIT_MAX, timeWindow: "1 minute" });
@@ -67,7 +87,8 @@ export async function buildApp(): Promise<FastifyInstance> {
   });
 
   // Uniform validation-error shape for Zod failures raised inside handlers.
-  app.setErrorHandler((err, _req, reply) => {
+  // Fastify v5 types the error as `unknown`; narrow before use.
+  app.setErrorHandler((err: unknown, _req, reply) => {
     if (err instanceof ZodError) {
       return reply.status(400).send({
         error: "validation_error",
@@ -75,11 +96,12 @@ export async function buildApp(): Promise<FastifyInstance> {
       });
     }
     app.log.error({ err }, "unhandled error");
-    const status = err.statusCode ?? 500;
+    const e = err as { statusCode?: number; name?: string; message?: string };
+    const status = e.statusCode ?? 500;
     // Don't leak internal error details on 5xx in production (info disclosure).
     // 4xx messages (validation, not-found, conflicts…) stay informative.
-    const message = status >= 500 && env.NODE_ENV === "production" ? "Erreur interne du serveur" : err.message;
-    return reply.status(status).send({ error: err.name ?? "internal_error", message });
+    const message = status >= 500 && env.NODE_ENV === "production" ? "Erreur interne du serveur" : e.message;
+    return reply.status(status).send({ error: e.name ?? "internal_error", message });
   });
 
   await app.register(
