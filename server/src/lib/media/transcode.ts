@@ -79,8 +79,10 @@ export async function processVideo(asset: { id: string; mime: string; storageKey
     const key = `renditions/${asset.id}/${l.label}.${l.ext}`;
     const out = localPath(key);
     const args = l.kind === "AUDIO"
-      ? ["-y", "-i", inPath, "-vn", "-c:a", "aac", "-b:a", `${l.bitrateKbps}k`, out]
-      : ["-y", "-i", inPath, "-vf", `scale=-2:${l.height}`, "-c:v", "libx264", "-b:v", `${l.bitrateKbps}k`, "-c:a", "aac", "-b:a", "96k", out];
+      ? ["-y", "-i", inPath, "-vn", "-c:a", "aac", "-b:a", `${l.bitrateKbps}k`, "-movflags", "+faststart", out]
+      // Web-safe H.264: yuv420p for broad decode support + faststart (moov atom up
+      // front) so the browser can start playback without downloading the whole file.
+      : ["-y", "-i", inPath, "-vf", `scale=-2:${l.height}`, "-c:v", "libx264", "-pix_fmt", "yuv420p", "-b:v", `${l.bitrateKbps}k`, "-c:a", "aac", "-b:a", "96k", "-movflags", "+faststart", out];
     const r = spawnSync("ffmpeg", args, { maxBuffer: 1 << 26 });
     if (r.status === 0) {
       renditions.push({

@@ -18,10 +18,14 @@ export type PlaybackManifest = {
 /** Pick a rendition (assumed lowest-bitrate first) for the connection. */
 export function pickRendition(renditions: Rendition[], conn: Conn = {}): Rendition | null {
   if (!renditions.length) return null;
+  // Prefer transcoded renditions (known bitrate, web-safe H.264) over the raw
+  // "source" upload (bitrate unknown), which may not be browser-playable.
+  const transcoded = renditions.filter((r) => r.bitrateKbps != null);
+  const list = transcoded.length ? transcoded : renditions;
   const eff = conn.effectiveType ?? "";
-  if (conn.saveData || eff === "slow-2g" || eff === "2g") return renditions[0]!; // lowest
-  if (eff === "3g") return renditions[Math.min(1, renditions.length - 1)]!;       // low-mid
-  return renditions[renditions.length - 1]!;                                       // best (4g/unknown)
+  if (conn.saveData || eff === "slow-2g" || eff === "2g") return list[0]!; // lowest
+  if (eff === "3g") return list[Math.min(1, list.length - 1)]!;            // low-mid
+  return list[list.length - 1]!;                                          // best (4g/unknown)
 }
 
 /** Read the live connection (Network Information API; empty when unsupported). */
