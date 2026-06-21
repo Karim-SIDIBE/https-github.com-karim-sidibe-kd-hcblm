@@ -97,7 +97,8 @@ export type LearnerRow = {
 };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; anonymized: boolean; deletionDaysLeft: number | null; enrollments: number; createdAt: string };
-export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; renditions: string[]; createdAt: string };
+export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; renditions: string[]; createdAt: string };
+export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string }[] };
 export type Seats = { seats: number; used: number; available: number };
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
@@ -138,6 +139,12 @@ export const api = {
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   media: () => req<MediaAsset[]>("GET", "/media"),
+  async mediaPlayback(id: string): Promise<MediaPlayback> {
+    const data = await req<any>("GET", `/media/${id}/playback`);
+    // Absolutise the API-relative + signed URLs so a native <video> can stream them.
+    if (Array.isArray(data?.renditions)) data.renditions = data.renditions.map((r: any) => ({ ...r, url: r.url ? new URL(r.url, BASE).href : r.url }));
+    return data as MediaPlayback;
+  },
   async uploadMedia(file: File): Promise<MediaAsset> {
     const fd = new FormData();
     fd.append("file", file);

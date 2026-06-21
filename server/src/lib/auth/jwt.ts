@@ -66,3 +66,35 @@ export async function verifyTwoFactorChallenge(token: string): Promise<string> {
   if (payload.pending2fa !== true || !payload.sub) throw new Error("invalid 2fa challenge");
   return payload.sub;
 }
+
+// --- media access token --------------------------------------------------------
+// Short-lived, URL-embeddable grant so a native <video> element (which cannot
+// send an Authorization header) can stream a protected rendition. Scoped to one
+// asset, distinct audience so it is useless as an access token.
+const MEDIA_AUDIENCE = `${env.AUTH_AUDIENCE}:media`;
+const MEDIA_TTL = "6h";
+
+export async function signMediaToken(assetId: string): Promise<string> {
+  const { privateKey, kid } = await getKeys();
+  return new SignJWT({ media: true })
+    .setProtectedHeader({ alg: JWT_ALG, kid, typ: "JWT" })
+    .setSubject(assetId)
+    .setIssuer(env.AUTH_ISSUER)
+    .setAudience(MEDIA_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(MEDIA_TTL)
+    .sign(privateKey);
+}
+
+/** Verify a media token → the asset id it grants. Throws if invalid/expired. */
+export async function verifyMediaToken(token: string): Promise<string> {
+  const { verifyKey } = await getKeys();
+  const { payload } = await jwtVerify(token, verifyKey, {
+    issuer: env.AUTH_ISSUER,
+    audience: MEDIA_AUDIENCE,
+    algorithms: [JWT_ALG],
+    clockTolerance: 5,
+  });
+  if (payload.media !== true || !payload.sub) throw new Error("invalid media token");
+  return payload.sub;
+}

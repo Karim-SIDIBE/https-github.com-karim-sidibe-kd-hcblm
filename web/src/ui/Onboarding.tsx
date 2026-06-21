@@ -77,13 +77,6 @@ export function Onboarding({ eid }: { eid: string }) {
         <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>
       </>)}
 
-      {step === "pam" && objective && (
-        <div className="hf-card hf-card--icy stack">
-          <div className="eyebrow">🎯 Objectif du parcours</div>
-          <p className="body" style={{ margin: 0 }}>{objective}</p>
-        </div>
-      )}
-
       {step === "pam" && (
         <div className="hf-card stack">
           <h1>Votre point de départ</h1>
@@ -94,6 +87,13 @@ export function Onboarding({ eid }: { eid: string }) {
             <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars}</span>
           </div>
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars} onClick={submitPam}>{busy ? "…" : "Enregistrer et continuer →"}</button>
+        </div>
+      )}
+
+      {step === "profile" && objective && (
+        <div className="hf-card hf-card--icy stack">
+          <div className="eyebrow">🎯 Objectif du parcours</div>
+          <p className="body" style={{ margin: 0 }}>{objective}</p>
         </div>
       )}
 

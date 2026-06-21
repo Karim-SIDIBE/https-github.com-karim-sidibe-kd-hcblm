@@ -103,9 +103,13 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
           />
           {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">À retenir</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
-          {session.exercise && (
-            <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>Passer à l'exercice →</button>
+          {!source.url && (
+            <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>⚠️ La vidéo n'est pas disponible pour le moment. Vous pouvez tout de même poursuivre la micro-session.</p></div>
           )}
+          {/* Always offer a way forward so a missing/failing video never blocks progression. */}
+          {session.exercise
+            ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>Passer à l'exercice →</button>
+            : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>Terminer la micro-session →</button>}
         </>
       )}
 
