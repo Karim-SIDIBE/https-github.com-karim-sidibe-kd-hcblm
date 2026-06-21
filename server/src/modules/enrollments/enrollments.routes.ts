@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
   getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
-  selfEnroll, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
+  selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { authenticate, authorize, guard, requireEnrollmentAccess } from "../../lib/auth.js";
@@ -47,6 +47,15 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       const e = await enroll(userId, courseId, isEnterprise ?? false);
       return reply.status(201).send({ data: e });
     } catch (err) { return handle(reply, err); }
+  });
+
+  // Admin — reset an enrolment to the latest published version (videos/edits),
+  // optionally wiping progress. Does NOT delete the account (use RGPD for that).
+  app.post("/enrollments/:id/reset", { preHandler: guard("enrollment:create") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { mode } = z.object({ mode: z.enum(["full", "version"]).default("full") }).parse(req.body ?? {});
+    try { return { data: await resetEnrollment(req.principal?.id, id, mode) }; }
+    catch (err) { return handle(reply, err); }
   });
 
   // B2C self-enrolment from the catalogue (the caller enrols themselves).
