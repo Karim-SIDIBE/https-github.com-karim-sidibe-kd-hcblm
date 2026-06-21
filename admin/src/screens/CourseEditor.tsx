@@ -72,28 +72,39 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
     setBusy("validate"); setMsg(null);
     try { setResult(await api.validateCourse(content)); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
   }
+  /** Persist current edits to a new DRAFT version; returns its id (or null). */
+  async function saveDraft(): Promise<string | null> {
+    if (isNew) {
+      if (!slug.trim()) { setMsg("Indiquez un identifiant (slug) pour le nouveau cours."); return null; }
+      const c = await api.createCourse(slug.trim(), content);
+      const full = await api.course(c.id);
+      const vid = (full.versions[0] as any)?.id ?? null; setVersionId(vid); return vid;
+    } else if (courseId) {
+      const v = await api.newVersion(courseId, content); setVersionId(v.id); return v.id;
+    }
+    return null;
+  }
   async function save() {
     setBusy("save"); setMsg(null); setVersionId(null);
-    try {
-      if (isNew) {
-        if (!slug.trim()) { setMsg("Indiquez un identifiant (slug) pour le nouveau cours."); setBusy(""); return; }
-        const c = await api.createCourse(slug.trim(), content);
-        const full = await api.course(c.id);
-        setVersionId((full.versions[0] as any)?.id ?? null);
-        setMsg("Cours créé en brouillon.");
-      } else if (courseId) {
-        const v = await api.newVersion(courseId, content);
-        setVersionId(v.id);
-        setMsg(`Nouvelle version ${v.version} créée (brouillon).`);
-      }
-      onSaved();
-    } catch (e: any) { setMsg(e?.message || "Erreur à l'enregistrement"); } finally { setBusy(""); }
+    try { const vid = await saveDraft(); if (vid) { setMsg("Brouillon enregistré."); onSaved(); } }
+    catch (e: any) { setMsg(e?.message || "Erreur à l'enregistrement"); } finally { setBusy(""); }
   }
   async function publish() {
     if (!versionId) return;
     setBusy("publish"); setMsg(null);
     try { await api.publishVersion(versionId); setMsg("✅ Version publiée."); onSaved(); }
     catch (e: any) { setMsg("Publication refusée : " + (e?.message || "la version doit passer la validation")); } finally { setBusy(""); }
+  }
+  /** One-click: save the current content as a new version AND publish it. */
+  async function saveAndPublish() {
+    setBusy("publish"); setMsg(null);
+    try {
+      const vid = await saveDraft();
+      if (!vid) { setBusy(""); return; }
+      await api.publishVersion(vid);
+      setMsg("✅ Cours publié — visible des apprenants. Pour un apprenant déjà inscrit : Apprenants → « Maj version » ou « Réinitialiser ».");
+      onSaved();
+    } catch (e: any) { setMsg("Publication refusée : " + (e?.message || "la version doit passer la validation complète")); } finally { setBusy(""); }
   }
   async function submitForReview() {
     if (!versionId) return;
@@ -128,8 +139,9 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
           </label>
           <button className="btn" onClick={exportJson} title="Télécharger ce parcours en JSON (sauvegarde / gabarit réimportable)">⬇ Exporter</button>
           <button className={`btn ${preview ? "btn--primary" : ""}`} onClick={() => setPreview((v) => !v)}>{preview ? "← Retour à l'édition" : "👁 Voir comme apprenant"}</button>
-          <button className="btn" disabled={busy === "validate"} onClick={validate}>{busy === "validate" ? "…" : "Valider"}</button>
-          <button className="btn btn--primary" disabled={busy === "save"} onClick={save}>{busy === "save" ? "…" : "Enregistrer (brouillon)"}</button>
+          <button className="btn" disabled={busy === "validate"} onClick={validate} title="Vérifie la validité du parcours (ne publie pas)">{busy === "validate" ? "…" : "Valider"}</button>
+          <button className="btn" disabled={busy === "save"} onClick={save}>{busy === "save" ? "…" : "Enregistrer (brouillon)"}</button>
+          {canPublish && <button className="btn btn--primary" disabled={busy === "publish"} onClick={saveAndPublish} title="Enregistre et publie : le parcours devient visible des apprenants">{busy === "publish" ? "…" : "🚀 Publier"}</button>}
         </div>
       </div>
 
