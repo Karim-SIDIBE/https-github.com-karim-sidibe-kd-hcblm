@@ -113,7 +113,15 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     block(enrollmentId: string, index: number) { return this.get(`/enrollments/${enrollmentId}/blocks/${index}`); },
     project(enrollmentId: string) { return this.get(`/enrollments/${enrollmentId}/project`); },
     notifications(enrollmentId: string) { return this.get(`/enrollments/${enrollmentId}/notifications`); },
-    mediaPlayback(mediaId: string) { return this.get(`/media/${mediaId}/playback`); },
+    async mediaPlayback(mediaId: string) {
+      const data = await this.get<any>(`/media/${mediaId}/playback`);
+      // The manifest returns API-relative URLs; make them absolute against the API
+      // origin so a native <video> works even when the PWA is on another subdomain.
+      const abs = (u?: string | null) => (u ? new URL(u, baseUrl).href : u);
+      if (Array.isArray(data?.renditions)) data.renditions = data.renditions.map((r: any) => ({ ...r, url: abs(r.url) }));
+      if (Array.isArray(data?.captions)) data.captions = data.captions.map((c: any) => ({ ...c, url: abs(c.url) }));
+      return data;
+    },
     async getOfflineBundle(enrollmentId: string, etag?: string) {
       const res = await raw("GET", `/enrollments/${enrollmentId}/offline-bundle`, etag ? { headers: { "if-none-match": `"${etag}"` } } : {});
       if (res.status === 304) return { status: 304 as const };

@@ -37,6 +37,13 @@ export function Medias() {
 
   function copyId(id: string) { navigator.clipboard?.writeText(id).then(() => setNote(`Identifiant copié : ${id}`)).catch(() => {}); }
 
+  const [preview, setPreview] = useState<{ asset: MediaAsset; url: string | null; kind: string } | null>(null);
+  async function openPreview(m: MediaAsset) {
+    setNote(null); setPreview({ asset: m, url: null, kind: m.kind });
+    try { const pb = await api.mediaPlayback(m.id); const r = pb.renditions?.[0]; setPreview({ asset: m, url: r?.url ?? null, kind: r?.kind ?? m.kind }); }
+    catch (e) { setPreview({ asset: m, url: null, kind: m.kind }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
+  }
+
   return (
     <div className="content">
       <div className="pagehead">
@@ -67,9 +74,12 @@ export function Medias() {
                     <td>{dur(m.durationSec)}</td>
                     <td>{size(m.sizeBytes)}</td>
                     <td><span className="muted" style={{ fontSize: 12 }}>{m.renditions.length ? m.renditions.join(", ") : "—"}</span></td>
-                    <td><span className={`pill ${st.cls}`}>{st.label}</span></td>
+                    <td><span className={`pill ${st.cls}`} title={m.error ?? undefined}>{st.label}</span></td>
                     <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(m.createdAt)}</span></td>
-                    <td><button className="btn btn--sm" onClick={() => copyId(m.id)} title="Copier l'identifiant du média">⧉ Copier</button></td>
+                    <td><div style={{ display: "flex", gap: 6 }}>
+                      <button className="btn btn--sm" onClick={() => openPreview(m)} title="Prévisualiser le média">▶ Aperçu</button>
+                      <button className="btn btn--sm" onClick={() => copyId(m.id)} title="Copier l'identifiant du média">⧉ Copier</button>
+                    </div></td>
                   </tr>
                 );
               })}
@@ -79,6 +89,28 @@ export function Medias() {
           {rows && rows.length === 0 && <div className="empty"><div className="big">🎬</div>Aucun média. Téléversez votre première vidéo.</div>}
         </div>
       </div>
+
+      {preview && (
+        <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", zIndex: 50, padding: 20 }}>
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 18, maxWidth: 760, width: "100%", boxShadow: "var(--shadow-lg)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+              <b>{preview.asset.filename ?? "Aperçu"}</b>
+              <button className="btn btn--sm" onClick={() => setPreview(null)}>✕ Fermer</button>
+            </div>
+            {preview.asset.status === "FAILED" ? (
+              <div style={{ color: "var(--danger)", fontSize: 13 }}>❌ Le traitement a échoué. {preview.asset.error}</div>
+            ) : preview.url ? (
+              preview.kind === "AUDIO"
+                ? <audio controls src={preview.url} style={{ width: "100%" }} />
+                : <video controls src={preview.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }} />
+            ) : preview.asset.status !== "READY" ? (
+              <div className="muted" style={{ fontSize: 13 }}>⏳ Média en cours de traitement ({preview.asset.status})… réessayez dans un instant.</div>
+            ) : (
+              <div className="muted" style={{ fontSize: 13 }}>Aperçu indisponible pour ce type de média (aucune piste lisible).</div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

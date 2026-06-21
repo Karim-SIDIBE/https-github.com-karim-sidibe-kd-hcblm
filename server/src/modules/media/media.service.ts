@@ -7,6 +7,7 @@ import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
 import { env } from "../../config/env.js";
 import { processVideo, ffmpegAvailable } from "../../lib/media/transcode.js";
+import { signMediaToken } from "../../lib/auth/jwt.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { computeProgress } from "../../domain/engine/progress.js";
 import { isStaff } from "../../domain/auth/permissions.js";
@@ -131,7 +132,7 @@ export async function listMedia(limit = 200) {
   });
   return assets.map((a) => ({
     id: a.id, kind: a.kind, filename: a.originalFilename, mime: a.mime,
-    sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, createdAt: a.createdAt,
+    sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, error: a.error, createdAt: a.createdAt,
     renditions: a.renditions.filter((r) => r.available).map((r) => r.label),
   }));
 }
@@ -156,9 +157,12 @@ export async function playbackManifest(id: string) {
   //     authenticated streaming endpoint on the API. Default behaviour is
   //     unchanged unless MEDIA_PUBLIC_BASE_URL is set.
   const cdn = !!env.MEDIA_PUBLIC_BASE_URL;
+  // Without a CDN, native <video> streams from the authenticated API endpoint —
+  // but it can't send a Bearer header, so we embed a short-lived signed token.
+  const mediaToken = cdn ? null : await signMediaToken(id);
   const labelOf = (rid: string) => asset.renditions.find((x) => x.id === rid)!.label;
   const toUrl = (r: { id: string; url: string | null; storageKey: string | null }) =>
-    r.url ?? (cdn && r.storageKey ? storage.publicUrl(r.storageKey) : `/api/v1/media/${id}/download?label=${encodeURIComponent(labelOf(r.id))}`);
+    r.url ?? (cdn && r.storageKey ? storage.publicUrl(r.storageKey) : `/api/v1/media/${id}/download?label=${encodeURIComponent(labelOf(r.id))}&t=${mediaToken}`);
   const recommendedLite = playable.find((r) => r.downloadable) ?? playable[0];
 
   return {
