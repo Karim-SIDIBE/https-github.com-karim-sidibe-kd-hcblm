@@ -18,6 +18,7 @@ import { activityId, buildStatement, quizResult, secondsToIsoDuration, XAPI_EXT,
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { issueCredential } from "../credentials/credentials.service.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
+import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 
 export class EngineError extends Error {
@@ -164,6 +165,48 @@ export async function selfEnroll(userId: string, courseId: string, memberOrgIds:
     throw new EngineError(403, "course_forbidden", "Parcours non disponible");
   }
   return enroll(userId, courseId, false);
+}
+
+/**
+ * Admin action — re-point an enrolment to the latest PUBLISHED course version
+ * (so newly-linked videos / edits become visible), without deleting the account.
+ * `mode: "version"` keeps progress; `mode: "full"` wipes all progress first.
+ */
+export async function resetEnrollment(actorId: string | undefined, enrollmentId: string, mode: "full" | "version") {
+  const e = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { id: true, courseId: true } });
+  if (!e) throw new EngineError(404, "not_found", "Inscription introuvable");
+  const latest = await prisma.courseVersion.findFirst({
+    where: { courseId: e.courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { id: true, version: true },
+  });
+  if (!latest) throw new EngineError(409, "no_published_version", "Aucune version publiée pour ce cours");
+
+  if (mode === "version") {
+    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { courseVersionId: latest.id } });
+    await audit({ actorId, action: "enrollment.version_updated", targetType: "enrollment", targetId: enrollmentId, meta: { version: latest.version } });
+    return { mode, version: latest.version };
+  }
+
+  // Full reset: drop every progress artefact, then re-pin to the latest version.
+  await prisma.$transaction([
+    prisma.itemCompletion.deleteMany({ where: { enrollmentId } }),
+    prisma.journalTrigger.deleteMany({ where: { enrollmentId } }),
+    prisma.mediaPosition.deleteMany({ where: { enrollmentId } }),
+    prisma.badge.deleteMany({ where: { enrollmentId } }),
+    prisma.reEngagementMessage.deleteMany({ where: { enrollmentId } }),
+    prisma.credential.deleteMany({ where: { enrollmentId } }),
+    prisma.aiAssessment.deleteMany({ where: { enrollmentId } }),
+    prisma.xapiStatement.deleteMany({ where: { enrollmentId } }),
+    prisma.notification.deleteMany({ where: { enrollmentId } }),
+    prisma.syncOperation.deleteMany({ where: { enrollmentId } }),
+    prisma.tutorSession.deleteMany({ where: { enrollmentId } }),
+    prisma.projectSubmission.deleteMany({ where: { enrollmentId } }),
+    prisma.enrollment.update({
+      where: { id: enrollmentId },
+      data: { courseVersionId: latest.id, status: "ACTIVE", momentAncrage: null, peerName: null, peerEmail: null, peerPhone: null, lastBlockIndex: null, lastItemKey: null, lastSeenAt: new Date(), journalStartedAt: null, completedAt: null },
+    }),
+  ]);
+  await audit({ actorId, action: "enrollment.reset", targetType: "enrollment", targetId: enrollmentId, meta: { version: latest.version } });
+  return { mode, version: latest.version };
 }
 
 // --- Moment d'Ancrage -------------------------------------------------------

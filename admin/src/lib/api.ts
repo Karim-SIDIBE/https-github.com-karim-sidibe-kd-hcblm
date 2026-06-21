@@ -91,7 +91,7 @@ export type CourseReport = {
   badgesIssued: { type: string; count: number }[]; credentialsIssued: number;
 };
 export type LearnerRow = {
-  id: string; name: string; email: string; status: string; progressPercent: number;
+  id: string; enrollmentId: string; name: string; email: string; status: string; progressPercent: number;
   finalQuiz: number | null; rubric: number | null; active: boolean;
   lastActivity: string | null; startedAt: string | null; completedAt: string | null;
 };
@@ -135,6 +135,7 @@ export const api = {
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
+  resetEnrollment: (enrollmentId: string, mode: "full" | "version") => req<{ mode: string; version: number }>("POST", `/enrollments/${enrollmentId}/reset`, { mode }),
   invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),

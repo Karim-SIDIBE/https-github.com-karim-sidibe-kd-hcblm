@@ -26,10 +26,15 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [note, setNote] = useState<string | null>(null);
   const canManage = CAN_MANAGE.includes(auth.user()?.role ?? "");
 
-  async function remove(l: LearnerRow) {
-    if (!window.confirm(`Supprimer définitivement ${l.name} (${l.email}) ?\nCette action est irréversible et efface son compte, ses inscriptions et sa progression.`)) return;
+  // Re-point the enrolment to the latest published version (so new videos/edits
+  // show up). "full" wipes progress, "version" keeps it. Never deletes the account.
+  async function resetCourse(l: LearnerRow, mode: "full" | "version") {
+    const msg = mode === "full"
+      ? `Réinitialiser le parcours de ${l.email} ?\nLa progression est remise à zéro ET l'inscription repasse à la dernière version publiée (nouvelles vidéos/modifs). Le compte n'est pas supprimé.`
+      : `Mettre à jour ${l.email} vers la dernière version publiée ?\nLa progression est conservée ; seules les nouvelles vidéos/modifications apparaissent.`;
+    if (!window.confirm(msg)) return;
     setBusyId(l.id); setNote(null);
-    try { await api.deleteUser(l.id); setNote(`🗑️ ${l.email} supprimé.`); setReloadKey((k) => k + 1); }
+    try { const r = await api.resetEnrollment(l.enrollmentId, mode); setNote(`✅ ${l.email} — ${mode === "full" ? "parcours réinitialisé" : "mis à jour"} (version ${r.version}).`); setReloadKey((k) => k + 1); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
@@ -89,7 +94,8 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                     <td>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
-                        <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => remove(l)} title="Supprimer définitivement ce compte" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>🗑️</button>
+                        <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "version")} title="Mettre à jour vers la dernière version publiée (garde la progression)">⟳ Maj version</button>
+                        <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "full")} title="Réinitialiser le parcours (remet la progression à zéro + dernière version)" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>↺ Réinitialiser</button>
                       </div>
                     </td>
                   )}
