@@ -5,6 +5,7 @@ import { navigate, routes, useRoute, type Route } from "./lib/router";
 import { brand, brandWordmark } from "./lib/brand";
 import { Login } from "./ui/Login";
 import { Enrollments } from "./ui/Enrollments";
+import { InstallPrompt } from "./ui/InstallPrompt";
 import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
 
 const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
@@ -99,7 +100,7 @@ export function App() {
       <div className="shell">
         <div className="main">
           <div className="appbar appbar--standalone"><Brand /><div className="tools"><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>Mon compte</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div></div>
-          <main className="screen"><Banner sync={sync} /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
+          <main className="screen"><Banner sync={sync} /><InstallPrompt /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
     );
@@ -133,6 +134,7 @@ export function App() {
 
         <main className="screen">
           <Banner sync={sync} />
+          <InstallPrompt />
           <Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense>
         </main>
 

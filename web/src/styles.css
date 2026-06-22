@@ -38,7 +38,7 @@ html,body { margin:0; }
 body { font-family:var(--font-body); color:var(--fg); background:var(--bg-soft); font-size:16px; line-height:1.45; -webkit-text-size-adjust:100%; }
 
 /* ============================================================ APP SHELL ============================================================ */
-.shell { min-height:100vh; display:flex; }
+.shell { min-height:100vh; min-height:100dvh; display:flex; } /* dvh: stable height on mobile Safari (address-bar) */
 .sidebar { display:none; }            /* desktop only (see media query) */
 .main { flex:1 1 auto; display:flex; flex-direction:column; min-width:0; }
 
@@ -91,8 +91,8 @@ a { color:var(--orange-600); }
 .hf-btn--outline { background:var(--bg); color:var(--navy-600); border-color:var(--navy-600); }
 .hf-btn--outline:hover { background:var(--navy-600); color:#fff; }
 .hf-btn--declick { background:var(--brand-declick); color:#fff; box-shadow:var(--shadow-sm); }
-.hf-btn--ghost { background:transparent; color:var(--navy-600); padding:10px 14px; min-height:0; }
-.hf-btn--sm { font-size:12.5px; padding:8px 14px; min-height:0; }
+.hf-btn--ghost { background:transparent; color:var(--navy-600); padding:10px 14px; min-height:var(--tap); }
+.hf-btn--sm { font-size:12.5px; padding:8px 14px; min-height:var(--tap); }
 .hf-btn--block { display:flex; width:100%; }
 .hf-btn:disabled,.hf-btn--disabled { background:var(--bg-soft); color:var(--fg-mute); border-color:var(--line); cursor:not-allowed; box-shadow:none; }
 .hf-btn:active { transform:translateY(0) scale(.97); }
@@ -199,7 +199,7 @@ button { min-height:var(--tap); background:var(--orange-500); color:#fff; border
 button:active { transform:translateY(1px); }
 button:disabled { opacity:.55; cursor:default; }
 button.secondary { background:var(--bg); color:var(--navy-600); border:2px solid var(--navy-600); }
-button.ghost { background:transparent; color:var(--navy-600); border:0; font-weight:600; min-height:0; }
+button.ghost { background:transparent; color:var(--navy-600); border:0; font-weight:600; min-height:var(--tap); }
 button.block { width:100%; }
 
 @media (prefers-reduced-motion:reduce){ .skeleton,.progress>span,button,.hf-prog>i{ animation:none; transition:none; } }
@@ -207,7 +207,7 @@ button.block { width:100%; }
 /* ============================================================ DESKTOP / TABLET ============================================================ */
 @media (min-width:900px) {
   body { background:var(--bg-tint); }
-  .shell { max-width:1180px; margin:24px auto; background:var(--bg); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); border:1px solid var(--line); overflow:hidden; min-height:calc(100vh - 48px); }
+  .shell { max-width:1180px; margin:24px auto; background:var(--bg); border-radius:var(--r-lg); box-shadow:var(--shadow-lg); border:1px solid var(--line); overflow:hidden; min-height:calc(100vh - 48px); min-height:calc(100dvh - 48px); }
   .sidebar { display:flex; flex-direction:column; flex:0 0 248px; background:var(--bg-soft); border-right:1px solid var(--line); padding:18px 14px; gap:6px; }
   .sidebar .brand { padding:6px 8px 16px; }
   .sidebar .navitem { display:flex; align-items:center; gap:12px; padding:12px 14px; border-radius:12px; color:var(--fg-2); font-family:var(--font-display); font-weight:700; font-size:14px; cursor:pointer; background:none; border:0; width:100%; justify-content:flex-start; }
@@ -219,3 +219,14 @@ button.block { width:100%; }
   .tabbar { display:none; }
   .screen { max-width:720px; padding:28px 32px 40px; }
 }
+
+/* ============================================================ MOBILE POLISH ============================================================ */
+/* No grey flash on tap (iOS/Android) — we already have :active/hover affordances. */
+button, a, .hf-rowtap, [role="button"] { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+
+/* "Add to home screen" prompt (A2HS) — dismissible banner above the content. */
+.a2hs { display:flex; align-items:center; gap:10px; background:var(--navy-700); color:#fff; border-radius:var(--r-md); padding:10px 12px; margin-bottom:14px; }
+.a2hs .a2hs-txt { display:flex; flex-direction:column; flex:1 1 auto; gap:1px; min-width:0; }
+.a2hs .a2hs-txt strong { font-size:13.5px; }
+.a2hs .a2hs-txt span { font-size:12px; color:rgba(255,255,255,.85); }
+.a2hs .hf-btn--ghost { color:#fff; padding:8px 10px; }
