@@ -64,16 +64,17 @@ npm run sync
 
 ## App icon & splash screen
 
-Drop a 1024×1024 `icon.png` (and optional `splash.png`) into `mobile/resources/`,
-then generate every density:
+Branded sources are **already provided** — `mobile/resources/icon.png` (1024×1024)
+and `mobile/resources/splash.png` (2732×2732), generated from the DECLICK logo.
+After adding the platforms, apply them to every density:
 
 ```bash
 npm run assets                    # @capacitor/assets → all icon/splash sizes
 npm run sync
 ```
 
-The source logo lives at `web/public/logo-icon.png`; export it to 1024×1024 on a
-solid `#F36F21` (or transparent) background for the store icon.
+For a white-label client build, replace those two files with the client's logo
+(same dimensions) and re-run the two commands above.
 
 ## Day-to-day: ship a new version
 
