@@ -22,7 +22,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     if (!blk) return null;
     const m = (blk.payload?.microSessions ?? []).find((s: any) => s.id === item);
     if (m) return m;
-    if (blk.type === "ONBOARDING" && item === "trigger") return { id: "trigger", title: "Introduction", video: blk.payload.triggerVideo };
+    if (blk.type === "ONBOARDING" && (item === "declencheur" || item === "trigger")) return { id: item, title: "Vidéo déclencheur", video: blk.payload.triggerVideo };
     return null;
   }, [bundle, block, item]);
 

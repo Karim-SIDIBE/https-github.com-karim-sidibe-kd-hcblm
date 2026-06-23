@@ -22,8 +22,13 @@ const sessionItems = (ms: MicroSession[]): BlockItem[] =>
 
 export function blockItems(block: Block): BlockItem[] {
   switch (block.type) {
-    case "ONBOARDING":
-      return [{ key: "onboarding", kind: "onboarding", label: "Introduction & point de départ" }];
+    case "ONBOARDING": {
+      const items: BlockItem[] = [{ key: "onboarding", kind: "onboarding", label: "Introduction & point de départ" }];
+      // The trigger ("déclencheur") video — a distinct key so it never collides
+      // with the trigger QUIZ ("trigger"). Optional: not a completion requirement.
+      if (block.payload.triggerVideo) items.push({ key: "declencheur", kind: "session", label: "Vidéo déclencheur", durationSec: block.payload.triggerVideo.durationSec });
+      return items;
+    }
     case "COMPREHENSION": {
       const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: "Quiz diagnostique" }, ...sessionItems(block.payload.microSessions)];
       if (block.payload.caseStudy) items.push({ key: "case", kind: "case", label: block.payload.caseStudy.title ?? "Étude de cas" });
