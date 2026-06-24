@@ -1,5 +1,5 @@
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
-import { api, courseTitle, type CourseReport, type AtRiskLearner } from "../lib/api";
+import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
 
@@ -21,6 +21,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
   const rep = useAsync<CourseReport>(() => api.courseReport(courseId), [courseId]);
   const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId]);
+  const comp = useAsync<CourseCompetencies>(() => api.competencies(courseId), [courseId]);
 
   const r = rep.data;
   const certified = r?.statusCounts?.CERTIFIED ?? r?.credentialsIssued ?? 0;
@@ -95,6 +96,28 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
                   ))}
                 </div>}
           </div>
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-h"><h3>Forces &amp; faiblesses du groupe</h3>{comp.data && <span className="pill pill--soft">{comp.data.learnersAssessed} évalué{comp.data.learnersAssessed > 1 ? "s" : ""}</span>}</div>
+        <div className="card-b" style={{ paddingTop: 6 }}>
+          {comp.loading ? <div className="muted">Chargement…</div>
+            : !comp.data?.competencies.length ? <div className="empty" style={{ padding: "26px 10px" }}><div className="big">📊</div>Aucun quiz diagnostique complété pour l'instant.</div>
+            : <>
+                <div className="muted" style={{ fontSize: 12.5, marginBottom: 10 }}>Score moyen au diagnostique par compétence (les plus faibles en premier — à renforcer dans le contenu).</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 11 }}>
+                  {comp.data.competencies.map((c) => {
+                    const col = c.avgPct < 50 ? "var(--danger)" : c.avgPct < 70 ? "var(--orange-500)" : "var(--green)";
+                    return (
+                      <div key={c.subArea}>
+                        <div className="row between" style={{ fontSize: 13 }}><span>{c.subArea}</span><b className="num">{c.avgPct}%</b></div>
+                        <div style={{ height: 8, background: "var(--bg-soft)", borderRadius: 999, marginTop: 4, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(c.avgPct, 2)}%`, background: col, borderRadius: 999 }} /></div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>}
         </div>
       </div>
 
