@@ -47,12 +47,19 @@ export type BlockProgress = {
 /** Derive the required completion items for one block. */
 export function blockRequirements(block: Block): RequiredItem[] {
   switch (block.type) {
-    case "ONBOARDING":
-      return [
+    case "ONBOARDING": {
+      const req: RequiredItem[] = [
         { itemType: "PROFILE", key: "profile", label: "Profil de gestion du temps identifié" },
         { itemType: "TRIGGER_QUIZ", key: "trigger", label: "Quiz déclencheur complété" },
-        { itemType: "PEER", key: "peer", label: "Pair de progression nommé" },
       ];
+      // The trigger ("déclencheur") video is the Bloc 0 micro-session — like every
+      // other block, all micro-sessions must be completed before the badge. Keyed
+      // "declencheur" (distinct from the trigger QUIZ "trigger"); see web content.ts.
+      if (block.payload.triggerVideo)
+        req.push({ itemType: "MICRO_SESSION", key: "declencheur", label: "Vidéo déclencheur visionnée" });
+      req.push({ itemType: "PEER", key: "peer", label: "Pair de progression nommé" });
+      return req;
+    }
     case "COMPREHENSION": {
       const req: RequiredItem[] = [
         { itemType: "DIAGNOSTIC_QUIZ", key: "diagnostic", label: "Quiz diagnostique" },

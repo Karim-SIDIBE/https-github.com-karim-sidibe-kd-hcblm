@@ -34,13 +34,20 @@ test("productivity score (dispositif #2): 0 fresh, rises with completion, reflec
 });
 
 test("Bloc 0 needs the Moment d'Ancrage even with items done", () => {
-  const recs: CompletionRecord[] = [
-    { blockIndex: 0, itemKey: "profile", scorePct: null },
-    { blockIndex: 0, itemKey: "trigger", scorePct: null },
-    { blockIndex: 0, itemKey: "peer", scorePct: null },
-  ];
+  // Complete EVERY Bloc 0 requirement (incl. the déclencheur video micro-session)
+  // so the test isolates the Moment d'Ancrage as the remaining gate.
+  const recs: CompletionRecord[] = blockRequirements(content.blocks[0]!).map((r) => ({ blockIndex: 0, itemKey: r.key, scorePct: null }));
   assert.equal(computeProgress(content, recs, false).blocks[0]!.state, "available"); // PAM missing
   assert.equal(computeProgress(content, recs, true).blocks[0]!.state, "completed");
+});
+
+test("Bloc 0 requires the déclencheur video micro-session", () => {
+  const onboarding = content.blocks[0]!;
+  if (!(onboarding as any).payload.triggerVideo) return; // skip if the course has no trigger video
+  assert.ok(blockRequirements(onboarding).some((r) => r.key === "declencheur"), "déclencheur must be a Bloc 0 requirement");
+  // Everything done EXCEPT the déclencheur → Bloc 0 stays incomplete (badge withheld).
+  const allButVideo = blockRequirements(onboarding).filter((r) => r.key !== "declencheur").map((r) => ({ blockIndex: 0, itemKey: r.key, scorePct: null }));
+  assert.equal(computeProgress(content, allButVideo, true).blocks[0]!.state, "available");
 });
 
 test("PRACTICE requires the inter-block quiz when present", () => {
