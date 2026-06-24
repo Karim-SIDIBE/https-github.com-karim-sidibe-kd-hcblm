@@ -90,7 +90,8 @@ export function Home({ eid }: { eid: string }) {
             <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
               {prio.slice(0, 2).map((p, i) => <li key={i} className="body" style={{ color: "var(--fg-1)" }}><strong>{p?.subArea ?? p?.label ?? String(p)}</strong></li>)}
             </ul>
-            <button className="hf-btn hf-btn--outline hf-btn--block" style={{ marginTop: 12 }} onClick={() => navigate(routes.cours(eid))}>Travailler ces points →</button>
+            <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 12 }} onClick={() => navigate(routes.revision(eid))}>Réviser mes points faibles →</button>
+            <button className="hf-btn hf-btn--ghost hf-btn--block" style={{ marginTop: 6 }} onClick={() => navigate(routes.cours(eid))}>Aller au cours</button>
           </div>
         );
       })()}

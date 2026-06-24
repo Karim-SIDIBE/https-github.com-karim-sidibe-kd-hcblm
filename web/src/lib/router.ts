@@ -18,6 +18,7 @@ export type Route =
   | { name: "deliverable"; eid: string; block: number; key: string }
   | { name: "project"; eid: string }
   | { name: "badges"; eid: string }
+  | { name: "revision"; eid: string }
   | { name: "onboarding"; eid: string }
   | { name: "block"; eid: string; block: number };
 
@@ -36,6 +37,7 @@ export function parseRoute(hash: string): Route {
     if (seg[2] === "deliverable" && seg[3] && seg[4]) return { name: "deliverable", eid, block: Number(seg[3]), key: decodeURIComponent(seg[4]) };
     if (seg[2] === "project") return { name: "project", eid };
     if (seg[2] === "badges") return { name: "badges", eid };
+    if (seg[2] === "revision") return { name: "revision", eid };
     if (seg[2] === "block" && seg[3]) return { name: "block", eid, block: Number(seg[3]) };
     return { name: "course", eid };
   }
@@ -62,6 +64,7 @@ export const routes = {
   deliverable: (eid: string, block: number, key: string) => `#/c/${encodeURIComponent(eid)}/deliverable/${block}/${encodeURIComponent(key)}`,
   project: (eid: string) => `#/c/${encodeURIComponent(eid)}/project`,
   badges: (eid: string) => `#/c/${encodeURIComponent(eid)}/badges`,
+  revision: (eid: string) => `#/c/${encodeURIComponent(eid)}/revision`,
 };
 
 export function useRoute(): Route {

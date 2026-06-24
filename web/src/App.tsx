@@ -18,6 +18,7 @@ const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Proj
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
 const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Account })));
+const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Revision })));
 
 /** The eid of a course-scoped route (null on the enrolments list). */
 function eidOf(route: Route): string | null {
@@ -47,6 +48,7 @@ function Screen({ route }: { route: Route }) {
     case "onboarding": return <Onboarding eid={route.eid} />;
     case "block": return <Course eid={route.eid} />;
     case "account": return <Account />;
+    case "revision": return <Revision eid={route.eid} />;
     default: return <Enrollments />;
   }
 }
