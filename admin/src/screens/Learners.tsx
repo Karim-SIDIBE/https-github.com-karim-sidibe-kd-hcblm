@@ -1,6 +1,9 @@
 import { useMemo, useState } from "react";
-import { api, auth, courseTitle, type LearnerRow } from "../lib/api";
+import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+
+const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
+const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
 
 const CAN_MANAGE = ["SUPER_ADMIN", "COURSE_ADMIN"];
 import type { CourseCtx } from "../App";
@@ -20,6 +23,8 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
   const [reloadKey, setReloadKey] = useState(0);
   const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId, reloadKey]);
+  const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId, reloadKey]);
+  const riskMap = useMemo(() => new Map((risk.data ?? []).map((r) => [r.enrollmentId, r])), [risk.data]);
   const [q, setQ] = useState("");
   const [filter, setFilter] = useState("Tous");
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -35,6 +40,14 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
     if (!window.confirm(msg)) return;
     setBusyId(l.id); setNote(null);
     try { const r = await api.resetEnrollment(l.enrollmentId, mode); setNote(`✅ ${l.email} — ${mode === "full" ? "parcours réinitialisé" : "mis à jour"} (version ${r.version}).`); setReloadKey((k) => k + 1); }
+    catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
+
+  // Manual re-engagement: send the learner a personalised "come back" nudge.
+  async function relancer(l: LearnerRow) {
+    setBusyId(l.id); setNote(null);
+    try { await api.nudgeLearner(l.enrollmentId); setNote(`✅ Relance envoyée à ${l.email}.`); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
@@ -80,7 +93,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th>{canManage && <th>Actions</th>}</tr></thead>
+            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th><th>Risque</th>{canManage && <th>Actions</th>}</tr></thead>
             <tbody>
               {rows.map((l) => (
                 <tr key={l.email}>
@@ -90,9 +103,11 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                   <td>{b4Pill(l)}</td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
                   <td>{statusPill(l)}</td>
+                  <td>{(() => { const rk = riskMap.get(l.enrollmentId); return rk ? <span className={`pill ${RISK_PILL[rk.riskLevel]}`} title={rk.factors.join(" · ")}>{rk.riskScore} · {RISK_FR[rk.riskLevel]}</span> : <span className="muted">—</span>; })()}</td>
                   {canManage && (
                     <td>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                        {l.status !== "CERTIFIED" && <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => relancer(l)} title="Envoyer une relance d'engagement personnalisée à l'apprenant">📣 Relancer</button>}
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "version")} title="Mettre à jour vers la dernière version publiée (garde la progression)">⟳ Maj version</button>
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "full")} title="Réinitialiser le parcours (remet la progression à zéro + dernière version)" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>↺ Réinitialiser</button>

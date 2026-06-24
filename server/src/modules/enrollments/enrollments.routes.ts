@@ -6,6 +6,7 @@ import {
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
+import { nudgeOne } from "../jobs/jobs.service.js";
 import { authenticate, authorize, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { memberOrgIds } from "../../lib/tenant.js";
@@ -56,6 +57,14 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     const { mode } = z.object({ mode: z.enum(["full", "version"]).default("full") }).parse(req.body ?? {});
     try { return { data: await resetEnrollment(req.principal?.id, id, mode) }; }
     catch (err) { return handle(reply, err); }
+  });
+
+  // Admin — manually re-engage (nudge) a single learner.
+  app.post("/enrollments/:id/nudge", { preHandler: guard("enrollment:create") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const r = await nudgeOne(id);
+    if (!r) return reply.notFound("Inscription introuvable");
+    return { data: r };
   });
 
   // B2C self-enrolment from the catalogue (the caller enrols themselves).

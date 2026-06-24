@@ -162,3 +162,36 @@ export async function runReEngagement(now: Date = new Date()): Promise<ReEngagem
 
   return { scanned: enrollments.length, created };
 }
+
+/**
+ * Manual re-engagement of ONE learner (admin "Relancer" action) — reuses the
+ * same personalised-nudge pipeline as the scheduled job, but on demand and
+ * always learner-facing. Returns null if the enrolment is unknown.
+ */
+export async function nudgeOne(enrollmentId: string) {
+  const e = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    include: { user: true, courseVersion: true, completions: true },
+  });
+  if (!e) return null;
+  const now = new Date();
+  const raw = dueStage(daysInactive(e.lastSeenAt ?? e.startedAt, now));
+  const stage: Stage = raw === "J3" || raw === "J7" ? raw : "J7"; // keep it learner-facing (never the admin J14)
+  const content = CourseContent.parse(e.courseVersion.content);
+  const resume = computeResume(
+    content,
+    e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
+    Boolean(e.momentAncrage),
+    { blockIndex: e.lastBlockIndex, itemKey: e.lastItemKey },
+  );
+  const blockDurationEstimate = resume ? content.blocks[resume.blockIndex]?.durationEstimate ?? "" : "";
+  const { channel, body, aiGenerated, provider } = await generateNudge(stage, {
+    learnerName: e.user.name, momentAncrage: e.momentAncrage, isEnterprise: e.isEnterprise, resume, blockDurationEstimate,
+  });
+  await prisma.reEngagementMessage.create({ data: { enrollmentId: e.id, stage, channel, body } });
+  await enqueueNotification({
+    enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "EMAIL",
+    subject: "Reprenez votre parcours", body, aiGenerated, provider,
+  });
+  return { sent: true as const, stage, channel, email: e.user.email };
+}
