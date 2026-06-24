@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner } from "../lib/api";
+import { Fragment, useMemo, useState } from "react";
+import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner, type LearnerDiagnostic } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 
 const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
@@ -19,6 +19,27 @@ function b4Pill(l: LearnerRow) {
   return <span className="muted">—</span>;
 }
 
+function DiagPanel({ d }: { d: LearnerDiagnostic | "loading" | undefined }) {
+  if (!d || d === "loading") return <span className="muted">Chargement du profil…</span>;
+  if (!d.taken || !d.subAreaScores?.length) return <span className="muted">Quiz diagnostique non passé.</span>;
+  return (
+    <div style={{ padding: "4px 2px" }}>
+      <div style={{ fontSize: 12.5, marginBottom: 8 }}><b>Profil de compétences</b>{d.profile ? ` · ${d.profile}` : ""}{d.scorePct != null ? ` · ${d.scorePct}% au diagnostique` : ""}</div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px 24px", maxWidth: 720 }}>
+        {d.subAreaScores.map((s) => {
+          const col = s.pct < 50 ? "var(--danger)" : s.pct < 70 ? "var(--orange-500)" : "var(--green)";
+          return (
+            <div key={s.subArea}>
+              <div className="row between" style={{ fontSize: 12.5 }}><span>{s.subArea}</span><b className="num">{s.pct}%</b></div>
+              <div style={{ height: 7, background: "var(--bg)", borderRadius: 999, marginTop: 3, overflow: "hidden" }}><div style={{ height: "100%", width: `${Math.max(s.pct, 2)}%`, background: col, borderRadius: 999 }} /></div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
   const [reloadKey, setReloadKey] = useState(0);
@@ -30,6 +51,19 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const canManage = CAN_MANAGE.includes(auth.user()?.role ?? "");
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, LearnerDiagnostic | "loading">>({});
+
+  // Toggle a learner's competency profile (diagnostic strengths/weaknesses).
+  async function toggleDetail(l: LearnerRow) {
+    if (detailId === l.enrollmentId) { setDetailId(null); return; }
+    setDetailId(l.enrollmentId);
+    if (!details[l.enrollmentId]) {
+      setDetails((d) => ({ ...d, [l.enrollmentId]: "loading" }));
+      try { const dg = await api.learnerDiagnostic(l.enrollmentId); setDetails((d) => ({ ...d, [l.enrollmentId]: dg })); }
+      catch { setDetails((d) => ({ ...d, [l.enrollmentId]: { taken: false } })); }
+    }
+  }
 
   // Re-point the enrolment to the latest published version (so new videos/edits
   // show up). "full" wipes progress, "version" keeps it. Never deletes the account.
@@ -96,8 +130,9 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
             <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th><th>Risque</th>{canManage && <th>Actions</th>}</tr></thead>
             <tbody>
               {rows.map((l) => (
-                <tr key={l.email}>
-                  <td><div className="uitem"><span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span><div className="who"><b>{l.name}</b><span>{l.email}</span></div></div></td>
+                <Fragment key={l.email}>
+                <tr>
+                  <td onClick={() => toggleDetail(l)} style={{ cursor: "pointer" }} title="Voir le profil de compétences"><div className="uitem"><span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span><div className="who"><b>{detailId === l.enrollmentId ? "▾ " : "▸ "}{l.name}</b><span>{l.email}</span></div></div></td>
                   <td><div className="progress"><div className="track"><i style={{ width: `${l.progressPercent}%`, background: l.progressPercent === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progressPercent}%</span></div></td>
                   <td>{l.finalQuiz != null ? <span className="pill pill--soft">{l.finalQuiz}%</span> : <span className="muted">—</span>}</td>
                   <td>{b4Pill(l)}</td>
@@ -115,6 +150,10 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                     </td>
                   )}
                 </tr>
+                {detailId === l.enrollmentId && (
+                  <tr><td colSpan={canManage ? 8 : 7} style={{ background: "var(--bg-soft)" }}><DiagPanel d={details[l.enrollmentId]} /></td></tr>
+                )}
+                </Fragment>
               ))}
             </tbody>
           </table>

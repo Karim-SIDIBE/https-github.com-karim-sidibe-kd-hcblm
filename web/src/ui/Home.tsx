@@ -17,6 +17,7 @@ export function Home({ eid }: { eid: string }) {
   const [resume, setResume] = useState<ResumeSnapshot>(() => getCachedResume(eid));
   const [name, setName] = useState(() => getIdentity()?.name?.trim().split(" ")[0] ?? "");
   const [peer, setPeer] = useState<{ name: string; notified: boolean } | null>(null);
+  const [weakAreas, setWeakAreas] = useState<{ subArea: string; pct: number }[]>([]);
 
   const refresh = useCallback(async () => {
     try {
@@ -26,6 +27,9 @@ export function Home({ eid }: { eid: string }) {
       setPeer(d?.peer ?? null);
       const r = await api.resume(eid);
       setResume(r?.resume ?? null); setCachedResume(eid, r?.resume ?? null);
+      // Diagnostic weak areas (server-backed → cross-device remediation focus).
+      const dg = await api.get<{ taken?: boolean; weaknesses?: { subArea: string; pct: number }[] }>(`/enrollments/${eid}/diagnostic`);
+      if (dg?.taken && dg.weaknesses) setWeakAreas(dg.weaknesses);
     } catch { /* offline — cached */ }
   }, [eid]);
 
@@ -73,10 +77,11 @@ export function Home({ eid }: { eid: string }) {
       )}
       {progress?.courseCompleted && <div className="hf-card hf-card--mint"><span className="hf-pill hf-pill--mint">Parcours terminé 🎓</span></div>}
 
-      {/* Targeted remediation: keep the diagnostic's weak areas in focus (Pilier 3). */}
+      {/* Targeted remediation: keep the diagnostic's weak areas in focus (Pilier 3).
+          Server-backed (cross-device) with a local cache fallback for offline. */}
       {!progress?.courseCompleted && (() => {
-        let prio: Array<{ subArea?: string; label?: string }> = [];
-        try { prio = JSON.parse(localStorage.getItem(`klms_diag_${eid}`) || "null")?.priorities ?? []; } catch { /* no diagnostic yet */ }
+        let prio: Array<{ subArea?: string; label?: string }> = weakAreas;
+        if (!prio.length) { try { prio = JSON.parse(localStorage.getItem(`klms_diag_${eid}`) || "null")?.priorities ?? []; } catch { /* no diagnostic yet */ } }
         if (!prio.length) return null;
         return (
           <div className="hf-card hf-card--icy">

@@ -143,6 +143,29 @@ export async function courseCompetencies(courseId: string) {
   return { learnersAssessed: perLearner.length, competencies: aggregateCompetencies(perLearner) };
 }
 
+// --- per-learner diagnostic profile (strengths / weaknesses) ----------------
+
+/** A single learner's diagnostic competency profile, for admin + learner views. */
+export async function learnerDiagnostic(enrollmentId: string) {
+  const row = await prisma.itemCompletion.findFirst({
+    where: { enrollmentId, itemType: "DIAGNOSTIC_QUIZ" },
+    select: { scorePct: true, data: true, completedAt: true },
+  });
+  if (!row) return { taken: false as const };
+  const data = row.data as { profile?: string; subAreaScores?: SubAreaScore[]; priorities?: { subArea: string; pct: number }[] } | null;
+  const subAreaScores = (data?.subAreaScores ?? []).map((s) => ({ subArea: s.subArea, pct: s.pct }));
+  const byStrong = [...subAreaScores].sort((a, b) => b.pct - a.pct);
+  return {
+    taken: true as const,
+    scorePct: row.scorePct,
+    profile: data?.profile ?? null,
+    completedAt: row.completedAt,
+    subAreaScores: [...subAreaScores].sort((a, b) => a.pct - b.pct), // weakest first
+    strengths: byStrong.slice(0, 2),
+    weaknesses: data?.priorities ?? byStrong.slice(-2).reverse(),
+  };
+}
+
 // --- course report (aggregates + funnel) ------------------------------------
 
 export async function courseReport(courseId: string, range?: DateRange) {

@@ -97,6 +97,8 @@ export type LearnerRow = {
 };
 export type AtRiskLearner = { id: string; enrollmentId: string; name: string; email: string; progressPercent: number; lastActivity: string | null; status: string; riskScore: number; riskLevel: "low" | "medium" | "high"; factors: string[] };
 export type CourseCompetencies = { learnersAssessed: number; competencies: { subArea: string; avgPct: number; learners: number }[] };
+type SubScore = { subArea: string; pct: number };
+export type LearnerDiagnostic = { taken: boolean; scorePct?: number | null; profile?: string | null; completedAt?: string; subAreaScores?: SubScore[]; strengths?: SubScore[]; weaknesses?: SubScore[] };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; anonymized: boolean; deletionDaysLeft: number | null; enrollments: number; createdAt: string };
 export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; renditions: string[]; createdAt: string };
@@ -137,6 +139,7 @@ export const api = {
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
   competencies: (courseId: string) => req<CourseCompetencies>("GET", `/analytics/courses/${courseId}/competencies`),
+  learnerDiagnostic: (enrollmentId: string) => req<LearnerDiagnostic>("GET", `/analytics/enrollments/${enrollmentId}/diagnostic`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
   resetEnrollment: (enrollmentId: string, mode: "full" | "version") => req<{ mode: string; version: number }>("POST", `/enrollments/${enrollmentId}/reset`, { mode }),

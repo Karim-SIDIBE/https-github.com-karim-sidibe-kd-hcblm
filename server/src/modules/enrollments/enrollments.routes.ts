@@ -7,6 +7,7 @@ import {
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { nudgeOne } from "../jobs/jobs.service.js";
+import { learnerDiagnostic } from "../analytics/analytics.service.js";
 import { authenticate, authorize, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { memberOrgIds } from "../../lib/tenant.js";
@@ -91,6 +92,12 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   });
 
   // Auto-resume target (Pilier 6.2)
+  // The learner's own diagnostic profile (cross-device remediation focus).
+  app.get("/enrollments/:id/diagnostic", { preHandler: owned }, async (req) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    return { data: await learnerDiagnostic(id) };
+  });
+
   app.get("/enrollments/:id/resume", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await getResume(id) }; } catch (err) { return handle(reply, err); }
