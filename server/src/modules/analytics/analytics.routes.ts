@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, courseLearners, courseReport, overview, pamExport, toCsv, transcript,
+  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseLearners, courseReport, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 
@@ -56,6 +56,12 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get("/analytics/courses/:courseId/at-risk", { preHandler: guard("analytics:read") }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     try { return { data: await atRiskLearners(courseId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Cohort competency map: average diagnostic score per sub-area (weakest first).
+  app.get("/analytics/courses/:courseId/competencies", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    try { return { data: await courseCompetencies(courseId) }; } catch (err) { return handle(reply, err); }
   });
 
   // Raw PAM export for a course (JSON or CSV) — authorised review (§6.1).

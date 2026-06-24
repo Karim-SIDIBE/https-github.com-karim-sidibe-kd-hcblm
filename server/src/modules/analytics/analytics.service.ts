@@ -9,6 +9,8 @@ import { CourseContent, type CourseContent as CourseContentT } from "../../domai
 import { computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
 import { forecastCompletion, type ForecastRow } from "../../domain/engine/forecast.js";
 import { dropoutRisk } from "../../domain/engine/risk.js";
+import { aggregateCompetencies } from "../../domain/engine/competency.js";
+import type { SubAreaScore } from "../../domain/engine/progress.js";
 import { credentialUrl } from "../../lib/credentials/openbadge.js";
 
 /** Optional reporting window (filters by enrolment start). */
@@ -123,6 +125,22 @@ export async function atRiskLearners(courseId: string) {
     })
     .filter((s) => s.riskScore > 0)
     .sort((a, b) => b.riskScore - a.riskScore);
+}
+
+// --- cohort competency map (diagnostic strengths/weaknesses) ----------------
+
+/** Average diagnostic sub-area scores across a course's learners, weakest first. */
+export async function courseCompetencies(courseId: string) {
+  const course = await prisma.course.findUnique({ where: { id: courseId } });
+  if (!course) throw new AnalyticsError(404, "no_course", "Parcours introuvable");
+  const rows = await prisma.itemCompletion.findMany({
+    where: { enrollment: { courseId }, itemType: "DIAGNOSTIC_QUIZ" },
+    select: { data: true },
+  });
+  const perLearner = rows
+    .map((r) => (r.data as { subAreaScores?: SubAreaScore[] } | null)?.subAreaScores ?? [])
+    .filter((s) => s.length > 0);
+  return { learnersAssessed: perLearner.length, competencies: aggregateCompetencies(perLearner) };
 }
 
 // --- course report (aggregates + funnel) ------------------------------------
