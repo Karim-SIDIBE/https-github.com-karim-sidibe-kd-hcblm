@@ -166,6 +166,28 @@ export async function learnerDiagnostic(enrollmentId: string) {
   };
 }
 
+/**
+ * Adaptive remediation (Pilier 3, contract-safe): the diagnostic questions the
+ * learner got WRONG, with the correct answer + feedback — for an optional review.
+ * Additive only; touches neither the block structure nor the pass thresholds.
+ */
+export async function diagnosticReview(enrollmentId: string) {
+  const completion = await prisma.itemCompletion.findFirst({
+    where: { enrollmentId, itemType: "DIAGNOSTIC_QUIZ" }, select: { data: true },
+  });
+  const answers = (completion?.data as { answers?: Record<string, string> } | null)?.answers;
+  if (!answers) return { taken: false as const, wrong: [] };
+  const enr = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, select: { courseVersion: { select: { content: true } } } });
+  if (!enr) return { taken: false as const, wrong: [] };
+  const content = CourseContent.parse(enr.courseVersion.content);
+  const block = content.blocks.find((b) => b.type === "COMPREHENSION");
+  const qs = block?.type === "COMPREHENSION" ? block.payload.diagnosticQuiz.questions : [];
+  const wrong = qs
+    .filter((q) => answers[q.id] != null && answers[q.id] !== q.correctKey)
+    .map((q) => ({ id: q.id, subArea: q.subArea ?? null, prompt: q.scenarioText, options: q.options, correctKey: q.correctKey, yourKey: answers[q.id]!, feedback: q.feedbackText }));
+  return { taken: true as const, total: qs.length, wrong };
+}
+
 // --- course report (aggregates + funnel) ------------------------------------
 
 export async function courseReport(courseId: string, range?: DateRange) {

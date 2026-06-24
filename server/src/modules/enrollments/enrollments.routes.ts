@@ -7,7 +7,7 @@ import {
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { nudgeOne } from "../jobs/jobs.service.js";
-import { learnerDiagnostic } from "../analytics/analytics.service.js";
+import { learnerDiagnostic, diagnosticReview } from "../analytics/analytics.service.js";
 import { authenticate, authorize, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { memberOrgIds } from "../../lib/tenant.js";
@@ -96,6 +96,12 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   app.get("/enrollments/:id/diagnostic", { preHandler: owned }, async (req) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     return { data: await learnerDiagnostic(id) };
+  });
+
+  // Adaptive remediation: the learner's wrong diagnostic questions, to review.
+  app.get("/enrollments/:id/diagnostic/review", { preHandler: owned }, async (req) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    return { data: await diagnosticReview(id) };
   });
 
   app.get("/enrollments/:id/resume", { preHandler: owned }, async (req, reply) => {
