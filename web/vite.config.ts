@@ -30,17 +30,21 @@ export default defineConfig({
         globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
         runtimeCaching: [
           {
-            // Media made available offline (video/captions): serve from cache
-            // first, with range-request support so the <video> can seek offline.
-            // Populated by the per-element "Rendre disponible hors ligne" action.
-            // 7-day retention backstops the app-level per-element purge (offline.ts).
+            // Media (video/captions). NetworkFirst so ONLINE playback always
+            // streams from the API (range/seek honoured server-side, never blocked
+            // by a stale/partial cache entry), while OFFLINE falls back to whatever
+            // the per-element "Rendre disponible hors ligne" action cached.
+            // CacheFirst here was a trap: a single opaque/partial response would
+            // poison playback indefinitely (the SW never re-hit the network).
+            // Only full/range 200/206 are cacheable — never opaque (0).
             urlPattern: ({ request, url }) =>
               request.destination === "video" || request.destination === "track" || /\/media\//.test(url.pathname),
-            handler: "CacheFirst",
+            handler: "NetworkFirst",
             options: {
               cacheName: "klms-media",
               rangeRequests: true,
-              cacheableResponse: { statuses: [0, 200, 206] },
+              networkTimeoutSeconds: 10,
+              cacheableResponse: { statuses: [200, 206] },
               expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
