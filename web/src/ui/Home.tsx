@@ -105,7 +105,7 @@ export function Home({ eid }: { eid: string }) {
       {prod && (
         <div className="hf-card hf-card--peach">
           <div className="row between">
-            <div><div className="eyebrow">Score de productivité africaine</div><div className="meta" style={{ marginTop: 2 }}>Monte à chaque exercice complété</div></div>
+            <div><div className="eyebrow">Score de productivité</div><div className="meta" style={{ marginTop: 2 }}>Monte à chaque exercice complété</div></div>
             <span className="num accent" style={{ fontSize: 30 }}>{prod.score}<span style={{ fontSize: 15 }}>/100</span></span>
           </div>
           <div className="hf-prog" style={{ margin: "12px 0 0" }}><i style={{ width: `${prod.score}%` }} /></div>

@@ -22,7 +22,7 @@ export function Onboarding({ eid }: { eid: string }) {
   const [pam, setPam] = useState("");
   const [profileKey, setProfileKey] = useState("");
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [peer, setPeer] = useState({ name: "", email: "", phone: "" });
+  const [peer, setPeer] = useState({ name: "", email: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -62,7 +62,7 @@ export function Onboarding({ eid }: { eid: string }) {
   async function submitPeer() {
     if (!peer.name.trim() || !/.+@.+\..+/.test(peer.email)) { setMsg("Indiquez un nom et un e-mail valides."); return; }
     setBusy(true); setMsg(null);
-    try { const r = await engine.commit(eid, "peer", { name: peer.name.trim(), email: peer.email.trim(), phone: peer.phone.trim() || undefined }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("done"); } finally { setBusy(false); }
+    try { const r = await engine.commit(eid, "peer", { name: peer.name.trim(), email: peer.email.trim() }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("done"); } finally { setBusy(false); }
   }
 
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.course(eid))}>← Accueil</button>;
@@ -127,7 +127,6 @@ export function Onboarding({ eid }: { eid: string }) {
           <p className="body">Choisissez une personne qui sera informée de vos réussites. <strong>Étape obligatoire</strong> — la responsabilisation sociale fait partie du parcours.</p>
           <label>Nom<input className="hf-field" value={peer.name} onChange={(e) => setPeer({ ...peer, name: e.target.value })} placeholder="Nom du collègue / mentor" /></label>
           <label>E-mail<input className="hf-field" value={peer.email} type="email" onChange={(e) => setPeer({ ...peer, email: e.target.value })} placeholder="email@exemple.com" /></label>
-          <label>Téléphone (WhatsApp, optionnel)<input className="hf-field" value={peer.phone} type="tel" onChange={(e) => setPeer({ ...peer, phone: e.target.value })} placeholder="+221…" /></label>
           {msg && <p className="ko" style={{ margin: 0 }}>{msg}</p>}
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={submitPeer}>{busy ? "…" : "Valider et débloquer le badge d'entrée"}</button>
         </div>

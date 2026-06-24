@@ -38,6 +38,26 @@ function blockIndexForAsset(content: CourseContentT, assetId: string): number | 
 }
 
 /**
+ * Tolerant (no-Zod) scan for an asset reference in stored content. Used as a
+ * fallback when `CourseContent.parse` fails on an older published version whose
+ * shape predates the current schema — we must NOT hard-lock a learner's media
+ * just because the stored document fails strict validation. Walks the same
+ * touchpoints (trigger video + micro-session videos) defensively.
+ */
+export function rawReferencesAsset(content: unknown, assetId: string): boolean {
+  const blocks = (content as { blocks?: unknown })?.blocks;
+  if (!Array.isArray(blocks)) return false;
+  for (const b of blocks) {
+    const p = (b as { payload?: any })?.payload ?? {};
+    if (p?.triggerVideo?.mediaId === assetId) return true;
+    if (Array.isArray(p?.microSessions)) {
+      for (const m of p.microSessions) if (m?.video?.mediaId === assetId) return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Enforce that the caller may access this asset. Staff have full access; a learner
  * is allowed only if one of their enrolments references the asset in a block that
  * is NOT locked by their progress. This closes the hole where any authenticated
@@ -55,16 +75,24 @@ export async function assertAssetAccessible(principal: AccessPrincipal, assetId:
     include: { courseVersion: true, completions: true },
   });
   for (const e of enrollments) {
-    let content: CourseContentT;
-    try { content = CourseContent.parse(e.courseVersion.content); } catch { continue; }
-    const idx = blockIndexForAsset(content, assetId);
-    if (idx == null) continue;
-    const progress = computeProgress(
-      content,
-      e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
-      Boolean(e.momentAncrage),
-    );
-    if (progress.blocks.find((b) => b.index === idx)?.state !== "locked") return;
+    let content: CourseContentT | null = null;
+    try { content = CourseContent.parse(e.courseVersion.content); } catch { content = null; }
+    if (content) {
+      const idx = blockIndexForAsset(content, assetId);
+      if (idx == null) continue;
+      const progress = computeProgress(
+        content,
+        e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
+        Boolean(e.momentAncrage),
+      );
+      if (progress.blocks.find((b) => b.index === idx)?.state !== "locked") return;
+    } else if (rawReferencesAsset(e.courseVersion.content, assetId)) {
+      // Stored content fails strict validation (schema drift on an older
+      // published version). Block-state gating can't be computed safely, but the
+      // learner is legitimately enrolled in a course that references this asset —
+      // allow playback rather than hard-locking ALL media behind a parse error.
+      return;
+    }
   }
   throw new MediaError(403, "block_locked", "Ce contenu n'est pas encore débloqué.");
 }

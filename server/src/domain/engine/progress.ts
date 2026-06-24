@@ -116,7 +116,7 @@ export type ProgressResult = {
   currentBlockIndex: number;
   courseCompleted: boolean;
   /**
-   * Dynamic "score de productivité africaine" (Pilier 6.1, dispositif #2):
+   * Dynamic "score de productivité" (Pilier 6.1, dispositif #2):
    * 0–100, rising as required items are completed and quizzes scored.
    * Deterministic — every required item across the 5 blocks carries one unit;
    * a completed non-scored item earns its full unit, a scored item earns a
