@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5];
 const CAP_KEY = "klms_captions"; // "on" | "off" — default on for first-time viewers
+const QUAL_KEY = "klms_video_quality"; // "auto" | a rendition label — sticky per learner
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
+// Friendly names for the quality picker (low-bandwidth choices made explicit).
+const QLABEL: Record<string, string> = { source: "Source (max)", "720p": "720p (HD)", "480p": "480p", "240p-lite": "240p — éco data", audio: "Audio seul" };
+const qlabel = (l: string) => QLABEL[l] ?? l;
 
 /**
  * VideoPlayer — mobile-first player (§4.3) with the Declick video chrome:
@@ -12,7 +16,7 @@ const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).
  * (play button + quality/ST/1× chips + scrub) so the session flow still works.
  */
 export function VideoPlayer({
-  src, captionsUrl, title, startAt = 0, durationSec, quality, watermark, onHeartbeat, onEnded,
+  src, captionsUrl, title, startAt = 0, durationSec, quality, watermark, onHeartbeat, onEnded, renditions,
 }: {
   src: string | null;
   captionsUrl: string | null;
@@ -20,6 +24,9 @@ export function VideoPlayer({
   startAt?: number;
   durationSec?: number;
   quality?: string | null;
+  /** Full playable ladder (lowest-bitrate first) so the learner can force a débit
+   *  — essential on slow/3G connections where auto-selection isn't enough. */
+  renditions?: { label: string; url: string; bitrateKbps?: number | null }[];
   /** Per-learner overlay (name/e-mail) — a leak deterrent, not a copy block. */
   watermark?: string | null;
   onHeartbeat: (sec: number, durationSec: number | null) => void;
@@ -29,7 +36,21 @@ export function VideoPlayer({
   const lastBeat = useRef(0);
   const [speed, setSpeed] = useState(1);
   const [captions, setCaptions] = useState(() => (localStorage.getItem(CAP_KEY) ?? "on") === "on");
+  const [qual, setQual] = useState<string>(() => localStorage.getItem(QUAL_KEY) || "auto");
   const [wmPos, setWmPos] = useState({ top: "12%", left: "8%" });
+  // Manual quality: pick the chosen rendition's URL, else the auto-resolved src.
+  const ladder = (renditions ?? []).filter((r) => r.url);
+  const hasChoice = ladder.length > 1;
+  const activeSrc = qual === "auto" || !ladder.length ? src : (ladder.find((r) => r.label === qual)?.url ?? src);
+  // Preserve playback position + state across a quality switch (the <video> reloads).
+  const pendingSeek = useRef<number | null>(null);
+  const wasPlaying = useRef(false);
+  useEffect(() => { localStorage.setItem(QUAL_KEY, qual); }, [qual]);
+  function changeQuality(next: string) {
+    const v = ref.current;
+    if (v) { pendingSeek.current = v.currentTime; wasPlaying.current = !v.paused; }
+    setQual(next);
+  }
 
   // Reposition the watermark periodically so it can't simply be cropped out.
   useEffect(() => {
@@ -60,7 +81,10 @@ export function VideoPlayer({
   function onLoaded() {
     const v = ref.current!;
     v.playbackRate = speed;
-    if (startAt > 0 && startAt < (v.duration || Infinity)) v.currentTime = startAt;
+    // After a quality switch, resume exactly where we were; else honour startAt.
+    const resume = pendingSeek.current ?? (startAt > 0 ? startAt : 0);
+    if (resume > 0 && resume < (v.duration || Infinity)) v.currentTime = resume;
+    if (pendingSeek.current != null) { if (wasPlaying.current) void v.play().catch(() => {}); pendingSeek.current = null; }
     const t = v.textTracks?.[0]; if (t) t.mode = captions ? "showing" : "disabled";
   }
   function onTime() {
@@ -76,11 +100,22 @@ export function VideoPlayer({
           <button key={sp} className={`hf-btn hf-btn--sm ${sp === speed ? "hf-btn--primary" : "hf-btn--outline"}`} onClick={() => setSpeed(sp)}>{sp}×</button>
         ))}
       </div>
-      {captionsUrl && (
-        <button className={`hf-btn hf-btn--sm ${captions ? "hf-btn--primary" : "hf-btn--outline"}`} aria-pressed={captions} onClick={() => setCaptions((c) => !c)}>
-          ST {captions ? "on" : "off"}
-        </button>
-      )}
+      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        {hasChoice && (
+          <label className="row" style={{ gap: 6, alignItems: "center" }} title="Forcez un débit plus léger sur connexion lente">
+            <span className="meta">Qualité</span>
+            <select className="hf-field" style={{ width: "auto", padding: "4px 8px" }} value={qual} onChange={(e) => changeQuality(e.target.value)}>
+              <option value="auto">Auto{quality ? ` (${qlabel(quality)})` : ""}</option>
+              {ladder.map((r) => <option key={r.label} value={r.label}>{qlabel(r.label)}{r.bitrateKbps ? ` · ${r.bitrateKbps}k` : ""}</option>)}
+            </select>
+          </label>
+        )}
+        {captionsUrl && (
+          <button className={`hf-btn hf-btn--sm ${captions ? "hf-btn--primary" : "hf-btn--outline"}`} aria-pressed={captions} onClick={() => setCaptions((c) => !c)}>
+            ST {captions ? "on" : "off"}
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -108,7 +143,7 @@ export function VideoPlayer({
     <div>
       <div className="hf-media" style={{ position: "relative" }}>
         <video
-          ref={ref} src={src} controls playsInline preload="metadata"
+          ref={ref} src={activeSrc ?? undefined} controls playsInline preload="metadata"
           controlsList="nodownload noplaybackrate" disablePictureInPicture onContextMenu={(e) => e.preventDefault()}
           onLoadedMetadata={onLoaded} onTimeUpdate={onTime}
           onPause={() => { const v = ref.current!; onHeartbeat(v.currentTime, Number.isFinite(v.duration) ? v.duration : null); }}
@@ -116,7 +151,7 @@ export function VideoPlayer({
         >
           {captionsUrl && <track default kind="subtitles" srcLang="fr" label="Français" src={captionsUrl} />}
         </video>
-        {quality && <div className="topchip">Auto {quality}</div>}
+        {(quality || hasChoice) && <div className="topchip">{qual === "auto" ? `Auto${quality ? " " + qlabel(quality) : ""}` : qlabel(qual)}</div>}
         {watermark && (
           <div aria-hidden style={{ position: "absolute", top: wmPos.top, left: wmPos.left, pointerEvents: "none", userSelect: "none",
             color: "rgba(255,255,255,0.32)", fontSize: 12, fontWeight: 600, letterSpacing: 0.3,

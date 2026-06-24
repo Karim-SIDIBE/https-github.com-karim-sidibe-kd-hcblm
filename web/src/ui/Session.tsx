@@ -13,6 +13,7 @@ type Bundle = { content: { blocks: any[] }; mediaAssets?: { mediaId: string; ren
 export function SessionScreen({ eid, block, item }: { eid: string; block: number; item: string }) {
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [source, setSource] = useState<{ url: string | null; captionsUrl: string | null; quality: string | null } | null>(null);
+  const [ladder, setLadder] = useState<Rendition[]>([]);
   const [startAt, setStartAt] = useState(0);
   const [phase, setPhase] = useState<"video" | "exercise">("video");
   const [error, setError] = useState<string | null>(null);
@@ -55,6 +56,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       const offline = bundle.mediaAssets?.find((a) => a.mediaId === session.video?.mediaId)?.renditions ?? null;
       if (!alive) return;
       setStartAt(at);
+      setLadder(manifest?.renditions?.length ? manifest.renditions : (offline ?? []));
       setSource(resolveSource(session.video ?? {}, manifest, offline, currentConn()));
     })();
     return () => { alive = false; };
@@ -96,7 +98,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             ) : null;
           })()}
           <VideoPlayer
-            src={source.url} captionsUrl={source.captionsUrl} title={session.title}
+            src={source.url} captionsUrl={source.captionsUrl} title={session.title} renditions={ladder}
             startAt={startAt} durationSec={session.video?.durationSec} quality={source.quality}
             watermark={(() => { const me = getIdentity(); return me ? `${me.name} · ${me.email}` : null; })()}
             onHeartbeat={heartbeat}
