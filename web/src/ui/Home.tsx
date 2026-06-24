@@ -73,6 +73,23 @@ export function Home({ eid }: { eid: string }) {
       )}
       {progress?.courseCompleted && <div className="hf-card hf-card--mint"><span className="hf-pill hf-pill--mint">Parcours terminé 🎓</span></div>}
 
+      {/* Targeted remediation: keep the diagnostic's weak areas in focus (Pilier 3). */}
+      {!progress?.courseCompleted && (() => {
+        let prio: Array<{ subArea?: string; label?: string }> = [];
+        try { prio = JSON.parse(localStorage.getItem(`klms_diag_${eid}`) || "null")?.priorities ?? []; } catch { /* no diagnostic yet */ }
+        if (!prio.length) return null;
+        return (
+          <div className="hf-card hf-card--icy">
+            <div className="eyebrow">🎯 Vos axes prioritaires</div>
+            <p className="body" style={{ margin: "6px 0 0" }}>D'après votre diagnostic, concentrez-vous sur :</p>
+            <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
+              {prio.slice(0, 2).map((p, i) => <li key={i} className="body" style={{ color: "var(--fg-1)" }}><strong>{p?.subArea ?? p?.label ?? String(p)}</strong></li>)}
+            </ul>
+            <button className="hf-btn hf-btn--outline hf-btn--block" style={{ marginTop: 12 }} onClick={() => navigate(routes.cours(eid))}>Travailler ces points →</button>
+          </div>
+        );
+      })()}
+
       <div className="hf-card">
         <div className="row between"><strong className="h3" style={{ margin: 0 }}>Progression</strong><span className="num accent" style={{ fontSize: 26 }}>{pct}%</span></div>
         <div className="hf-prog" style={{ margin: "12px 0" }}><i style={{ width: `${pct}%` }} /></div>

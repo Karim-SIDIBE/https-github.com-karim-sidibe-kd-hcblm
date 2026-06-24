@@ -138,6 +138,7 @@ export const api = {
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
   resetEnrollment: (enrollmentId: string, mode: "full" | "version") => req<{ mode: string; version: number }>("POST", `/enrollments/${enrollmentId}/reset`, { mode }),
+  nudgeLearner: (enrollmentId: string) => req<{ sent: boolean; stage: string; email: string }>("POST", `/enrollments/${enrollmentId}/nudge`, {}),
   invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
