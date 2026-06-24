@@ -1,6 +1,6 @@
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
-import { api, courseTitle, type CourseReport, type LearnerRow } from "../lib/api";
-import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import { api, courseTitle, type CourseReport, type AtRiskLearner } from "../lib/api";
+import { avatarColor, initials, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
 
 const BLOCK_FR: Record<string, string> = {
@@ -20,13 +20,14 @@ function Kpi({ icon, ic, val, lbl }: { icon: JSX.Element; ic: string; val: strin
 export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
   const rep = useAsync<CourseReport>(() => api.courseReport(courseId), [courseId]);
-  const learners = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId]);
+  const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId]);
 
   const r = rep.data;
-  const ls = learners.data ?? [];
   const certified = r?.statusCounts?.CERTIFIED ?? r?.credentialsIssued ?? 0;
   const maxF = r ? Math.max(r.enrollments, ...r.blockFunnel.map((b) => b.completed), 1) : 1;
-  const atRisk = ls.filter((l) => !l.active && l.status !== "CERTIFIED").sort((a, b) => (a.lastActivity || "").localeCompare(b.lastActivity || "")).slice(0, 6);
+  const atRisk = (risk.data ?? []).slice(0, 6);
+  const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
+  const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
 
   return (
     <div className="content">
@@ -82,14 +83,14 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
         <div className="card">
           <div className="card-h"><h3>Apprenants à risque</h3><span className="pill pill--red"><span className="dot" />{atRisk.length}</span></div>
           <div className="card-b" style={{ paddingTop: 4 }}>
-            {learners.loading ? <div className="muted">Chargement…</div>
-              : atRisk.length === 0 ? <div className="empty" style={{ padding: "34px 10px" }}><div className="big">✅</div>Aucun apprenant inactif.</div>
+            {risk.loading ? <div className="muted">Chargement…</div>
+              : atRisk.length === 0 ? <div className="empty" style={{ padding: "34px 10px" }}><div className="big">✅</div>Aucun apprenant à risque.</div>
               : <div className="risk">
                   {atRisk.map((l) => (
                     <div className="r" key={l.email}>
                       <span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span>
-                      <div className="who"><b>{l.name}</b><span>Inactif · {ago(l.lastActivity).toLowerCase()} · {l.progressPercent}%</span></div>
-                      <span className="pill pill--warn">À relancer</span>
+                      <div className="who"><b>{l.name}</b><span>{l.factors[0] ?? `${l.progressPercent}%`} · {l.progressPercent}%</span></div>
+                      <span className={`pill ${RISK_PILL[l.riskLevel]}`} title={l.factors.join(" · ")}>{l.riskScore} · {RISK_FR[l.riskLevel]}</span>
                     </div>
                   ))}
                 </div>}

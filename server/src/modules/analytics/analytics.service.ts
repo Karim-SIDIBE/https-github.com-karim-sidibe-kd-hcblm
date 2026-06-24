@@ -8,6 +8,7 @@ import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
 import { forecastCompletion, type ForecastRow } from "../../domain/engine/forecast.js";
+import { dropoutRisk } from "../../domain/engine/risk.js";
 import { credentialUrl } from "../../lib/credentials/openbadge.js";
 
 /** Optional reporting window (filters by enrolment start). */
@@ -84,6 +85,44 @@ export async function courseLearners(courseId: string) {
       active: isActive(e.lastSeenAt, now), lastActivity: e.lastSeenAt, startedAt: e.startedAt, completedAt: e.completedAt,
     };
   });
+}
+
+// --- dropout-risk ranking (predictive analytics) ----------------------------
+
+/** Score every non-finished learner of a course for dropout risk, ranked. */
+export async function atRiskLearners(courseId: string) {
+  const course = await prisma.course.findUnique({ where: { id: courseId } });
+  if (!course) throw new AnalyticsError(404, "no_course", "Parcours introuvable");
+  const now = new Date();
+  const enrollments = await prisma.enrollment.findMany({
+    where: { courseId },
+    include: { user: { select: { id: true, name: true, email: true } }, courseVersion: true, completions: true, _count: { select: { reEngagements: true } } },
+  });
+  return enrollments
+    .map((e) => {
+      const content = CourseContent.parse(e.courseVersion.content);
+      const progress = computeProgress(content, records(e.completions), Boolean(e.momentAncrage));
+      const score = (bi: number, k: string) => e.completions.find((c) => c.blockIndex === bi && c.itemKey === k)?.scorePct ?? null;
+      const progressPercent = Math.round((progress.completedBlockIndexes.length / content.blocks.length) * 100);
+      const risk = dropoutRisk({
+        certified: e.status === "CERTIFIED",
+        completed: progress.courseCompleted,
+        daysSinceActivity: daysBetween(e.lastSeenAt ?? e.startedAt, now),
+        daysSinceStart: daysBetween(e.startedAt, now),
+        progressPercent,
+        pamCaptured: Boolean(e.momentAncrage),
+        diagnosticScore: score(1, "diagnostic"),
+        failedFinal: progress.blocks.some((b) => b.index === 3 && b.failedThreshold != null),
+        nudgesSent: e._count.reEngagements,
+      });
+      return {
+        id: e.user.id, enrollmentId: e.id, name: e.user.name, email: e.user.email,
+        progressPercent, lastActivity: e.lastSeenAt, status: e.status,
+        riskScore: risk.score, riskLevel: risk.level, factors: risk.factors.slice(0, 3).map((f) => f.label),
+      };
+    })
+    .filter((s) => s.riskScore > 0)
+    .sort((a, b) => b.riskScore - a.riskScore);
 }
 
 // --- course report (aggregates + funnel) ------------------------------------
