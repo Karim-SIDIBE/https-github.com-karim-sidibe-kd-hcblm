@@ -10,6 +10,7 @@
  *   can fill them in later. This keeps the platform fully functional offline.
  */
 import { spawnSync } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { localPath, sizeOf } from "../storage/storage.js";
 
 export type MediaKindT = "VIDEO" | "AUDIO" | "CAPTIONS" | "IMAGE";
@@ -74,6 +75,9 @@ export async function processVideo(asset: { id: string; mime: string; storageKey
   const inPath = localPath(asset.storageKey);
   const durationSec = probeDurationSec(inPath);
   const renditions: RenditionSpec[] = [source];
+  // ffmpeg does NOT create the output directory — without this every rendition
+  // fails instantly to open its output file and is recorded as unavailable.
+  await mkdir(localPath(`renditions/${asset.id}`), { recursive: true });
 
   for (const l of LADDER) {
     const key = `renditions/${asset.id}/${l.label}.${l.ext}`;
@@ -90,6 +94,8 @@ export async function processVideo(asset: { id: string; mime: string; storageKey
         height: l.height, downloadable: l.downloadable, available: true, sizeBytes: await sizeOf(key).catch(() => undefined),
       });
     } else {
+      const why = (r.stderr?.toString() || r.error?.message || `statut ${r.status}`).trim().split("\n").pop();
+      console.warn(`[transcode] ${asset.id} ${l.label} — échec ffmpeg : ${why}`);
       renditions.push({ label: l.label, kind: l.kind, mime: l.mime, bitrateKbps: l.bitrateKbps, height: l.height, downloadable: l.downloadable, available: false });
     }
   }
