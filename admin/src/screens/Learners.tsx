@@ -1,6 +1,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner, type LearnerDiagnostic } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import { table, downloadCsv, today, type Col } from "../lib/csv";
 
 const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
 const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
@@ -97,6 +98,25 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
     finally { setBusyId(null); }
   }
 
+  // Export the currently filtered/searched list (+ risk data) as Excel-ready CSV.
+  function exportCsv() {
+    const cols: Col<LearnerRow>[] = [
+      { label: "Nom", value: (l) => l.name },
+      { label: "E-mail", value: (l) => l.email },
+      { label: "Statut", value: (l) => l.status },
+      { label: "Progression (%)", value: (l) => l.progressPercent },
+      { label: "Quiz final (%)", value: (l) => l.finalQuiz ?? "" },
+      { label: "Projet B4 (%)", value: (l) => l.rubric ?? "" },
+      { label: "Dernière activité", value: (l) => l.lastActivity ?? "" },
+      { label: "Démarré le", value: (l) => l.startedAt ?? "" },
+      { label: "Certifié le", value: (l) => l.completedAt ?? "" },
+      { label: "Score de risque", value: (l) => riskMap.get(l.enrollmentId)?.riskScore ?? "" },
+      { label: "Niveau de risque", value: (l) => { const rk = riskMap.get(l.enrollmentId); return rk ? RISK_FR[rk.riskLevel] : ""; } },
+      { label: "Facteurs de risque", value: (l) => riskMap.get(l.enrollmentId)?.factors.join(" · ") ?? "" },
+    ];
+    downloadCsv(`apprenants-${today()}.csv`, table(cols, rows));
+  }
+
   const rows = useMemo(() => (data ?? []).filter((l) =>
     (filter === "Tous" || (filter === "Certifiés" && l.status === "CERTIFIED") || (filter === "En cours" && l.active && l.status !== "CERTIFIED") || (filter === "Inactifs" && !l.active && l.status !== "CERTIFIED")) &&
     (q === "" || (l.name + l.email).toLowerCase().includes(q.toLowerCase()))
@@ -124,6 +144,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
             <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher par nom ou e-mail…" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
           <select className="select" value={filter} onChange={(e) => setFilter(e.target.value)}><option>Tous</option><option>En cours</option><option>Inactifs</option><option>Certifiés</option></select>
+          <button className="btn" style={{ marginLeft: "auto" }} onClick={exportCsv} disabled={!rows.length} title="Exporter la liste filtrée au format CSV (Excel/Sheets)">⤓ Exporter CSV</button>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
