@@ -9,6 +9,9 @@ const STATUS: Record<string, { cls: string; label: string }> = {
   FAILED: { cls: "pill--red", label: "Échec" },
 };
 const KIND: Record<string, string> = { VIDEO: "🎬 Vidéo", AUDIO: "🎵 Audio", IMAGE: "🖼️ Image", CAPTIONS: "💬 Sous-titres" };
+const QLABEL: Record<string, string> = { source: "Source (max)", "720p": "720p (HD)", "480p": "480p", "240p-lite": "240p (éco)", audio: "Audio seul" };
+const qlabel = (l: string) => QLABEL[l] ?? l;
+type Rend = { label: string; kind: string; url: string | null; bitrateKbps?: number | null };
 
 function size(n: number | null) { if (!n) return "—"; const u = ["o", "Ko", "Mo", "Go"]; let i = 0, v = n; while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; } return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`; }
 function dur(s: number | null) { if (!s) return "—"; const m = Math.floor(s / 60), x = Math.round(s % 60); return `${m}:${String(x).padStart(2, "0")}`; }
@@ -37,11 +40,17 @@ export function Medias() {
 
   function copyId(id: string) { navigator.clipboard?.writeText(id).then(() => setNote(`Identifiant copié : ${id}`)).catch(() => {}); }
 
-  const [preview, setPreview] = useState<{ asset: MediaAsset; url: string | null; kind: string } | null>(null);
+  const [preview, setPreview] = useState<{ asset: MediaAsset; renditions: Rend[]; sel: string } | null>(null);
   async function openPreview(m: MediaAsset) {
-    setNote(null); setPreview({ asset: m, url: null, kind: m.kind });
-    try { const pb = await api.mediaPlayback(m.id); const r = pb.renditions?.[0]; setPreview({ asset: m, url: r?.url ?? null, kind: r?.kind ?? m.kind }); }
-    catch (e) { setPreview({ asset: m, url: null, kind: m.kind }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
+    setNote(null); setPreview({ asset: m, renditions: [], sel: "" });
+    try {
+      const pb = await api.mediaPlayback(m.id);
+      const rends = (pb.renditions ?? []) as Rend[];
+      // Default to the best VIDEO rendition (admins want to SEE the picture, not
+      // land on audio-only because it sorts first); fall back to whatever exists.
+      const def = [...rends].filter((r) => r.kind === "VIDEO").sort((a, b) => (b.bitrateKbps ?? 0) - (a.bitrateKbps ?? 0))[0] ?? rends[0];
+      setPreview({ asset: m, renditions: rends, sel: def?.label ?? "" });
+    } catch (e) { setPreview({ asset: m, renditions: [], sel: "" }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
   }
 
   return (
@@ -99,15 +108,29 @@ export function Medias() {
             </div>
             {preview.asset.status === "FAILED" ? (
               <div style={{ color: "var(--danger)", fontSize: 13 }}>❌ Le traitement a échoué. {preview.asset.error}</div>
-            ) : preview.url ? (
-              preview.kind === "AUDIO"
-                ? <audio controls src={preview.url} style={{ width: "100%" }} />
-                : <video controls src={preview.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }} />
-            ) : preview.asset.status !== "READY" ? (
-              <div className="muted" style={{ fontSize: 13 }}>⏳ Média en cours de traitement ({preview.asset.status})… réessayez dans un instant.</div>
-            ) : (
-              <div className="muted" style={{ fontSize: 13 }}>Aperçu indisponible pour ce type de média (aucune piste lisible).</div>
-            )}
+            ) : (() => {
+              const active = preview.renditions.find((r) => r.label === preview.sel) ?? null;
+              if (!active?.url) {
+                return preview.asset.status !== "READY"
+                  ? <div className="muted" style={{ fontSize: 13 }}>⏳ Média en cours de traitement ({preview.asset.status})… réessayez dans un instant.</div>
+                  : <div className="muted" style={{ fontSize: 13 }}>Aperçu indisponible pour ce type de média (aucune piste lisible).</div>;
+              }
+              return (
+                <>
+                  {preview.renditions.length > 1 && (
+                    <div style={{ marginBottom: 10, display: "flex", alignItems: "center", gap: 8 }}>
+                      <label className="muted" style={{ fontSize: 12 }}>Qualité</label>
+                      <select value={preview.sel} onChange={(e) => setPreview((p) => p && ({ ...p, sel: e.target.value }))}>
+                        {preview.renditions.map((r) => <option key={r.label} value={r.label}>{qlabel(r.label)}{r.bitrateKbps ? ` · ${r.bitrateKbps}k` : ""}</option>)}
+                      </select>
+                    </div>
+                  )}
+                  {active.kind === "AUDIO"
+                    ? <audio key={active.url} controls src={active.url} style={{ width: "100%" }} />
+                    : <video key={active.url} controls src={active.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }} />}
+                </>
+              );
+            })()}
           </div>
         </div>
       )}
