@@ -2,6 +2,7 @@ import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
 import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
 import { table, downloadCsv, downloadBlob, today } from "../lib/csv";
+import { ScheduledReports } from "./ScheduledReports";
 import type { CourseCtx } from "../App";
 
 const BLOCK_FR: Record<string, string> = {
@@ -174,6 +175,8 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
               </>}
         </div>
       </div>
+
+      <ScheduledReports courseId={courseId} />
 
       <div className="card" style={{ marginTop: 16 }}>
         <div className="card-h"><h3>Badges & certificats délivrés</h3></div>

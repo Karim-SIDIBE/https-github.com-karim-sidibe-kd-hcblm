@@ -900,6 +900,26 @@ model ReEngagementMessage {
   @@index([enrollmentId, stage])
 }
 
+/// Scheduled e-mail delivery of a course report (Excel/CSV) to recipients.
+enum ReportFrequency {
+  WEEKLY
+  MONTHLY
+}
+
+model ReportSchedule {
+  id          String          @id @default(cuid())
+  courseId    String
+  recipients  String[] // e-mail addresses
+  frequency   ReportFrequency @default(WEEKLY)
+  format      String          @default("xlsx") // "xlsx" | "csv"
+  active      Boolean         @default(true)
+  lastSentAt  DateTime?
+  createdById String?
+  createdAt   DateTime        @default(now())
+
+  @@index([courseId])
+}
+
 /// xAPI statements emitted to the LRS (Pilier — analytics / interoperability).
 model XapiStatement {
   id           String     @id @default(cuid())

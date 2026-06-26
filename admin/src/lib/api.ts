@@ -104,6 +104,7 @@ export type UserRow = { id: string; name: string; email: string; role: string; v
 export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; renditions: string[]; createdAt: string };
 export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[] };
 export type Seats = { seats: number; used: number; available: number };
+export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
@@ -138,6 +139,10 @@ export const api = {
   courseReport: (courseId: string) => req<CourseReport>("GET", `/analytics/courses/${courseId}`),
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
+  reportSchedules: (courseId: string) => req<ReportSchedule[]>("GET", `/reports/schedules?courseId=${courseId}`),
+  createReportSchedule: (b: { courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format?: "xlsx" | "csv" }) =>
+    req<ReportSchedule>("POST", "/reports/schedules", b),
+  deleteReportSchedule: (id: string) => req<{ id: string }>("DELETE", `/reports/schedules/${id}`),
   async exportCourseXlsx(courseId: string): Promise<Blob> {
     const t = auth.token();
     const res = await fetch(`${BASE}/analytics/courses/${courseId}/export.xlsx`, { headers: t ? { authorization: `Bearer ${t}` } : {} });

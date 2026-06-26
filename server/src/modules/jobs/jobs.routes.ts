@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "./jobs.service.js";
+import { runDueReports } from "../reports/reports.service.js";
 import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
@@ -36,6 +37,12 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/project-sla/run", { preHandler: guard("job:run") }, async (req) => {
     const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
     return { data: await runProjectSlaAlerts(now ? new Date(now) : new Date()) };
+  });
+
+  // Send due scheduled e-mail reports (weekly/monthly course report attachments).
+  app.post("/jobs/scheduled-reports/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
+    return { data: await runDueReports(now ? new Date(now) : new Date()) };
   });
 
   // Forward stored xAPI statements to the external LRS.
