@@ -35,12 +35,19 @@ export function smtpConfigured(): boolean {
   return Boolean(env.SMTP_URL);
 }
 
-/** Send a plain-text e-mail (with a minimal HTML wrap). Throws if SMTP is unset. */
-export async function sendSmtpEmail(to: string, subject: string, body: string): Promise<void> {
+export type EmailAttachment = { filename: string; content: Buffer; contentType?: string };
+
+/** Send a plain-text e-mail (with a minimal HTML wrap) + optional attachments.
+ *  Throws if SMTP is unset. */
+export async function sendSmtpEmail(to: string, subject: string, body: string, attachments?: EmailAttachment[]): Promise<void> {
   const t = transport();
   if (!t) throw new Error("SMTP not configured");
   const html = `<div style="font-family:system-ui,Arial,sans-serif;font-size:15px;line-height:1.5;white-space:pre-wrap">${escapeHtml(body)}</div>`;
-  await t.sendMail({ from: env.MAIL_FROM ?? `${env.BRAND_NAME} <no-reply@localhost>`, to, subject, text: body, html });
+  await t.sendMail({
+    from: env.MAIL_FROM ?? `${env.BRAND_NAME} <no-reply@localhost>`,
+    to, subject, text: body, html,
+    ...(attachments?.length ? { attachments } : {}),
+  });
 }
 
 function escapeHtml(s: string): string {
