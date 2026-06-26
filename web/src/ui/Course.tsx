@@ -119,7 +119,7 @@ export function Course({ eid }: { eid: string }) {
       )}
 
       {blocks.map((b) => {
-        const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b);
+        const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b, t);
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
             <div className="row between"><h3 style={{ margin: 0 }}>{t("home.block", { n: b.index })} · {b.title}</h3>{STATE(st, t)}</div>

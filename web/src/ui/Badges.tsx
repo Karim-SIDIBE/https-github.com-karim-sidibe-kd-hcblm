@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { navigate, routes } from "../lib/router";
 import { brand } from "../lib/brand";
+import { useT } from "../lib/i18n";
 
 type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; revoked: boolean; hostedUrl: string; verifyUrl: string };
 const ORG = brand.issuer;
 const TIERS = [
-  { type: "ENTRY", abbr: "Entré", name: "Badge Entrée", block: "Bloc 0" },
-  { type: "COMPREHENSION", abbr: "Compr", name: "Badge Compréhension", block: "Bloc 1" },
-  { type: "PRACTICE", abbr: "Prati", name: "Badge Pratique", block: "Bloc 2" },
-  { type: "ANCHORING", abbr: "Ancra", name: "Badge Ancrage", block: "Bloc 3" },
+  { type: "ENTRY", abbr: "Entré", nameKey: "bd.entry", block: 0 },
+  { type: "COMPREHENSION", abbr: "Compr", nameKey: "bd.comprehension", block: 1 },
+  { type: "PRACTICE", abbr: "Prati", nameKey: "bd.practice", block: 2 },
+  { type: "ANCHORING", abbr: "Ancra", nameKey: "bd.anchoring", block: 3 },
 ];
-const LEVELS: Record<string, string> = { L1: "Niveau 1", L2: "Niveau 2", L3: "Niveau 3", N1: "Niveau 1", N2: "Niveau 2", N3: "Niveau 3" };
 
 function linkedInUrl(c: Credential) {
   const d = new Date(c.issuedAt);
@@ -20,17 +20,19 @@ function linkedInUrl(c: Credential) {
 }
 
 export function Badges({ eid }: { eid: string }) {
+  const t = useT();
+  const levelLabel = (l: string) => { const n = l.replace(/\D/g, ""); return n === "1" || n === "2" || n === "3" ? t(`level.${n}`) : l; };
   const [creds, setCreds] = useState<Credential[]>([]);
   const [badges, setBadges] = useState<{ type: string }[]>([]);
   const [completed, setCompleted] = useState(false);
-  const [level, setLevel] = useState("Niveau 1");
+  const [level, setLevel] = useState("N1");
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
-      if (alive && b?.course?.level) setLevel(LEVELS[b.course.level] ?? b.course.level);
+      if (alive && b?.course?.level) setLevel(b.course.level);
       try {
         const [c, prog] = await Promise.all([api.get<Credential[]>(`/enrollments/${eid}/credentials`), api.progress(eid)]);
         if (!alive) return;
@@ -47,24 +49,24 @@ export function Badges({ eid }: { eid: string }) {
 
   return (
     <div className="stack">
-      <div><div className="eyebrow">Vos badges</div><h1 style={{ marginTop: 6 }}>Progression certifiante</h1></div>
+      <div><div className="eyebrow">{t("bd.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("bd.title")}</h1></div>
       {!loaded && <><div className="skeleton card" /><div className="skeleton card" /></>}
 
-      {TIERS.map((t) => {
-        const earned = has(t.type); const c = credFor(t.type);
+      {TIERS.map((tier) => {
+        const earned = has(tier.type); const c = credFor(tier.type);
         return (
-          <div key={t.type} className="hf-card" style={earned ? undefined : { opacity: 0.7 }}>
+          <div key={tier.type} className="hf-card" style={earned ? undefined : { opacity: 0.7 }}>
             <div className="row between">
               <div className="row" style={{ gap: 14 }}>
-                <span className={`hf-medal ${earned ? "earned" : ""}`}>{t.abbr}</span>
-                <div><strong className="h4">{t.name}</strong><div className="meta">{t.block}</div></div>
+                <span className={`hf-medal ${earned ? "earned" : ""}`}>{tier.abbr}</span>
+                <div><strong className="h4">{t(tier.nameKey)}</strong><div className="meta">{t("home.block", { n: tier.block })}</div></div>
               </div>
-              {earned ? <span className="hf-pill hf-pill--mint hf-pill--sm">Obtenu</span> : <span className="hf-lock">🔒 Verrouillé</span>}
+              {earned ? <span className="hf-pill hf-pill--mint hf-pill--sm">{t("bd.obtained")}</span> : <span className="hf-lock">{t("course.state.locked")}</span>}
             </div>
             {earned && c && !c.revoked && (
               <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
-                <a href={linkedInUrl(c)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">Ajouter à LinkedIn</button></a>
-                <a href={c.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">Vérifier</button></a>
+                <a href={linkedInUrl(c)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">{t("bd.addLinkedIn")}</button></a>
+                <a href={c.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">{t("bd.verify")}</button></a>
               </div>
             )}
           </div>
@@ -73,15 +75,15 @@ export function Badges({ eid }: { eid: string }) {
 
       {/* Certificate */}
       <div className="hf-card hf-card--peach hf-card--stripe-orange center">
-        <span className="hf-medal cert lg" style={{ margin: "0 auto" }}>{level}</span>
-        <h2 style={{ marginTop: 12 }}>Certificat de {level}</h2>
+        <span className="hf-medal cert lg" style={{ margin: "0 auto" }}>{levelLabel(level)}</span>
+        <h2 style={{ marginTop: 12 }}>{t("bd.certOf", { level: levelLabel(level) })}</h2>
         {completed && cert ? (
           <div className="row" style={{ justifyContent: "center", marginTop: 8, flexWrap: "wrap" }}>
-            <a href={linkedInUrl(cert)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">Ajouter à LinkedIn</button></a>
-            <a href={cert.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">Vérification publique</button></a>
+            <a href={linkedInUrl(cert)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">{t("bd.addLinkedIn")}</button></a>
+            <a href={cert.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">{t("bd.publicVerify")}</button></a>
           </div>
         ) : (
-          <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} onClick={() => navigate(routes.project(eid))}>Déposer mon projet du Bloc 4 →</button>
+          <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} onClick={() => navigate(routes.project(eid))}>{t("bd.submitProject")}</button>
         )}
       </div>
     </div>

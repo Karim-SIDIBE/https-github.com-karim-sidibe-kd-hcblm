@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Exercise as ExerciseSpec } from "@kd/shared";
+import { useT } from "../lib/i18n";
 
 export type { ExerciseSpec };
 export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?: string; correct?: boolean };
@@ -11,6 +12,7 @@ export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?:
  * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
 export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void> }) {
+  const t = useT();
   const start = useRef(Date.now());
   const [phase, setPhase] = useState<"answer" | "feedback">("answer");
   const [choice, setChoice] = useState<string>("");
@@ -40,10 +42,10 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
 
   return (
     <div className="hf-card hf-card--stripe-orange stack">
-      <div className="eyebrow">Micro-exercice — obligatoire</div>
+      <div className="eyebrow">{t("ex.eyebrow")}</div>
 
       <div className="hf-pam">
-        <span className="tag">🎯 Moment d'Ancrage</span>
+        <span className="tag">{t("ob.pamTag")}</span>
         <div className="quote" style={{ whiteSpace: "pre-wrap" }}>{exercise.prompt}</div>
       </div>
 
@@ -57,7 +59,7 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
 
           {exercise.type === "written" && (
             <div className="hf-textwrap">
-              <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder="Votre réponse, ancrée dans votre situation réelle…" style={{ minHeight: 150 }}
+              <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
               <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars}</span>
             </div>
@@ -70,20 +72,20 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
             </label>
           ))}
 
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer} onClick={() => setPhase("feedback")}>Valider ma réponse</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer} onClick={() => setPhase("feedback")}>{t("ex.validate")}</button>
         </div>
       )}
 
       {phase === "feedback" && (
         <div className="stack pt-reveal">
           {exercise.type === "multi" && (
-            <span className={`hf-pill ${isCorrect ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{isCorrect ? "✓ Bonne réponse" : "À revoir"}</span>
+            <span className={`hf-pill ${isCorrect ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{isCorrect ? t("ex.correct") : t("ex.review")}</span>
           )}
           <div className="hf-card hf-card--mint">
-            <strong className="ok">Feedback immédiat</strong>
+            <strong className="ok">{t("ex.feedback")}</strong>
             <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{exercise.feedbackText}</p>
           </div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={finish}>{busy ? "…" : "Session suivante →"}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={finish}>{busy ? "…" : t("ex.next")}</button>
         </div>
       )}
     </div>
