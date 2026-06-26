@@ -1,6 +1,7 @@
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
 import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
+import { table, downloadCsv, today } from "../lib/csv";
 import type { CourseCtx } from "../App";
 
 const BLOCK_FR: Record<string, string> = {
@@ -30,6 +31,52 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
   const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
 
+  // Full course report as a sectioned, Excel-ready CSV (KPIs + funnel + at-risk + competencies).
+  function exportReport() {
+    if (!r) return;
+    const course = courses.find((c) => c.id === courseId);
+    const titleLine = `RAPPORT;${course ? courseTitle(course) : "Parcours"};${today()}`;
+    const kpi = "INDICATEURS\r\n" + table<{ k: string; v: string | number }>(
+      [{ label: "Indicateur", value: (x) => x.k }, { label: "Valeur", value: (x) => x.v }],
+      [
+        { k: "Apprenants inscrits", v: r.enrollments },
+        { k: "Actifs (7 jours)", v: r.activeLearners },
+        { k: "Taux de complétion (%)", v: r.completionRate },
+        { k: "Prévision de certification (%)", v: r.forecast.forecastPercent },
+        { k: "Apprenants certifiés", v: certified },
+        { k: "Certificats délivrés", v: r.credentialsIssued },
+        { k: "Moyenne quiz final (%)", v: r.averageFinalQuiz ?? "" },
+        { k: "Moyenne grille B4 (%)", v: r.averageRubric ?? "" },
+      ],
+    );
+    const funnel = "ENTONNOIR PAR BLOC\r\n" + table(
+      [
+        { label: "Bloc", value: (b) => b.index },
+        { label: "Type", value: (b) => BLOCK_FR[b.type] ?? b.type },
+        { label: "Complétés", value: (b) => b.completed },
+        { label: "% des inscrits", value: (b) => (r.enrollments ? Math.round((b.completed / r.enrollments) * 100) : 0) },
+      ], r.blockFunnel,
+    );
+    const atRiskCsv = "APPRENANTS À RISQUE\r\n" + table<AtRiskLearner>(
+      [
+        { label: "Nom", value: (l) => l.name },
+        { label: "E-mail", value: (l) => l.email },
+        { label: "Progression (%)", value: (l) => l.progressPercent },
+        { label: "Score de risque", value: (l) => l.riskScore },
+        { label: "Niveau", value: (l) => RISK_FR[l.riskLevel] },
+        { label: "Facteurs", value: (l) => l.factors.join(" · ") },
+      ], risk.data ?? [],
+    );
+    const compCsv = "COMPÉTENCES DU GROUPE\r\n" + table(
+      [
+        { label: "Compétence", value: (c) => c.subArea },
+        { label: "Score moyen (%)", value: (c) => c.avgPct },
+        { label: "Apprenants évalués", value: (c) => c.learners },
+      ], comp.data?.competencies ?? [],
+    );
+    downloadCsv(`rapport-${today()}.csv`, titleLine, kpi, funnel, atRiskCsv, compCsv);
+  }
+
   return (
     <div className="content">
       <div className="pagehead">
@@ -42,7 +89,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
           <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
             {courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}
           </select>
-          <button className="btn btn--primary">Exporter le rapport</button>
+          <button className="btn btn--primary" onClick={exportReport} disabled={!r} title="Télécharger le rapport complet (CSV : indicateurs, entonnoir, apprenants à risque, compétences)">⤓ Exporter le rapport</button>
         </div>
       </div>
 
