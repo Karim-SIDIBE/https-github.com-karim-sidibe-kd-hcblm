@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, deleteMedia, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { scanStreamHead } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
@@ -70,6 +70,12 @@ export async function mediaRoutes(app: FastifyInstance) {
   app.get("/media/:id", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     try { await assertAssetAccessible(req.principal, id); return { data: await getAsset(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Delete a media asset (authors/admins). Blocked while a course references it.
+  app.delete("/media/:id", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return reply.send({ data: await deleteMedia(id) }); } catch (err) { return handle(reply, err); }
   });
 
   // Adaptive playback manifest (lowest-bitrate first + recommended lite + captions).

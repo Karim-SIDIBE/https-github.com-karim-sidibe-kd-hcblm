@@ -209,3 +209,30 @@ export async function resolveRendition(assetId: string, label: string) {
   if (!r || !r.available) throw new MediaError(404, "no_rendition", "Rendition indisponible");
   return r;
 }
+
+/** Course versions (title + version) whose content still references this asset.
+ *  Used to block deletion of media that a published/draft course depends on. */
+export async function assetReferences(assetId: string): Promise<string[]> {
+  const versions = await prisma.courseVersion.findMany({ select: { title: true, version: true, content: true } });
+  const out = new Set<string>();
+  for (const v of versions) if (rawReferencesAsset(v.content, assetId)) out.add(`${v.title} (v${v.version})`);
+  return [...out];
+}
+
+/** Delete a media asset: its stored objects (source + renditions) + DB rows.
+ *  Refuses if any course still references it — unlink it in the editor first. */
+export async function deleteMedia(assetId: string) {
+  const asset = await prisma.mediaAsset.findUnique({ where: { id: assetId }, include: { renditions: true } });
+  if (!asset) throw new MediaError(404, "not_found", "Média introuvable");
+  const refs = await assetReferences(assetId);
+  if (refs.length) {
+    throw new MediaError(409, "in_use", `Vidéo utilisée par : ${refs.join(", ")}. Déliez-la d'abord dans l'éditeur de cours, puis réessayez.`);
+  }
+  // Remove stored objects (best-effort: a missing file shouldn't block the delete).
+  const keys = new Set<string>();
+  if (asset.storageKey && !["external", "pending"].includes(asset.storageKey)) keys.add(asset.storageKey);
+  for (const r of asset.renditions) if (r.storageKey) keys.add(r.storageKey);
+  for (const k of keys) await storage.remove(k).catch(() => {});
+  await prisma.mediaAsset.delete({ where: { id: assetId } }); // cascades to renditions
+  return { id: assetId, removedObjects: keys.size };
+}

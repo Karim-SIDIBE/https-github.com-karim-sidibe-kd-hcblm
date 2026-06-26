@@ -148,6 +148,7 @@ export const api = {
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   media: () => req<MediaAsset[]>("GET", "/media"),
+  deleteMedia: (id: string) => req<{ id: string; removedObjects: number }>("DELETE", `/media/${id}`),
   async mediaPlayback(id: string): Promise<MediaPlayback> {
     const data = await req<any>("GET", `/media/${id}/playback`);
     // Absolutise the API-relative + signed URLs so a native <video> can stream them.
