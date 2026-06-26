@@ -1,8 +1,9 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseLearners, courseReport, learnerDiagnostic, overview, pamExport, toCsv, transcript,
+  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseLearners, courseReport, courseWorkbook, learnerDiagnostic, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
+import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 
 const owned = [authenticate, requireEnrollmentAccess];
@@ -50,6 +51,18 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const { format } = z.object({ format: z.enum(["csv", "json"]).optional() }).parse(req.query);
     try { return maybeCsv(reply, format, await courseLearners(courseId), `course-${courseId}-learners`); }
     catch (err) { return handle(reply, err); }
+  });
+
+  // Full course report as a multi-sheet Excel workbook (over the full dataset).
+  app.get("/analytics/courses/:courseId/export.xlsx", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    try {
+      const buf = buildXlsx(await courseWorkbook(courseId));
+      return reply
+        .header("content-type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+        .header("content-disposition", `attachment; filename="rapport-${courseId}.xlsx"`)
+        .send(buf);
+    } catch (err) { return handle(reply, err); }
   });
 
   // Dropout-risk ranking for a course's learners (predictive analytics).
