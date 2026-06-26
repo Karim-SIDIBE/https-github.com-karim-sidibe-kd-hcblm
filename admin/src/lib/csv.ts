@@ -25,6 +25,15 @@ export function today(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+/** Download an arbitrary Blob (e.g. a server-generated .xlsx) as a file. */
+export function downloadBlob(filename: string, blob: Blob): void {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
 /** Download CSV blocks as a file (BOM prepended, blocks separated by a blank line). */
 export function downloadCsv(filename: string, ...blocks: string[]): void {
   const text = "﻿" + blocks.filter(Boolean).join("\r\n\r\n");

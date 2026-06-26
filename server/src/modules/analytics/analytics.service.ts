@@ -12,6 +12,7 @@ import { dropoutRisk } from "../../domain/engine/risk.js";
 import { aggregateCompetencies } from "../../domain/engine/competency.js";
 import type { SubAreaScore } from "../../domain/engine/progress.js";
 import { credentialUrl } from "../../lib/credentials/openbadge.js";
+import type { Sheet, Cell } from "../../lib/export/xlsx.js";
 
 /** Optional reporting window (filters by enrolment start). */
 export type DateRange = { since?: Date; until?: Date };
@@ -329,6 +330,54 @@ export async function cohortReport(cohortId: string) {
     averageProgress: avg(members.map((m) => m.progressPercent)),
     rows: members,
   };
+}
+
+const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
+const fdate = (d: Date | string | null | undefined): string => (d ? new Date(d).toISOString().slice(0, 16).replace("T", " ") : "");
+
+/** Assemble a multi-sheet workbook (Synthèse, Entonnoir, Apprenants, À risque,
+ *  Compétences) for a course — over the FULL dataset (not the browser view). */
+export async function courseWorkbook(courseId: string): Promise<Sheet[]> {
+  const [report, learners, risk, comp] = await Promise.all([
+    courseReport(courseId), courseLearners(courseId), atRiskLearners(courseId), courseCompetencies(courseId),
+  ]);
+  const certified = report.statusCounts?.CERTIFIED ?? report.forecast.certified ?? 0;
+
+  const synthese: Cell[][] = [
+    ["Indicateur", "Valeur"],
+    ["Apprenants inscrits", report.enrollments],
+    ["Actifs (7 jours)", report.activeLearners],
+    ["Taux de complétion (%)", report.completionRate],
+    ["Prévision de certification (%)", report.forecast.forecastPercent],
+    ["Apprenants certifiés", certified],
+    ["Certificats délivrés", report.credentialsIssued],
+    ["Moyenne quiz final (%)", report.averageFinalQuiz ?? ""],
+    ["Moyenne grille B4 (%)", report.averageRubric ?? ""],
+  ];
+  const entonnoir: Cell[][] = [
+    ["Bloc", "Type", "Complétés", "% des inscrits"],
+    ...report.blockFunnel.map((b) => [b.index, b.type, b.completed, report.enrollments ? Math.round((b.completed / report.enrollments) * 100) : 0] as Cell[]),
+  ];
+  const apprenants: Cell[][] = [
+    ["Nom", "E-mail", "Statut", "Progression (%)", "Quiz final (%)", "Projet B4 (%)", "Actif", "Dernière activité", "Démarré le", "Certifié le"],
+    ...learners.map((l) => [l.name, l.email, l.status, l.progressPercent, l.finalQuiz ?? "", l.rubric ?? "", l.active ? "Oui" : "Non", fdate(l.lastActivity), fdate(l.startedAt), fdate(l.completedAt)] as Cell[]),
+  ];
+  const aRisque: Cell[][] = [
+    ["Nom", "E-mail", "Progression (%)", "Statut", "Score de risque", "Niveau", "Facteurs"],
+    ...risk.map((r) => [r.name, r.email, r.progressPercent, r.status, r.riskScore, RISK_FR[r.riskLevel] ?? r.riskLevel, r.factors.join(" · ")] as Cell[]),
+  ];
+  const competences: Cell[][] = [
+    ["Compétence", "Score moyen (%)", "Apprenants évalués"],
+    ...comp.competencies.map((c) => [c.subArea, c.avgPct, c.learners] as Cell[]),
+  ];
+
+  return [
+    { name: "Synthèse", rows: synthese },
+    { name: "Entonnoir", rows: entonnoir },
+    { name: "Apprenants", rows: apprenants },
+    { name: "À risque", rows: aRisque },
+    { name: "Compétences", rows: competences },
+  ];
 }
 
 /** Minimal CSV serializer for report rows. */

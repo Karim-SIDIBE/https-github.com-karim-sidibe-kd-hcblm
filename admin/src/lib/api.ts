@@ -138,6 +138,12 @@ export const api = {
   courseReport: (courseId: string) => req<CourseReport>("GET", `/analytics/courses/${courseId}`),
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
+  async exportCourseXlsx(courseId: string): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/analytics/courses/${courseId}/export.xlsx`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Export Excel échoué");
+    return res.blob();
+  },
   competencies: (courseId: string) => req<CourseCompetencies>("GET", `/analytics/courses/${courseId}/competencies`),
   learnerDiagnostic: (enrollmentId: string) => req<LearnerDiagnostic>("GET", `/analytics/enrollments/${enrollmentId}/diagnostic`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),

@@ -1,7 +1,7 @@
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
 import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
-import { table, downloadCsv, today } from "../lib/csv";
+import { table, downloadCsv, downloadBlob, today } from "../lib/csv";
 import type { CourseCtx } from "../App";
 
 const BLOCK_FR: Record<string, string> = {
@@ -77,6 +77,12 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
     downloadCsv(`rapport-${today()}.csv`, titleLine, kpi, funnel, atRiskCsv, compCsv);
   }
 
+  // Server-side full report as a formatted, multi-sheet Excel workbook.
+  async function exportExcel() {
+    try { downloadBlob(`rapport-${today()}.xlsx`, await api.exportCourseXlsx(courseId)); }
+    catch { window.alert("Export Excel indisponible pour le moment."); }
+  }
+
   return (
     <div className="content">
       <div className="pagehead">
@@ -89,7 +95,8 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
           <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
             {courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}
           </select>
-          <button className="btn btn--primary" onClick={exportReport} disabled={!r} title="Télécharger le rapport complet (CSV : indicateurs, entonnoir, apprenants à risque, compétences)">⤓ Exporter le rapport</button>
+          <button className="btn" onClick={exportReport} disabled={!r} title="Rapport complet en CSV (indicateurs, entonnoir, apprenants à risque, compétences)">⤓ CSV</button>
+          <button className="btn btn--primary" onClick={exportExcel} title="Classeur Excel multi-onglets sur l'ensemble du parcours (côté serveur)">⤓ Excel</button>
         </div>
       </div>
 
