@@ -6,12 +6,14 @@ import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume,
 import { blockItems } from "../lib/content";
 import { remainingLabel, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
+import { useT } from "../lib/i18n";
 
-const LEVELS: Record<string, string> = { L1: "Niveau 1", L2: "Niveau 2", L3: "Niveau 3", N1: "Niveau 1", N2: "Niveau 2", N3: "Niveau 3" };
 const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}`;
 type Bundle = { course: { title: string; level: string }; content: CourseContent };
 
 export function Home({ eid }: { eid: string }) {
+  const t = useT();
+  const levelLabel = (l: string) => { const n = l.replace(/\D/g, ""); return n === "1" || n === "2" || n === "3" ? t(`level.${n}`) : l; };
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
   const [resume, setResume] = useState<ResumeSnapshot>(() => getCachedResume(eid));
@@ -63,19 +65,19 @@ export function Home({ eid }: { eid: string }) {
   return (
     <div className="stack">
       <div>
-        <div className="eyebrow">{bundle.course.title} · {LEVELS[bundle.course.level] ?? bundle.course.level}</div>
-        <h1 style={{ marginTop: 6 }}>Bonjour {name || "👋"}</h1>
+        <div className="eyebrow">{bundle.course.title} · {levelLabel(bundle.course.level)}</div>
+        <h1 style={{ marginTop: 6 }}>{t("home.hello", { name: name || "👋" })}</h1>
       </div>
 
       {resume && !progress?.courseCompleted && (
         <div className="hf-card hf-card--peach hf-card--stripe-orange">
-          <div className="eyebrow">Reprendre</div>
-          <div className="h3" style={{ margin: "6px 0 2px" }}>Bloc {resume.blockIndex}{(resume as any).itemLabel ? ` · ${(resume as any).itemLabel}` : ""}{(resume as any).blockTitle ? ` — ${(resume as any).blockTitle}` : ""}</div>
-          <div className="meta">↺ Reprise exacte{resume.positionSec ? ` · vidéo ${mmss(resume.positionSec)}` : ""}</div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 14 }} onClick={openResume}>Reprendre →</button>
+          <div className="eyebrow">{t("home.resume")}</div>
+          <div className="h3" style={{ margin: "6px 0 2px" }}>{t("home.block", { n: resume.blockIndex })}{(resume as any).itemLabel ? ` · ${(resume as any).itemLabel}` : ""}{(resume as any).blockTitle ? ` — ${(resume as any).blockTitle}` : ""}</div>
+          <div className="meta">{t("home.exactResume")}{resume.positionSec ? ` · ${t("home.video", { time: mmss(resume.positionSec) })}` : ""}</div>
+          <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 14 }} onClick={openResume}>{t("home.resumeBtn")}</button>
         </div>
       )}
-      {progress?.courseCompleted && <div className="hf-card hf-card--mint"><span className="hf-pill hf-pill--mint">Parcours terminé 🎓</span></div>}
+      {progress?.courseCompleted && <div className="hf-card hf-card--mint"><span className="hf-pill hf-pill--mint">{t("home.courseDone")}</span></div>}
 
       {/* Targeted remediation: keep the diagnostic's weak areas in focus (Pilier 3).
           Server-backed (cross-device) with a local cache fallback for offline. */}
@@ -85,27 +87,27 @@ export function Home({ eid }: { eid: string }) {
         if (!prio.length) return null;
         return (
           <div className="hf-card hf-card--icy">
-            <div className="eyebrow">🎯 Vos axes prioritaires</div>
-            <p className="body" style={{ margin: "6px 0 0" }}>D'après votre diagnostic, concentrez-vous sur :</p>
+            <div className="eyebrow">{t("home.priorities")}</div>
+            <p className="body" style={{ margin: "6px 0 0" }}>{t("home.prioritiesDesc")}</p>
             <ul style={{ margin: "8px 0 0", paddingLeft: 18 }}>
               {prio.slice(0, 2).map((p, i) => <li key={i} className="body" style={{ color: "var(--fg-1)" }}><strong>{p?.subArea ?? p?.label ?? String(p)}</strong></li>)}
             </ul>
-            <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 12 }} onClick={() => navigate(routes.revision(eid))}>Réviser mes points faibles →</button>
-            <button className="hf-btn hf-btn--ghost hf-btn--block" style={{ marginTop: 6 }} onClick={() => navigate(routes.cours(eid))}>Aller au cours</button>
+            <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 12 }} onClick={() => navigate(routes.revision(eid))}>{t("home.review")}</button>
+            <button className="hf-btn hf-btn--ghost hf-btn--block" style={{ marginTop: 6 }} onClick={() => navigate(routes.cours(eid))}>{t("home.goToCourse")}</button>
           </div>
         );
       })()}
 
       <div className="hf-card">
-        <div className="row between"><strong className="h3" style={{ margin: 0 }}>Progression</strong><span className="num accent" style={{ fontSize: 26 }}>{pct}%</span></div>
+        <div className="row between"><strong className="h3" style={{ margin: 0 }}>{t("home.progress")}</strong><span className="num accent" style={{ fontSize: 26 }}>{pct}%</span></div>
         <div className="hf-prog" style={{ margin: "12px 0" }}><i style={{ width: `${pct}%` }} /></div>
-        <div className="row between meta"><span>{blocksDone} / {blocks.length} blocs</span>{remaining && <span>⏱️ {remaining}</span>}</div>
+        <div className="row between meta"><span>{t("home.blocksCount", { done: blocksDone, total: blocks.length })}</span>{remaining && <span>⏱️ {remaining}</span>}</div>
       </div>
 
       {prod && (
         <div className="hf-card hf-card--peach">
           <div className="row between">
-            <div><div className="eyebrow">Score de productivité</div><div className="meta" style={{ marginTop: 2 }}>Monte à chaque exercice complété</div></div>
+            <div><div className="eyebrow">{t("home.prodScore")}</div><div className="meta" style={{ marginTop: 2 }}>{t("home.prodDesc")}</div></div>
             <span className="num accent" style={{ fontSize: 30 }}>{prod.score}<span style={{ fontSize: 15 }}>/100</span></span>
           </div>
           <div className="hf-prog" style={{ margin: "12px 0 0" }}><i style={{ width: `${prod.score}%` }} /></div>
@@ -113,7 +115,7 @@ export function Home({ eid }: { eid: string }) {
       )}
 
       <div>
-        <div className="eyebrow" style={{ marginBottom: 8 }}>Votre parcours</div>
+        <div className="eyebrow" style={{ marginBottom: 8 }}>{t("home.yourPath")}</div>
         <div className="hf-rail">
           {blocks.map((b, i) => {
             const st = stateOf(b.index); const done = doneIdx.has(b.index);
@@ -132,9 +134,9 @@ export function Home({ eid }: { eid: string }) {
         <div className="hf-card hf-card--mint row between">
           <div className="row" style={{ gap: 10 }}>
             <span className="hf-medal earned" style={{ width: 40, height: 40, fontSize: 16 }}>👥</span>
-            <div><div className="meta">Pair de progression</div><strong className="h4">{peer.name}</strong></div>
+            <div><div className="meta">{t("home.peer")}</div><strong className="h4">{peer.name}</strong></div>
           </div>
-          {peer.notified && <span className="hf-pill hf-pill--mint hf-pill--sm">✓ Notifié</span>}
+          {peer.notified && <span className="hf-pill hf-pill--mint hf-pill--sm">{t("home.notified")}</span>}
         </div>
       )}
     </div>
