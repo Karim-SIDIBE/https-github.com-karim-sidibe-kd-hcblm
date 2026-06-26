@@ -7,13 +7,14 @@ import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/con
 import { availabilityOf, makeAvailable, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 import type { CourseContent } from "@kd/shared";
+import { useT, type TFn } from "../lib/i18n";
 
 type Bundle = { course: { title: string }; content: CourseContent };
 
-const STATE = (st: string) =>
-  st === "completed" ? <span className="hf-pill hf-pill--mint hf-pill--sm">Terminé</span> :
-  st === "locked" ? <span className="hf-lock">🔒 Verrouillé</span> :
-  <span className="hf-pill hf-pill--orange hf-pill--sm">En cours</span>;
+const STATE = (st: string, t: TFn) =>
+  st === "completed" ? <span className="hf-pill hf-pill--mint hf-pill--sm">{t("course.state.done")}</span> :
+  st === "locked" ? <span className="hf-lock">{t("course.state.locked")}</span> :
+  <span className="hf-pill hf-pill--orange hf-pill--sm">{t("course.state.inProgress")}</span>;
 const ICON: Record<ItemKind, string> = {
   onboarding: "🚀", diagnostic: "📝", session: "🎬", case: "📋", scenarios: "🧩",
   interblock: "📝", field: "📍", self: "🪞", plan: "🗓️", final: "🏁", journal: "📓", project: "🎓",
@@ -23,6 +24,7 @@ const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interbloc
 const akey = (blockIndex: number, itemKey: string) => `${blockIndex}:${itemKey}`;
 
 export function Course({ eid }: { eid: string }) {
+  const t = useT();
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
   const [diag, setDiag] = useState<{ priorities: string[]; profile: string | null } | null>(null);
@@ -45,7 +47,7 @@ export function Course({ eid }: { eid: string }) {
     const r = await makeAvailable(api.cacheFetch, bundle as any, eid, blockIndex, it.key);
     setBusy((m) => ({ ...m, [k]: false }));
     refreshAvail(bundle);
-    setMsg(r.total > 0 ? `« ${it.label} » disponible hors ligne (${r.cached}/${r.total}) · 7 jours.` : `« ${it.label} » disponible hors ligne · 7 jours.`);
+    setMsg(r.total > 0 ? t("course.availMsg", { label: it.label, cached: r.cached, total: r.total }) : t("course.availMsgSimple", { label: it.label }));
   }
   async function removeItem(blockIndex: number, it: BlockItem) {
     await removeAvailability(eid, blockIndex, it.key);
@@ -63,7 +65,7 @@ export function Course({ eid }: { eid: string }) {
       const cached = await store.getBundle<Bundle>(eid); if (alive && cached) setBundle(cached);
       const b = await engine.cacheBundle(eid);
       const loaded = (b ?? cached) as Bundle | null;
-      if (alive && b) setBundle(b); else if (alive && !cached) setMsg("Parcours indisponible (hors-ligne et non rendu disponible).");
+      if (alive && b) setBundle(b); else if (alive && !cached) setMsg(t("course.unavailable"));
       await purgeExpired(eid);                 // evict elements past their 7-day window
       if (alive) refreshAvail(loaded);
       await refreshProgress();
@@ -105,12 +107,12 @@ export function Course({ eid }: { eid: string }) {
 
   return (
     <div className="stack">
-      <div><div className="eyebrow">Le parcours</div><h1 style={{ marginTop: 6 }}>{bundle.course.title}</h1></div>
+      <div><div className="eyebrow">{t("course.title")}</div><h1 style={{ marginTop: 6 }}>{bundle.course.title}</h1></div>
       {msg && <p className="meta">{msg}</p>}
 
       {diag && (diag.priorities?.length ?? 0) > 0 && (
         <div className="hf-card hf-card--peach hf-card--stripe-orange">
-          <div className="eyebrow">🎯 Vos priorités d'apprentissage</div>
+          <div className="eyebrow">{t("course.priorities")}</div>
           {diag.profile && <span className="hf-pill hf-pill--orange hf-pill--sm" style={{ margin: "8px 0", display: "inline-flex" }}>{diag.profile}</span>}
           <ol style={{ margin: "6px 0 0", paddingLeft: 20 }} className="body">{diag.priorities.map((p) => <li key={p}>{p}</li>)}</ol>
         </div>
@@ -120,13 +122,13 @@ export function Course({ eid }: { eid: string }) {
         const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b);
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
-            <div className="row between"><h3 style={{ margin: 0 }}>Bloc {b.index} · {b.title}</h3>{STATE(st)}</div>
+            <div className="row between"><h3 style={{ margin: 0 }}>{t("home.block", { n: b.index })} · {b.title}</h3>{STATE(st, t)}</div>
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
               for (const u of (b as any).units) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; }
-              const parts = [`${c.ms} micro-session${c.ms > 1 ? "s" : ""}`];
-              if (c.la) parts.push(`${c.la} activité${c.la > 1 ? "s" : ""} longue${c.la > 1 ? "s" : ""}`);
-              if (c.mt) parts.push(`${c.mt} micro-tâche${c.mt > 1 ? "s" : ""}`);
+              const parts = [`${c.ms} ${t(c.ms > 1 ? "course.ms_p" : "course.ms_s")}`];
+              if (c.la) parts.push(`${c.la} ${t(c.la > 1 ? "course.la_p" : "course.la_s")}`);
+              if (c.mt) parts.push(`${c.mt} ${t(c.mt > 1 ? "course.mt_p" : "course.mt_s")}`);
               return <div className="meta" style={{ marginTop: 4 }}>{parts.join(" · ")}</div>;
             })()}
             <div className="stack" style={{ marginTop: 12 }}>
@@ -143,18 +145,18 @@ export function Course({ eid }: { eid: string }) {
                         <span><strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>{it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}</span>
                       </span>
                       {!locked && !isDone && !NAVIGABLE.includes(it.kind)
-                        ? <button className="hf-btn hf-btn--sm hf-btn--outline" onClick={(e) => { e.stopPropagation(); completeInterim(b.index, it); }}>Terminé</button>
+                        ? <button className="hf-btn hf-btn--sm hf-btn--outline" onClick={(e) => { e.stopPropagation(); completeInterim(b.index, it); }}>{t("course.markDone")}</button>
                         : <span className="meta">{isDone ? "" : "→"}</span>}
                     </div>
                     {!locked && !isDone && (
                       <div className="row" style={{ gap: 8, marginTop: 6, paddingLeft: 2 }}>
                         {av?.available
                           ? <>
-                              <span className="hf-pill hf-pill--mint hf-pill--sm">✓ Disponible hors ligne · {av.daysLeft} j</span>
-                              <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ padding: "2px 8px" }} onClick={(e) => { e.stopPropagation(); removeItem(b.index, it); }}>Retirer</button>
+                              <span className="hf-pill hf-pill--mint hf-pill--sm">{t("course.availOffline", { days: av.daysLeft })}</span>
+                              <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ padding: "2px 8px" }} onClick={(e) => { e.stopPropagation(); removeItem(b.index, it); }}>{t("course.remove")}</button>
                             </>
                           : <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ padding: "2px 8px" }} disabled={busy[k]} onClick={(e) => { e.stopPropagation(); makeItemAvailable(b.index, it); }}>
-                              {busy[k] ? "…" : "⤓ Rendre disponible hors ligne"}
+                              {busy[k] ? "…" : t("course.makeOffline")}
                             </button>}
                       </div>
                     )}

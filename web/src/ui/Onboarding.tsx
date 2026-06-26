@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
 import { navigate, routes } from "../lib/router";
+import { useT } from "../lib/i18n";
 
 type Onboarding = {
   momentAncrage: { promptText: string; minChars: number; placeholderExample?: string };
@@ -16,6 +17,7 @@ type Step = "pam" | "profile" | "peer" | "done";
  * (AC#5 / failure-mode 5 — no skip). Styled with the hf-* kit.
  */
 export function Onboarding({ eid }: { eid: string }) {
+  const t = useT();
   const [payload, setPayload] = useState<Onboarding | null>(null);
   const [objective, setObjective] = useState("");
   const [step, setStep] = useState<Step | null>(null);
@@ -60,12 +62,12 @@ export function Onboarding({ eid }: { eid: string }) {
     try { const r = await engine.commit(eid, "quiz_trigger", { answers, profileKey }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("peer"); } finally { setBusy(false); }
   }
   async function submitPeer() {
-    if (!peer.name.trim() || !/.+@.+\..+/.test(peer.email)) { setMsg("Indiquez un nom et un e-mail valides."); return; }
+    if (!peer.name.trim() || !/.+@.+\..+/.test(peer.email)) { setMsg(t("ob.invalidPeer")); return; }
     setBusy(true); setMsg(null);
     try { const r = await engine.commit(eid, "peer", { name: peer.name.trim(), email: peer.email.trim() }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("done"); } finally { setBusy(false); }
   }
 
-  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.course(eid))}>← Accueil</button>;
+  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.course(eid))}>← {t("nav.home")}</button>;
   if (!payload || !step) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "60%" }} /><div className="skeleton card" /></div>;
   const stepNo = step === "pam" ? 1 : step === "profile" ? 2 : 3;
 
@@ -73,26 +75,26 @@ export function Onboarding({ eid }: { eid: string }) {
     <div className="stack">
       <Back />
       {step !== "done" && (<>
-        <div className="eyebrow">Bloc 0 · Étape {stepNo} sur 3</div>
+        <div className="eyebrow">{t("ob.step", { n: stepNo })}</div>
         <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>
       </>)}
 
       {step === "pam" && (
         <div className="hf-card stack">
-          <h1>Votre point de départ</h1>
-          <div className="hf-pam"><span className="tag">🎯 Moment d'Ancrage</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{payload.momentAncrage.promptText}</div></div>
+          <h1>{t("ob.startingPoint")}</h1>
+          <div className="hf-pam"><span className="tag">{t("ob.pamTag")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{payload.momentAncrage.promptText}</div></div>
           <div className="hf-textwrap">
-            <textarea className="hf-field" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || "Décrivez votre situation professionnelle réelle…"}
+            <textarea className="hf-field" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} style={{ minHeight: 160 }} />
             <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars}</span>
           </div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars} onClick={submitPam}>{busy ? "…" : "Enregistrer et continuer →"}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars} onClick={submitPam}>{busy ? "…" : t("ob.saveContinue")}</button>
         </div>
       )}
 
       {step === "profile" && objective && (
         <div className="hf-card hf-card--icy stack">
-          <div className="eyebrow">🎯 Objectif du parcours</div>
+          <div className="eyebrow">{t("ob.objective")}</div>
           <p className="body" style={{ margin: 0 }}>{objective}</p>
         </div>
       )}
@@ -100,7 +102,7 @@ export function Onboarding({ eid }: { eid: string }) {
       {step === "profile" && (
         <div className="stack">
           <div className="hf-card stack">
-            <h3>Quel profil vous correspond le mieux ?</h3>
+            <h3>{t("ob.whichProfile")}</h3>
             {payload.profileChoices.map((p) => (
               <div key={p.key} className={`pt-opt ${profileKey === p.key ? "sel" : ""}`} role="button" onClick={() => setProfileKey(p.key)}>
                 <strong className="h4">{p.name}</strong><div className="meta">{p.description}</div>
@@ -117,27 +119,27 @@ export function Onboarding({ eid }: { eid: string }) {
               ))}
             </div>
           ))}
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !profileKey || !allAnswered} onClick={submitProfile}>{busy ? "…" : "Continuer →"}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !profileKey || !allAnswered} onClick={submitProfile}>{busy ? "…" : t("ob.continue")}</button>
         </div>
       )}
 
       {step === "peer" && (
         <div className="hf-card stack">
-          <h3>Votre pair de progression</h3>
-          <p className="body">Choisissez une personne qui sera informée de vos réussites. <strong>Étape obligatoire</strong> — la responsabilisation sociale fait partie du parcours.</p>
-          <label>Nom<input className="hf-field" value={peer.name} onChange={(e) => setPeer({ ...peer, name: e.target.value })} placeholder="Nom du collègue / mentor" /></label>
-          <label>E-mail<input className="hf-field" value={peer.email} type="email" onChange={(e) => setPeer({ ...peer, email: e.target.value })} placeholder="email@exemple.com" /></label>
+          <h3>{t("ob.peerTitle")}</h3>
+          <p className="body">{t("ob.peerDescPre")}<strong>{t("ob.peerMandatory")}</strong>{t("ob.peerDescPost")}</p>
+          <label>{t("ob.name")}<input className="hf-field" value={peer.name} onChange={(e) => setPeer({ ...peer, name: e.target.value })} placeholder={t("ob.namePh")} /></label>
+          <label>{t("ob.email")}<input className="hf-field" value={peer.email} type="email" onChange={(e) => setPeer({ ...peer, email: e.target.value })} placeholder={t("ob.emailPh")} /></label>
           {msg && <p className="ko" style={{ margin: 0 }}>{msg}</p>}
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={submitPeer}>{busy ? "…" : "Valider et débloquer le badge d'entrée"}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={submitPeer}>{busy ? "…" : t("ob.validate")}</button>
         </div>
       )}
 
       {step === "done" && (
         <div className="hf-card hf-card--peach hf-card--stripe-orange center stack">
-          <span className="hf-medal earned lg" style={{ margin: "0 auto" }}>Entré</span>
-          <h1>Bloc 0 terminé</h1>
-          <p className="body">Votre badge d'entrée est débloqué. Vous pouvez commencer le parcours.</p>
-          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>Commencer le parcours →</button>
+          <span className="hf-medal earned lg" style={{ margin: "0 auto" }}>{t("ob.medal")}</span>
+          <h1>{t("ob.doneTitle")}</h1>
+          <p className="body">{t("ob.doneDesc")}</p>
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>{t("ob.startCourse")}</button>
         </div>
       )}
     </div>
