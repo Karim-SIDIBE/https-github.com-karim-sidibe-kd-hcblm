@@ -40,6 +40,12 @@ export function Medias() {
 
   function copyId(id: string) { navigator.clipboard?.writeText(id).then(() => setNote(`Identifiant copié : ${id}`)).catch(() => {}); }
 
+  async function remove(m: MediaAsset) {
+    if (!window.confirm(`Supprimer définitivement « ${m.filename ?? m.id} » ?\nLes fichiers vidéo (source + tous les débits) seront effacés. Action irréversible.`)) return;
+    try { const r = await api.deleteMedia(m.id); setNote(`🗑️ « ${m.filename ?? m.id} » supprimé (${r.removedObjects} fichier(s) effacé(s)).`); load(); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
+  }
+
   const [preview, setPreview] = useState<{ asset: MediaAsset; renditions: Rend[]; sel: string } | null>(null);
   async function openPreview(m: MediaAsset) {
     setNote(null); setPreview({ asset: m, renditions: [], sel: "" });
@@ -88,6 +94,7 @@ export function Medias() {
                     <td><div style={{ display: "flex", gap: 6 }}>
                       <button className="btn btn--sm" onClick={() => openPreview(m)} title="Prévisualiser le média">▶ Aperçu</button>
                       <button className="btn btn--sm" onClick={() => copyId(m.id)} title="Copier l'identifiant du média">⧉ Copier</button>
+                      <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => remove(m)} title="Supprimer ce média">🗑️</button>
                     </div></td>
                   </tr>
                 );
