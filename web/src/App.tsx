@@ -7,6 +7,8 @@ import { Login } from "./ui/Login";
 import { Enrollments } from "./ui/Enrollments";
 import { InstallPrompt } from "./ui/InstallPrompt";
 import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
+import { useT } from "./lib/i18n";
+import { LanguageSwitcher } from "./ui/LanguageSwitcher";
 
 const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
 const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
@@ -54,35 +56,38 @@ function Screen({ route }: { route: Route }) {
 }
 
 const TABS = [
-  { key: "home", label: "Accueil", Icon: IconHome, href: routes.course },
-  { key: "cours", label: "Cours", Icon: IconBook, href: routes.cours },
-  { key: "journal", label: "Journal", Icon: IconJournal, href: routes.journal },
-  { key: "badges", label: "Badges", Icon: IconBadge, href: routes.badges },
+  { key: "home", label: "nav.home", Icon: IconHome, href: routes.course },
+  { key: "cours", label: "nav.cours", Icon: IconBook, href: routes.cours },
+  { key: "journal", label: "nav.journal", Icon: IconJournal, href: routes.journal },
+  { key: "badges", label: "nav.badges", Icon: IconBadge, href: routes.badges },
 ] as const;
 
 function Brand() {
+  const t = useT();
   const wm = brandWordmark();
   return (
-    <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title="Mes parcours">
+    <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title={t("brand.myCourses")}>
       <img className="mark" src="/logo-icon.png" alt={brand.operator} />
-      <span className="wm">{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}<span className="sub">Opéré par {brand.operator}</span></span>
+      <span className="wm">{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}<span className="sub">{t("brand.operatedBy", { operator: brand.operator })}</span></span>
     </div>
   );
 }
 
 function Banner({ sync }: { sync: SyncState }) {
+  const t = useT();
   const [online, setOnline] = useState(navigator.onLine);
   useEffect(() => {
     const on = () => setOnline(true), off = () => setOnline(false);
     window.addEventListener("online", on); window.addEventListener("offline", off);
     return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
-  if (!online) return <div className="banner offline">⚠️ Hors-ligne — votre progression est enregistrée et se synchronisera automatiquement.</div>;
-  if (sync === "syncing") return <div className="banner syncing">⟳ Synchronisation…</div>;
+  if (!online) return <div className="banner offline">{t("banner.offline")}</div>;
+  if (sync === "syncing") return <div className="banner syncing">{t("banner.syncing")}</div>;
   return null;
 }
 
 export function App() {
+  const t = useT();
   const [authed, setAuthed] = useState(isLoggedIn());
   const [sync, setSync] = useState<SyncState>("idle");
   const route = useRoute();
@@ -101,7 +106,7 @@ export function App() {
     return (
       <div className="shell">
         <div className="main">
-          <div className="appbar appbar--standalone"><Brand /><div className="tools"><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>Mon compte</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>Déconnexion</button></div></div>
+          <div className="appbar appbar--standalone"><Brand /><div className="tools"><LanguageSwitcher /><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>{t("nav.account")}</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>{t("nav.logout")}</button></div></div>
           <main className="screen"><Banner sync={sync} /><InstallPrompt /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
@@ -115,12 +120,13 @@ export function App() {
         <Brand />
         {TABS.map(({ key, label, Icon, href }) => (
           <button key={key} className={`navitem ${tab === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
-            <Icon /> {label}
+            <Icon /> {t(label)}
           </button>
         ))}
         <div className="spacer" />
-        <button className="navitem" onClick={() => navigate(routes.account())}>Mon compte</button>
-        <button className="navitem" onClick={onLogout}>Déconnexion</button>
+        <button className="navitem" onClick={() => navigate(routes.account())}>{t("nav.account")}</button>
+        <button className="navitem" onClick={onLogout}>{t("nav.logout")}</button>
+        <div style={{ padding: "8px 12px" }}><LanguageSwitcher /></div>
       </aside>
 
       <div className="main">
@@ -128,9 +134,10 @@ export function App() {
         <header className="appbar">
           <Brand />
           <div className="tools">
-            <span className="iconbtn" aria-label="Notifications"><IconBell size={18} /></span>
-            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>Mon compte</button>
-            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={onLogout}>Déconnexion</button>
+            <LanguageSwitcher compact />
+            <span className="iconbtn" aria-label={t("a11y.notifications")}><IconBell size={18} /></span>
+            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>{t("nav.account")}</button>
+            <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={onLogout}>{t("nav.logout")}</button>
           </div>
         </header>
 
@@ -145,7 +152,7 @@ export function App() {
           <nav className="tabbar">
             {TABS.map(({ key, label, Icon, href }) => (
               <button key={key} className={`tab ${tab === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
-                <Icon /> {label}
+                <Icon /> {t(label)}
               </button>
             ))}
           </nav>

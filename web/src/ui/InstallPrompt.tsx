@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT } from "../lib/i18n";
 
 /**
  * "Add to home screen" prompt. Chrome/Android expose `beforeinstallprompt` (we
@@ -40,15 +41,20 @@ export function InstallPrompt() {
     dismiss();
   }
 
+  return <InstallBar iosHint={iosHint} install={install} dismiss={dismiss} />;
+}
+
+function InstallBar({ iosHint, install, dismiss }: { iosHint: boolean; install: () => void; dismiss: () => void }) {
+  const t = useT();
   return (
-    <div className="a2hs" role="dialog" aria-label="Installer l'application">
+    <div className="a2hs" role="dialog" aria-label={t("install.aria")}>
       <span aria-hidden style={{ fontSize: 20 }}>📲</span>
       <div className="a2hs-txt">
-        <strong>Installer l'app</strong>
-        <span>{iosHint ? "Appuyez sur Partager ⬆️ puis « Sur l'écran d'accueil »." : "Accès rapide, plein écran, hors-ligne."}</span>
+        <strong>{t("install.title")}</strong>
+        <span>{iosHint ? t("install.ios") : t("install.sub")}</span>
       </div>
-      {!iosHint && <button className="hf-btn hf-btn--primary hf-btn--sm" onClick={install}>Installer</button>}
-      <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={dismiss} aria-label="Fermer">✕</button>
+      {!iosHint && <button className="hf-btn hf-btn--primary hf-btn--sm" onClick={install}>{t("install.cta")}</button>}
+      <button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={dismiss} aria-label={t("install.close")}>✕</button>
     </div>
   );
 }
