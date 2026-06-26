@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner, type LearnerDiagnostic } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 import { table, downloadCsv, today, type Col } from "../lib/csv";
@@ -8,6 +8,15 @@ const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low:
 
 const CAN_MANAGE = ["SUPER_ADMIN", "COURSE_ADMIN"];
 import type { CourseCtx } from "../App";
+
+// Configurable views (per-browser). Columns + filters are saved locally.
+const DEFAULT_COLS = ["progress", "finalQuiz", "rubric", "lastActivity", "status", "risk"];
+const ACTIVE_KEY = "klms_learners_active";
+const VIEWS_KEY = "klms_learners_views";
+type ViewConfig = { cols: string[]; filter: string; q: string };
+function loadJSON<T>(key: string, fallback: T): T {
+  try { const v = localStorage.getItem(key); return v ? (JSON.parse(v) as T) : fallback; } catch { return fallback; }
+}
 
 function statusPill(l: LearnerRow) {
   if (l.status === "CERTIFIED") return <span className="pill pill--green"><span className="dot" />Certifié</span>;
@@ -47,13 +56,48 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId, reloadKey]);
   const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId, reloadKey]);
   const riskMap = useMemo(() => new Map((risk.data ?? []).map((r) => [r.enrollmentId, r])), [risk.data]);
-  const [q, setQ] = useState("");
-  const [filter, setFilter] = useState("Tous");
+
+  const active0 = loadJSON<Partial<ViewConfig>>(ACTIVE_KEY, {});
+  const [q, setQ] = useState(active0.q ?? "");
+  const [filter, setFilter] = useState(active0.filter ?? "Tous");
+  const [visible, setVisible] = useState<string[]>(active0.cols ?? DEFAULT_COLS);
+  const [views, setViews] = useState<Record<string, ViewConfig>>(() => loadJSON(VIEWS_KEY, {}));
+  const [viewName, setViewName] = useState("");
+  const [colMenu, setColMenu] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const canManage = CAN_MANAGE.includes(auth.user()?.role ?? "");
   const [detailId, setDetailId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, LearnerDiagnostic | "loading">>({});
+
+  // Persist the active view + the saved-views library locally.
+  useEffect(() => { localStorage.setItem(ACTIVE_KEY, JSON.stringify({ cols: visible, filter, q } satisfies ViewConfig)); }, [visible, filter, q]);
+  useEffect(() => { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); }, [views]);
+
+  // Column registry — single source of truth for the table cells AND the export.
+  type ColDef = { key: string; label: string; cell: (l: LearnerRow) => ReactNode; csv: Col<LearnerRow>[] };
+  const ALL_COLS: ColDef[] = [
+    { key: "progress", label: "Progression", csv: [{ label: "Progression (%)", value: (l) => l.progressPercent }],
+      cell: (l) => <div className="progress"><div className="track"><i style={{ width: `${l.progressPercent}%`, background: l.progressPercent === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progressPercent}%</span></div> },
+    { key: "finalQuiz", label: "Quiz final", csv: [{ label: "Quiz final (%)", value: (l) => l.finalQuiz ?? "" }],
+      cell: (l) => l.finalQuiz != null ? <span className="pill pill--soft">{l.finalQuiz}%</span> : <span className="muted">—</span> },
+    { key: "rubric", label: "Projet B4", csv: [{ label: "Projet B4 (%)", value: (l) => l.rubric ?? "" }], cell: (l) => b4Pill(l) },
+    { key: "lastActivity", label: "Dernière activité", csv: [{ label: "Dernière activité", value: (l) => l.lastActivity ?? "" }],
+      cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span> },
+    { key: "status", label: "Statut", csv: [{ label: "Statut", value: (l) => l.status }], cell: (l) => statusPill(l) },
+    { key: "risk", label: "Risque",
+      csv: [
+        { label: "Score de risque", value: (l) => riskMap.get(l.enrollmentId)?.riskScore ?? "" },
+        { label: "Niveau de risque", value: (l) => { const rk = riskMap.get(l.enrollmentId); return rk ? RISK_FR[rk.riskLevel] : ""; } },
+        { label: "Facteurs de risque", value: (l) => riskMap.get(l.enrollmentId)?.factors.join(" · ") ?? "" },
+      ],
+      cell: (l) => { const rk = riskMap.get(l.enrollmentId); return rk ? <span className={`pill ${RISK_PILL[rk.riskLevel]}`} title={rk.factors.join(" · ")}>{rk.riskScore} · {RISK_FR[rk.riskLevel]}</span> : <span className="muted">—</span>; } },
+    { key: "startedAt", label: "Démarré le", csv: [{ label: "Démarré le", value: (l) => l.startedAt ?? "" }],
+      cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.startedAt)}</span> },
+    { key: "completedAt", label: "Certifié le", csv: [{ label: "Certifié le", value: (l) => l.completedAt ?? "" }],
+      cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.completedAt)}</span> },
+  ];
+  const shownCols = ALL_COLS.filter((c) => visible.includes(c.key));
 
   // Toggle a learner's competency profile (diagnostic strengths/weaknesses).
   async function toggleDetail(l: LearnerRow) {
@@ -98,23 +142,35 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
     finally { setBusyId(null); }
   }
 
-  // Export the currently filtered/searched list (+ risk data) as Excel-ready CSV.
+  // Export the visible columns of the filtered list as Excel-ready CSV.
   function exportCsv() {
     const cols: Col<LearnerRow>[] = [
       { label: "Nom", value: (l) => l.name },
       { label: "E-mail", value: (l) => l.email },
-      { label: "Statut", value: (l) => l.status },
-      { label: "Progression (%)", value: (l) => l.progressPercent },
-      { label: "Quiz final (%)", value: (l) => l.finalQuiz ?? "" },
-      { label: "Projet B4 (%)", value: (l) => l.rubric ?? "" },
-      { label: "Dernière activité", value: (l) => l.lastActivity ?? "" },
-      { label: "Démarré le", value: (l) => l.startedAt ?? "" },
-      { label: "Certifié le", value: (l) => l.completedAt ?? "" },
-      { label: "Score de risque", value: (l) => riskMap.get(l.enrollmentId)?.riskScore ?? "" },
-      { label: "Niveau de risque", value: (l) => { const rk = riskMap.get(l.enrollmentId); return rk ? RISK_FR[rk.riskLevel] : ""; } },
-      { label: "Facteurs de risque", value: (l) => riskMap.get(l.enrollmentId)?.factors.join(" · ") ?? "" },
+      ...shownCols.flatMap((c) => c.csv),
     ];
     downloadCsv(`apprenants-${today()}.csv`, table(cols, rows));
+  }
+
+  // --- saved views ---
+  // shownCols filters ALL_COLS, so render order is fixed regardless of insertion order.
+  const toggleCol = (k: string) => setVisible((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]));
+  function saveView() {
+    const name = window.prompt("Nom de la vue :")?.trim();
+    if (!name) return;
+    setViews((vs) => ({ ...vs, [name]: { cols: visible, filter, q } }));
+    setViewName(name); setNote(`✅ Vue « ${name} » enregistrée.`);
+  }
+  function applyView(name: string) {
+    setViewName(name);
+    const v = views[name]; if (!v) return;
+    setVisible(v.cols); setFilter(v.filter); setQ(v.q ?? "");
+  }
+  function deleteView() {
+    if (!viewName || !views[viewName]) return;
+    if (!window.confirm(`Supprimer la vue « ${viewName} » ?`)) return;
+    setViews((vs) => { const c = { ...vs }; delete c[viewName]; return c; });
+    setViewName("");
   }
 
   const rows = useMemo(() => (data ?? []).filter((l) =>
@@ -139,27 +195,46 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
       {note && <div className="card" style={{ background: (note.startsWith("✅") || note.startsWith("🗑️")) ? "var(--success-tint)" : "var(--warning-tint)", border: "none", padding: "11px 14px", marginBottom: 14, fontSize: 13 }} onClick={() => setNote(null)}>{note}</div>}
 
       <div className="card">
-        <div className="card-h" style={{ paddingBottom: 14, borderBottom: "1px solid var(--line)", flexWrap: "wrap" }}>
-          <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-soft)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 300 }}>
+        <div className="card-h" style={{ paddingBottom: 14, borderBottom: "1px solid var(--line)", flexWrap: "wrap", gap: 8 }}>
+          <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-soft)", border: "1px solid var(--line)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 260 }}>
             <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher par nom ou e-mail…" value={q} onChange={(e) => setQ(e.target.value)} />
           </label>
           <select className="select" value={filter} onChange={(e) => setFilter(e.target.value)}><option>Tous</option><option>En cours</option><option>Inactifs</option><option>Certifiés</option></select>
-          <button className="btn" style={{ marginLeft: "auto" }} onClick={exportCsv} disabled={!rows.length} title="Exporter la liste filtrée au format CSV (Excel/Sheets)">⤓ Exporter CSV</button>
+
+          {/* Column picker */}
+          <div style={{ position: "relative" }}>
+            <button className="btn" onClick={() => setColMenu((o) => !o)} title="Choisir les colonnes affichées">⚙ Colonnes ▾</button>
+            {colMenu && (
+              <div style={{ position: "absolute", zIndex: 20, top: "calc(100% + 4px)", left: 0, background: "#fff", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "var(--shadow-lg)", padding: 8, minWidth: 190 }}>
+                {ALL_COLS.map((c) => (
+                  <label key={c.key} style={{ display: "flex", alignItems: "center", gap: 8, padding: "5px 6px", fontSize: 13, cursor: "pointer" }}>
+                    <input type="checkbox" checked={visible.includes(c.key)} onChange={() => toggleCol(c.key)} /> {c.label}
+                  </label>
+                ))}
+                <button className="btn btn--sm" style={{ width: "100%", marginTop: 6 }} onClick={() => setVisible(DEFAULT_COLS)}>Réinitialiser</button>
+              </div>
+            )}
+          </div>
+
+          {/* Saved views */}
+          <select className="select" value={viewName} onChange={(e) => applyView(e.target.value)} title="Vues enregistrées">
+            <option value="">Vue courante</option>
+            {Object.keys(views).map((n) => <option key={n} value={n}>{n}</option>)}
+          </select>
+          <button className="btn" onClick={saveView} title="Enregistrer la configuration actuelle (colonnes + filtres)">💾 Enregistrer</button>
+          {viewName && <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={deleteView} title="Supprimer la vue sélectionnée">🗑️</button>}
+
+          <button className="btn" style={{ marginLeft: "auto" }} onClick={exportCsv} disabled={!rows.length} title="Exporter les colonnes visibles de la liste filtrée (CSV Excel/Sheets)">⤓ Exporter CSV</button>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Apprenant</th><th>Progression</th><th>Quiz final</th><th>Projet B4</th><th>Dernière activité</th><th>Statut</th><th>Risque</th>{canManage && <th>Actions</th>}</tr></thead>
+            <thead><tr><th>Apprenant</th>{shownCols.map((c) => <th key={c.key}>{c.label}</th>)}{canManage && <th>Actions</th>}</tr></thead>
             <tbody>
               {rows.map((l) => (
                 <Fragment key={l.email}>
                 <tr>
                   <td onClick={() => toggleDetail(l)} style={{ cursor: "pointer" }} title="Voir le profil de compétences"><div className="uitem"><span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span><div className="who"><b>{detailId === l.enrollmentId ? "▾ " : "▸ "}{l.name}</b><span>{l.email}</span></div></div></td>
-                  <td><div className="progress"><div className="track"><i style={{ width: `${l.progressPercent}%`, background: l.progressPercent === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progressPercent}%</span></div></td>
-                  <td>{l.finalQuiz != null ? <span className="pill pill--soft">{l.finalQuiz}%</span> : <span className="muted">—</span>}</td>
-                  <td>{b4Pill(l)}</td>
-                  <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span></td>
-                  <td>{statusPill(l)}</td>
-                  <td>{(() => { const rk = riskMap.get(l.enrollmentId); return rk ? <span className={`pill ${RISK_PILL[rk.riskLevel]}`} title={rk.factors.join(" · ")}>{rk.riskScore} · {RISK_FR[rk.riskLevel]}</span> : <span className="muted">—</span>; })()}</td>
+                  {shownCols.map((c) => <td key={c.key}>{c.cell(l)}</td>)}
                   {canManage && (
                     <td>
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
@@ -172,7 +247,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                   )}
                 </tr>
                 {detailId === l.enrollmentId && (
-                  <tr><td colSpan={canManage ? 8 : 7} style={{ background: "var(--bg-soft)" }}><DiagPanel d={details[l.enrollmentId]} /></td></tr>
+                  <tr><td colSpan={1 + shownCols.length + (canManage ? 1 : 0)} style={{ background: "var(--bg-soft)" }}><DiagPanel d={details[l.enrollmentId]} /></td></tr>
                 )}
                 </Fragment>
               ))}
