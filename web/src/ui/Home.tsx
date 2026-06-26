@@ -4,7 +4,7 @@ import { api, engine, store, getIdentity } from "../lib/app";
 import { rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
-import { remainingLabel, type Session } from "../lib/format";
+import { remainingSeconds, formatDuration, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
 
@@ -58,7 +58,8 @@ export function Home({ eid }: { eid: string }) {
     const done = new Set(progress?.blocks.find((x) => x.index === b.index)?.completedKeys ?? []);
     return blockItems(b as any).filter((it) => it.kind === "session").map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: done.has(it.key) }));
   });
-  const remaining = remainingLabel(allSessions);
+  const remSec = remainingSeconds(allSessions);
+  const remaining = remSec > 0 ? t("home.remaining", { dur: formatDuration(remSec) }) : null;
 
   const openResume = () => { if (!resume) return; resume.blockIndex === 0 ? navigate(routes.onboarding(eid)) : navigate(routes.session(eid, resume.blockIndex, resume.itemKey)); };
 

@@ -4,15 +4,17 @@ import { setCachedProgress } from "../lib/cache";
 import { diagnosticProfile, scoreQuiz, type ScoredQuestion } from "../lib/quiz";
 import { navigate, routes, type QuizKind } from "../lib/router";
 import { Quiz, type QuizQuestion, type QuestionMeta } from "./Quiz";
+import { useT } from "../lib/i18n";
 
 const CFG: Record<QuizKind, { blockType: string; source: string; action: string; title: string }> = {
-  diagnostic: { blockType: "COMPREHENSION", source: "diagnosticQuiz", action: "quiz_diagnostic", title: "Quiz diagnostique" },
-  interblock: { blockType: "PRACTICE", source: "interBlockQuiz", action: "quiz_interblock", title: "Quiz interbloc" },
-  final: { blockType: "ANCHORING", source: "finalQuiz", action: "quiz_final", title: "Quiz final" },
+  diagnostic: { blockType: "COMPREHENSION", source: "diagnosticQuiz", action: "quiz_diagnostic", title: "qz.diagnostic" },
+  interblock: { blockType: "PRACTICE", source: "interBlockQuiz", action: "quiz_interblock", title: "qz.interblock" },
+  final: { blockType: "ANCHORING", source: "finalQuiz", action: "quiz_final", title: "qz.final" },
 };
 const diagKey = (eid: string) => `klms_diag_${eid}`;
 
 export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
+  const t = useT();
   const cfg = CFG[kind];
   const [bundle, setBundle] = useState<any>(null);
   const [result, setResult] = useState<null | { node: JSX.Element }>(null);
@@ -42,10 +44,10 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
       try { localStorage.setItem(diagKey(eid), JSON.stringify({ priorities: prof.priorities, profile: band?.name ?? null })); } catch { /* */ }
       setResult({ node: (
         <div className="hf-card hf-card--stripe-orange stack pt-reveal">
-          <div className="eyebrow">Votre profil de compétence</div>
+          <div className="eyebrow">{t("qz.profileTitle")}</div>
           {band && <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{band.name}</span>}
           {band?.description && <p className="body">{band.description}</p>}
-          <strong className="h4">Vos 2 priorités d'apprentissage</strong>
+          <strong className="h4">{t("qz.priorities")}</strong>
           <div className="stack">
             {prof.priorities.map((p, i) => (
               <div key={p} className="hf-card hf-card--peach row" style={{ gap: 12, padding: 14 }}>
@@ -54,7 +56,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
               </div>
             ))}
           </div>
-          <p className="meta">Score : {prof.correct}/{prof.total}</p>
+          <p className="meta">{t("qz.score", { correct: prof.correct, total: prof.total })}</p>
         </div>
       ) });
     } else if (kind === "final") {
@@ -63,29 +65,29 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
       setResult({ node: (
         <div className="hf-card center stack pt-reveal">
           <p style={{ fontSize: 44, margin: 0 }}>{passed ? "🎉" : "💪"}</p>
-          <h2>{passed ? "Quiz final réussi !" : "Pas encore atteint"}</h2>
-          <span className={`hf-pill ${passed ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "center" }}>{s.scorePct}% · seuil {data!.threshold ?? 70}%</span>
-          <p className="body">{passed ? "Le bloc de certification est débloqué." : "Reprenez les sessions du bloc puis retentez."}</p>
+          <h2>{passed ? t("qz.finalPassed") : t("qz.finalNotYet")}</h2>
+          <span className={`hf-pill ${passed ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "center" }}>{t("qz.thresholdPill", { pct: s.scorePct, threshold: data!.threshold ?? 70 })}</span>
+          <p className="body">{passed ? t("qz.finalPassedDesc") : t("qz.finalFailDesc")}</p>
         </div>
       ) });
     } else {
       const s = scoreQuiz(data!.raw, answers);
-      setResult({ node: <div className="hf-card center stack pt-reveal"><h2>Consolidation terminée</h2><span className="hf-pill hf-pill--mint" style={{ alignSelf: "center" }}>{s.correct}/{s.total} bonnes réponses</span></div> });
+      setResult({ node: <div className="hf-card center stack pt-reveal"><h2>{t("qz.consolidationDone")}</h2><span className="hf-pill hf-pill--mint" style={{ alignSelf: "center" }}>{t("qz.correctCount", { correct: s.correct, total: s.total })}</span></div> });
     }
   }
 
-  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>← Le parcours</button>;
+  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>{t("nav.backCourse")}</button>;
   if (!bundle) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
-  if (!data) return <div className="stack"><Back /><p className="banner offline">Quiz indisponible.</p></div>;
+  if (!data) return <div className="stack"><Back /><p className="banner offline">{t("qz.unavailable")}</p></div>;
 
   return (
     <div className="stack">
       <Back />
-      <h1>{cfg.title}</h1>
+      <h1>{t(cfg.title)}</h1>
       {result ? (
         <>
           {result.node}
-          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>Continuer →</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>{t("common.continue")}</button>
         </>
       ) : (
         <Quiz questions={data.questions} onSubmit={onSubmit} />

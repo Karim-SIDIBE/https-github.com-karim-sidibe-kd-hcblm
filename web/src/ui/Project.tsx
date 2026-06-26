@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
 import { navigate, routes } from "../lib/router";
+import { useT, useI18n } from "../lib/i18n";
 
 type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: number };
 
@@ -12,6 +13,8 @@ type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: 
  * evaluation → result), with no e-mail step. hf-* kit.
  */
 export function Project({ eid }: { eid: string }) {
+  const t = useT();
+  const { lang } = useI18n();
   const [bundle, setBundle] = useState<any>(null);
   const [status, setStatus] = useState<any | undefined>(undefined); // undefined=loading, null=not submitted
   const [values, setValues] = useState<Record<string, string>>({});
@@ -46,27 +49,27 @@ export function Project({ eid }: { eid: string }) {
     } finally { setBusy(false); }
   }
 
-  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>← Le parcours</button>;
+  const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>{t("nav.backCourse")}</button>;
   if (!bundle || status === undefined) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
-  if (!spec) return <div className="stack"><Back /><p className="banner offline">Projet indisponible.</p></div>;
+  if (!spec) return <div className="stack"><Back /><p className="banner offline">{t("pj.unavailable")}</p></div>;
 
   // --- already submitted → lifecycle status ---
   if (status) {
-    const STATUS_FR: Record<string, string> = { SUBMITTED: "Soumis — en attente d'attribution", ASSIGNED: "En cours d'évaluation", PASSED: "Validé 🎓", REVISION_REQUESTED: "Révision demandée" };
+    const STATUS_FR: Record<string, string> = { SUBMITTED: t("pj.st.submitted"), ASSIGNED: t("pj.st.assigned"), PASSED: t("pj.st.passed"), REVISION_REQUESTED: t("pj.st.revision") };
     const pillCls = status.result === "PASS" ? "hf-pill--mint" : status.result === "FAIL" ? "hf-pill--orange" : "hf-pill--soft";
     return (
       <div className="stack">
         <Back />
-        <div><div className="eyebrow">Bloc 4 · Certification</div><h1 style={{ marginTop: 6 }}>Projet de certification</h1></div>
+        <div><div className="eyebrow">{t("pj.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("pj.title")}</h1></div>
         <div className="hf-card stack">
           <span className={`hf-pill ${pillCls}`} style={{ alignSelf: "flex-start" }}>{STATUS_FR[status.revisionStatus] ?? status.revisionStatus}</span>
-          {status.submittedAt && <p className="meta" style={{ margin: 0 }}>Soumis le {new Date(status.submittedAt).toLocaleDateString("fr-FR")}</p>}
-          {status.evaluator && <p className="meta" style={{ margin: 0 }}>Évaluateur : {status.evaluator.name}</p>}
-          {status.scoreTotal != null && <p className="h4" style={{ margin: 0 }}>Score : {status.scoreTotal}/100 <span className="meta">(seuil {spec.rubric.threshold})</span></p>}
+          {status.submittedAt && <p className="meta" style={{ margin: 0 }}>{t("pj.submittedOn", { date: new Date(status.submittedAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR") })}</p>}
+          {status.evaluator && <p className="meta" style={{ margin: 0 }}>{t("pj.evaluator", { name: status.evaluator.name })}</p>}
+          {status.scoreTotal != null && <p className="h4" style={{ margin: 0 }}>{t("pj.scoreLine", { score: status.scoreTotal })} <span className="meta">{t("pj.scoreThreshold", { threshold: spec.rubric.threshold })}</span></p>}
           {Array.isArray(status.criteria) && (
             <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => <li key={c.label}>{c.label} : {c.points}/{c.weightPoints}</li>)}</ul>
           )}
-          {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">Retour de l'évaluateur</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
+          {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">{t("pj.evalFeedback")}</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
         </div>
       </div>
     );
@@ -76,20 +79,20 @@ export function Project({ eid }: { eid: string }) {
   return (
     <div className="stack">
       <Back />
-      <div><div className="eyebrow">Bloc 4 · Certification</div><h1 style={{ marginTop: 6 }}>Projet de certification</h1></div>
+      <div><div className="eyebrow">{t("pj.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("pj.title")}</h1></div>
 
       <div className="hf-card hf-card--stripe-orange stack">
-        <div className="hf-pam"><span className="tag">🎯 Votre mission</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
+        <div className="hf-pam"><span className="tag">{t("mission")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
       </div>
 
       <div className="hf-card hf-card--icy stack">
-        <strong className="h4">Grille d'évaluation <span className="meta" style={{ fontWeight: 400 }}>(visible avant de soumettre)</span></strong>
+        <strong className="h4">{t("pj.rubricTitle")} <span className="meta" style={{ fontWeight: 400 }}>{t("pj.rubricNote")}</span></strong>
         <div className="stack" style={{ gap: 8 }}>
           {spec.rubric.criteria.map((c) => (
-            <div key={c.label} className="row between"><span className="body">{c.label}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{c.weightPoints} pts</span></div>
+            <div key={c.label} className="row between"><span className="body">{c.label}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span></div>
           ))}
         </div>
-        <p className="meta" style={{ margin: 0 }}>Seuil de réussite : {spec.rubric.threshold}/100</p>
+        <p className="meta" style={{ margin: 0 }}>{t("pj.passThreshold", { threshold: spec.rubric.threshold })}</p>
       </div>
 
       {spec.sections.map((s, i) => (
@@ -100,8 +103,8 @@ export function Project({ eid }: { eid: string }) {
             onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
         </div>
       ))}
-      <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !complete} onClick={submit}>{busy ? "…" : "Soumettre mon projet →"}</button>
-      {!complete && <p className="meta" style={{ margin: 0 }}>Complétez les 5 sections pour soumettre.</p>}
+      <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !complete} onClick={submit}>{busy ? "…" : t("pj.submit")}</button>
+      {!complete && <p className="meta" style={{ margin: 0 }}>{t("pj.complete5")}</p>}
     </div>
   );
 }

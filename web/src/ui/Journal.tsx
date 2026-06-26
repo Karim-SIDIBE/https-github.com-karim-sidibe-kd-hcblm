@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { getCachedProgress, type ProgressSnapshot } from "../lib/cache";
 import { navigate, routes } from "../lib/router";
+import { useT } from "../lib/i18n";
 
 /** Journal de bord (Bloc 4) — les micro-entrées J+1 → J+14, prompts ancrés PAM. */
 export function Journal({ eid }: { eid: string }) {
+  const t = useT();
   const [bundle, setBundle] = useState<any>(null);
   const [progress, setProgress] = useState<ProgressSnapshot | null>(() => getCachedProgress(eid));
 
@@ -27,8 +29,8 @@ export function Journal({ eid }: { eid: string }) {
 
   return (
     <div className="stack">
-      <div><div className="eyebrow">Journal de bord</div><h1 style={{ marginTop: 6 }}>Ancrer mes acquis</h1></div>
-      <p className="body">Une micro-entrée à des intervalles clés, ancrée dans votre situation réelle (votre Moment d'Ancrage).</p>
+      <div><div className="eyebrow">{t("jr.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("jr.title")}</h1></div>
+      <p className="body">{t("jr.intro")}</p>
       {entries.map((e) => {
         const key = `J+${e.day}`; const isDone = done.has(key);
         return (
@@ -36,7 +38,7 @@ export function Journal({ eid }: { eid: string }) {
             <div className="row" style={{ gap: 12 }}>
               <span className={`hf-medal ${isDone ? "earned" : ""}`} style={{ width: 44, height: 44, fontSize: 12 }}>J+{e.day}</span>
               <div>
-                <strong className="h4">Jour J+{e.day}</strong>
+                <strong className="h4">{t("jr.day", { n: e.day })}</strong>
                 <div className="meta" style={{ maxWidth: 360, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{e.prompt}</div>
               </div>
             </div>

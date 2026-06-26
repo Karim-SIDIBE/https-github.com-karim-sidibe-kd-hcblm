@@ -20,35 +20,39 @@ export const ITEM_TYPE: Partial<Record<ItemKind, string>> = {
 const sessionItems = (ms: MicroSession[]): BlockItem[] =>
   ms.map((m) => ({ key: m.id, kind: "session" as const, label: `${m.id} — ${m.title}`, durationSec: m.video?.durationSec }));
 
-export function blockItems(block: Block): BlockItem[] {
+/** Optional translator (passed by the renderer); falls back to French. */
+type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+export function blockItems(block: Block, t?: Translate): BlockItem[] {
+  const tr = (key: string, fr: string, vars?: Record<string, string | number>) => (t ? t(key, vars) : fr);
   switch (block.type) {
     case "ONBOARDING": {
-      const items: BlockItem[] = [{ key: "onboarding", kind: "onboarding", label: "Introduction & point de départ" }];
+      const items: BlockItem[] = [{ key: "onboarding", kind: "onboarding", label: tr("ci.onboarding", "Introduction & point de départ") }];
       // The trigger ("déclencheur") video — a distinct key so it never collides
       // with the trigger QUIZ ("trigger"). Optional: not a completion requirement.
-      if (block.payload.triggerVideo) items.push({ key: "declencheur", kind: "session", label: "Vidéo déclencheur", durationSec: block.payload.triggerVideo.durationSec });
+      if (block.payload.triggerVideo) items.push({ key: "declencheur", kind: "session", label: tr("sess.triggerVideo", "Vidéo déclencheur"), durationSec: block.payload.triggerVideo.durationSec });
       return items;
     }
     case "COMPREHENSION": {
-      const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: "Quiz diagnostique" }, ...sessionItems(block.payload.microSessions)];
-      if (block.payload.caseStudy) items.push({ key: "case", kind: "case", label: block.payload.caseStudy.title ?? "Étude de cas" });
+      const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: tr("qz.diagnostic", "Quiz diagnostique") }, ...sessionItems(block.payload.microSessions)];
+      if (block.payload.caseStudy) items.push({ key: "case", kind: "case", label: block.payload.caseStudy.title ?? tr("ci.case", "Étude de cas") });
       return items;
     }
     case "PRACTICE": {
       const items = [...sessionItems(block.payload.microSessions)];
-      if (block.payload.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: "Mises en situation guidées" });
-      if (block.payload.interBlockQuiz) items.push({ key: "interblock", kind: "interblock", label: block.payload.interBlockQuiz.title || "Quiz interbloc" });
-      items.push({ key: "field", kind: "field", label: "Application terrain" });
+      if (block.payload.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: tr("ci.scenarios", "Mises en situation guidées") });
+      if (block.payload.interBlockQuiz) items.push({ key: "interblock", kind: "interblock", label: block.payload.interBlockQuiz.title || tr("qz.interblock", "Quiz interbloc") });
+      items.push({ key: "field", kind: "field", label: tr("dl.fieldTitle", "Application terrain") });
       return items;
     }
     case "ANCHORING":
       return [...sessionItems(block.payload.microSessions),
-        { key: "self", kind: "self", label: "Auto-évaluation" },
-        { key: "plan", kind: "plan", label: "Plan d'action 30 jours" },
-        { key: "final", kind: "final", label: "Quiz final" }];
+        { key: "self", kind: "self", label: tr("ci.self", "Auto-évaluation") },
+        { key: "plan", kind: "plan", label: tr("ci.plan", "Plan d'action 30 jours") },
+        { key: "final", kind: "final", label: tr("qz.final", "Quiz final") }];
     case "CERTIFICATION": {
-      const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({ key: `J+${e.day}`, kind: "journal" as const, label: `Journal J+${e.day}` }));
-      return [{ key: "project", kind: "project", label: "Projet de certification" }, ...journal];
+      const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({ key: `J+${e.day}`, kind: "journal" as const, label: tr("ci.journal", `Journal J+${e.day}`, { day: e.day }) }));
+      return [{ key: "project", kind: "project", label: tr("pj.title", "Projet de certification") }, ...journal];
     }
   }
 }
