@@ -6,11 +6,13 @@ import { previousSession } from "../lib/content";
 import { navigate, routes } from "../lib/router";
 import { VideoPlayer } from "./VideoPlayer";
 import { Exercise, type ExerciseMeta, type ExerciseSpec } from "./Exercise";
+import { useT } from "../lib/i18n";
 
 type Session = { id: string; title: string; video: any; exercise?: ExerciseSpec; summaryPoints?: string[]; durationEstimate?: string };
 type Bundle = { content: { blocks: any[] }; mediaAssets?: { mediaId: string; renditions: Rendition[] }[] };
 
 export function SessionScreen({ eid, block, item }: { eid: string; block: number; item: string }) {
+  const t = useT();
   const [bundle, setBundle] = useState<Bundle | null>(null);
   const [source, setSource] = useState<{ url: string | null; captionsUrl: string | null; quality: string | null } | null>(null);
   const [ladder, setLadder] = useState<Rendition[]>([]);
@@ -23,16 +25,16 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     if (!blk) return null;
     const m = (blk.payload?.microSessions ?? []).find((s: any) => s.id === item);
     if (m) return m;
-    if (blk.type === "ONBOARDING" && (item === "declencheur" || item === "trigger")) return { id: item, title: "Vidéo déclencheur", video: blk.payload.triggerVideo };
+    if (blk.type === "ONBOARDING" && (item === "declencheur" || item === "trigger")) return { id: item, title: t("sess.triggerVideo"), video: blk.payload.triggerVideo };
     return null;
-  }, [bundle, block, item]);
+  }, [bundle, block, item, t]);
 
   useEffect(() => {
     let alive = true;
     (async () => {
       const b = (await store.getBundle<Bundle>(eid)) ?? (await engine.cacheBundle(eid));
       if (!alive) return;
-      if (!b) { setError("Parcours indisponible hors-ligne."); return; }
+      if (!b) { setError(t("sess.unavailableOffline")); return; }
       setBundle(b);
     })();
     return () => { alive = false; };
@@ -75,7 +77,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     navigate(routes.course(eid));
   }
 
-  if (error) return <div><button className="ghost" onClick={() => navigate(routes.course(eid))}>← Retour</button><p className="banner offline">{error}</p></div>;
+  if (error) return <div><button className="ghost" onClick={() => navigate(routes.course(eid))}>← {t("common.back")}</button><p className="banner offline">{error}</p></div>;
   if (!bundle || !session || !source) return <div><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" style={{ height: 200 }} /></div>;
 
   return (
@@ -83,7 +85,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       <button className="ghost" onClick={() => navigate(routes.course(eid))}>← {session.title}</button>
 
       {session.durationEstimate && (
-        <div className="meta" style={{ marginTop: -4 }}>⏱️ Cette micro-session : {session.durationEstimate}</div>
+        <div className="meta" style={{ marginTop: -4 }}>{t("sess.thisSession", { dur: session.durationEstimate })}</div>
       )}
 
       {phase === "video" && (
@@ -92,7 +94,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             const prev = previousSession(bundle.content.blocks, block, item);
             return prev && prev.summaryPoints.length > 0 ? (
               <div className="card" style={{ background: "#eff6ff" }}>
-                <strong>↩︎ Rappel — {prev.title}</strong>
+                <strong>{t("sess.recall", { title: prev.title })}</strong>
                 <ul style={{ margin: "6px 0 0", paddingLeft: 20 }}>{prev.summaryPoints.map((p, i) => <li key={i}>{p}</li>)}</ul>
               </div>
             ) : null;
@@ -104,14 +106,14 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             onHeartbeat={heartbeat}
             onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
           />
-          {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">À retenir</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
+          {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">{t("sess.keyTakeaway")}</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
           {!source.url && (
-            <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>⚠️ La vidéo n'est pas disponible pour le moment. Vous pouvez tout de même poursuivre la micro-session.</p></div>
+            <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>{t("sess.videoUnavailable")}</p></div>
           )}
           {/* Always offer a way forward so a missing/failing video never blocks progression. */}
           {session.exercise
-            ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>Passer à l'exercice →</button>
-            : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>Terminer la micro-session →</button>}
+            ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>{t("sess.skipExercise")}</button>
+            : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>{t("sess.finishSession")}</button>}
         </>
       )}
 
