@@ -112,6 +112,25 @@ function BankPicker({ onClose, onInsert }: { onClose: () => void; onInsert: (qs:
   );
 }
 
+/* ---------------- per-learner random pool (P1 3b) ---------------- */
+function PoolConfig({ pool, path, set }: { pool?: { subArea?: string; draw: number }; path: (c: Content) => { pool?: { subArea?: string; draw: number } }; set: Set }) {
+  return (
+    <div style={{ border: "1px dashed var(--line-strong)", borderRadius: 8, padding: 10, background: "var(--bg-soft)" }}>
+      <label className="row" style={{ gap: 8, alignItems: "center", cursor: "pointer" }}>
+        <input type="checkbox" checked={!!pool} onChange={(e) => set((c) => { if (e.target.checked) path(c).pool = { draw: 5 }; else delete path(c).pool; })} />
+        <b style={{ fontSize: 12.5 }}>🎲 Tirage aléatoire depuis la banque (différent par apprenant)</b>
+      </label>
+      {pool && (
+        <div className="row" style={{ gap: 8, marginTop: 8 }}>
+          <div style={{ flex: 1 }}><label style={lbl}>Sous-domaine (filtre)</label><input style={field} value={pool.subArea ?? ""} placeholder="(tous les sous-domaines)" onChange={(e) => set((c) => { path(c).pool!.subArea = e.target.value || undefined; })} /></div>
+          <div style={{ width: 120 }}><label style={lbl}>Nombre tiré</label><input style={field} type="number" min={1} max={50} value={pool.draw} onChange={(e) => set((c) => { path(c).pool!.draw = Number(e.target.value); })} /></div>
+        </div>
+      )}
+      <div className="muted" style={{ fontSize: 11, marginTop: 6 }}>Les questions fixes ci-dessous sont posées à tous ; en plus, {pool ? `${pool.draw} question(s)` : "des questions"} sont tirées au hasard de la banque pour chaque apprenant.</div>
+    </div>
+  );
+}
+
 /* ---------------- scored questions (diagnostic / interblock / final) ---------------- */
 function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: Content) => SQ[]; set: Set }) {
   const [picker, setPicker] = useState(false);
@@ -478,7 +497,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {/* ---- Bloc 1 ---- */}
       {block.type === "COMPREHENSION" && (
         <>
-          {p.diagnosticQuiz && <Card title="Quiz diagnostique (noté)"><ScoredQuestions questions={p.diagnosticQuiz.questions} path={(c) => c.blocks[ri].payload.diagnosticQuiz.questions} set={set} /></Card>}
+          {p.diagnosticQuiz && <Card title="Quiz diagnostique (noté)"><PoolConfig pool={p.diagnosticQuiz.pool} path={(c) => c.blocks[ri].payload.diagnosticQuiz} set={set} /><ScoredQuestions questions={p.diagnosticQuiz.questions} path={(c) => c.blocks[ri].payload.diagnosticQuiz.questions} set={set} /></Card>}
         </>
       )}
 
@@ -511,6 +530,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
           {p.interBlockQuiz
             ? <Card title="Quiz interbloc (non noté)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { delete c.blocks[ri].payload.interBlockQuiz; })}>Retirer</button>}>
                 <div><label style={lbl}>Titre</label><input style={field} value={p.interBlockQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.interBlockQuiz.title = e.target.value; })} /></div>
+                <PoolConfig pool={p.interBlockQuiz.pool} path={(c) => c.blocks[ri].payload.interBlockQuiz} set={set} />
                 <ScoredQuestions questions={p.interBlockQuiz.questions} path={(c) => c.blocks[ri].payload.interBlockQuiz.questions} set={set} />
               </Card>
             : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.interBlockQuiz = { title: "Quiz interbloc", scored: false, questions: [newSQ(1)] }; })}>+ Ajouter un quiz interbloc</button>}
@@ -531,6 +551,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
         <>
           {p.finalQuiz && <Card title="Quiz final (noté)" action={<span className="pill pill--soft">Seuil {p.finalQuiz.passThreshold ?? "?"}%</span>}>
             <div style={{ width: 200 }}><label style={lbl}>Seuil de réussite (%)</label><input style={field} type="number" min={0} max={100} value={p.finalQuiz.passThreshold ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.passThreshold = Number(e.target.value); })} /></div>
+            <PoolConfig pool={p.finalQuiz.pool} path={(c) => c.blocks[ri].payload.finalQuiz} set={set} />
             <ScoredQuestions questions={p.finalQuiz.questions} path={(c) => c.blocks[ri].payload.finalQuiz.questions} set={set} />
           </Card>}
           {p.selfAssessment && (

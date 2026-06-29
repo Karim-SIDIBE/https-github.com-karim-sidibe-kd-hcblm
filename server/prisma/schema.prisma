@@ -695,6 +695,7 @@ model Enrollment {
   tutorSessions  TutorSession[]
   mediaPositions MediaPosition[]
   journalTriggers JournalTrigger[]
+  quizDraws      QuizDraw[]
   projectSubmission ProjectSubmission?
 
   @@unique([userId, courseId])
@@ -899,6 +900,19 @@ model ReEngagementMessage {
   sentAt       DateTime          @default(now())
 
   @@index([enrollmentId, stage])
+}
+
+/// Per-learner materialised quiz draw (random pool from the bank), stored once
+/// per (enrollment, quiz) so the set is stable across bundle rebuilds + scoring.
+model QuizDraw {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  quizKey      String // "diagnostic" | "interblock" | "final"
+  questions    Json // the materialised ScoredQuestion[] for this learner
+  createdAt    DateTime   @default(now())
+
+  @@unique([enrollmentId, quizKey])
 }
 
 /// Reusable question bank — a stored ScoredQuestion (validated on write) that

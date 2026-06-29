@@ -37,6 +37,28 @@ export async function deleteBankQuestion(id: string) {
   return { id };
 }
 
+type QuizContainer = { questions?: unknown[]; pool?: { subArea?: string; draw: number } };
+
+/**
+ * Materialise a quiz's questions for one learner: the fixed questions plus a
+ * STABLE random draw from the bank. Stored once per (enrollment, quiz) so the
+ * set is identical across bundle rebuilds and server-side scoring. No pool ⇒
+ * the fixed questions, unchanged (backward-compatible).
+ */
+export async function materializeQuiz(enrollmentId: string, quizKey: string, container: QuizContainer): Promise<unknown[]> {
+  const fixed = container.questions ?? [];
+  if (!container.pool) return fixed;
+  const existing = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } });
+  if (existing) return existing.questions as unknown[];
+  const drawn = await randomBankQuestions(container.pool.subArea, container.pool.draw);
+  // Re-id drawn questions so they never collide with the fixed ones in the answers map.
+  const reided = drawn.map((q, i) => ({ ...(q as Record<string, unknown>), id: `pool-${i}` }));
+  const questions = [...fixed, ...reided];
+  try { await prisma.quizDraw.create({ data: { enrollmentId, quizKey, questions: questions as object } }); }
+  catch { const again = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } }); if (again) return again.questions as unknown[]; }
+  return questions;
+}
+
 /** Draw up to `count` questions (optionally filtered by sub-area), shuffled. */
 export async function randomBankQuestions(subArea: string | undefined, count: number): Promise<unknown[]> {
   const all = await prisma.bankQuestion.findMany({ where: subArea ? { subArea } : {}, select: { question: true } });

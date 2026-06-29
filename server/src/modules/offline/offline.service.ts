@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
 import {
   EngineError, captureMomentAncrage, completeItem, designatePeer, getResume, reconcile,
@@ -89,7 +90,18 @@ export async function buildBundle(enrollmentId: string) {
   const { enrollment, content } = await load(enrollmentId);
   const version = enrollment.courseVersion;
   const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage);
-  const rendered = injectMomentAncrage(content, enrollment.momentAncrage);
+  const rendered = injectMomentAncrage(content, enrollment.momentAncrage) as { blocks?: { type: string; payload?: Record<string, { pool?: unknown; questions?: unknown[] }> }[] };
+
+  // Per-learner question pools (P1 3b): materialise a stable random draw into the
+  // learner's bundle so it works offline and matches server-side scoring.
+  for (const b of rendered.blocks ?? []) {
+    const apply = async (key: string, container?: { pool?: unknown; questions?: unknown[] }) => {
+      if (container?.pool) container.questions = await materializeQuiz(enrollmentId, key, container as never);
+    };
+    if (b.type === "COMPREHENSION") await apply("diagnostic", b.payload?.diagnosticQuiz);
+    else if (b.type === "PRACTICE") await apply("interblock", b.payload?.interBlockQuiz);
+    else if (b.type === "ANCHORING") await apply("final", b.payload?.finalQuiz);
+  }
   return {
     etag,
     bundle: {

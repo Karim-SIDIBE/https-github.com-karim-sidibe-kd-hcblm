@@ -7,7 +7,8 @@
  */
 import { Prisma, type ItemType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
-import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
+import { materializeQuiz } from "../bank/bank.service.js";
+import { CourseContent, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
 import { computeProgress, scoreQuiz, diagnosticProfile, type CompletionRecord } from "../../domain/engine/progress.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -394,7 +395,7 @@ export async function submitInterBlockQuiz(enrollmentId: string, answers: Record
     throw new EngineError(409, "no_quiz", "Ce parcours n'a pas de quiz interbloc");
   }
   assertUnlocked(ctx, block.index);
-  const qs = block.payload.interBlockQuiz.questions;
+  const qs = await materializeQuiz(enrollmentId, "interblock", block.payload.interBlockQuiz) as ScoredQuestion[];
   const { correct, total } = scoreQuiz(qs, answers); // for feedback only — not gated
   await upsertCompletion(enrollmentId, block.index, "INTER_BLOCK_QUIZ", "interblock", null, { answers, correct, total });
   await touch(enrollmentId, block.index, "interblock");
@@ -409,7 +410,7 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
   const block = ctx.content.blocks.find((b) => b.type === "COMPREHENSION");
   if (block?.type !== "COMPREHENSION") throw new EngineError(409, "no_block", "Bloc 1 absent");
   assertUnlocked(ctx, block.index);
-  const qs = block.payload.diagnosticQuiz.questions;
+  const qs = await materializeQuiz(enrollmentId, "diagnostic", block.payload.diagnosticQuiz) as ScoredQuestion[];
   const { scorePct, correct, total, subAreaScores, priorities } = diagnosticProfile(qs, answers);
   const band = block.payload.diagnosticQuiz.profiles.find(
     (p) => correct >= p.scoreRange[0] && correct <= p.scoreRange[1],
@@ -433,7 +434,7 @@ export async function submitFinalQuiz(enrollmentId: string, answers: Record<stri
   const block = ctx.content.blocks.find((b) => b.type === "ANCHORING");
   if (block?.type !== "ANCHORING") throw new EngineError(409, "no_block", "Bloc 3 absent");
   assertUnlocked(ctx, block.index);
-  const qs = block.payload.finalQuiz.questions;
+  const qs = await materializeQuiz(enrollmentId, "final", block.payload.finalQuiz) as ScoredQuestion[];
   const { scorePct, correct, total } = scoreQuiz(qs, answers);
   const threshold = block.payload.finalQuiz.passThreshold;
   await upsertCompletion(enrollmentId, block.index, "FINAL_QUIZ", "final", scorePct, { answers, correct, total });
