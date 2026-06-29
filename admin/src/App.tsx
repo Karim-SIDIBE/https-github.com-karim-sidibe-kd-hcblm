@@ -18,6 +18,7 @@ import { Evaluation } from "./screens/Evaluation";
 import { Certificats } from "./screens/Certificats";
 import { Cours } from "./screens/Cours";
 import { Medias } from "./screens/Medias";
+import { QuestionBank } from "./screens/QuestionBank";
 import { Settings } from "./screens/Settings";
 import { Security } from "./screens/Security";
 import { Soon } from "./screens/Soon";
@@ -35,6 +36,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Pédagogie", items: [
     { id: "courses", label: "Cours", Icon: ICourse, roles: [A, C, D, R] },
     { id: "medias", label: "Médiathèque", Icon: ISession, roles: [A, C, D] },
+    { id: "bank", label: "Banque de questions", Icon: ICourse, roles: [A, C, D, R] },
     { id: "eval", label: "Projets Bloc 4", Icon: IEval, roles: [A, C, E] },
     { id: "certs", label: "Certificats", Icon: ICert, roles: [A, C] },
   ]},
@@ -148,6 +150,7 @@ export function App() {
           : view === "certs" ? <Certificats />
           : view === "courses" ? <Cours ctx={ctx} />
           : view === "medias" ? <Medias />
+          : view === "bank" ? <QuestionBank />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Soon title={TITLES[view] ?? "Module"} />}

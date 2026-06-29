@@ -30,6 +30,7 @@ import { exportRoutes } from "./modules/export/export.routes.js";
 import { credentialRoutes } from "./modules/credentials/credentials.routes.js";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
+import { bankRoutes } from "./modules/bank/bank.routes.js";
 import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
@@ -136,6 +137,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await credentialRoutes(api);
       await analyticsRoutes(api);
       await reportsRoutes(api);
+      await bankRoutes(api);
       await auditRoutes(api);
       await webhookRoutes(api);
       await docsRoutes(api);

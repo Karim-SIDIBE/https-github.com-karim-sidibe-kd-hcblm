@@ -71,16 +71,63 @@ function Options({ opts, correctKey, correctKeys, scored, path, set }: { opts: O
   );
 }
 
+/* ---------------- question-bank picker (insert reusable questions) ---------------- */
+function BankPicker({ onClose, onInsert }: { onClose: () => void; onInsert: (qs: SQ[]) => void }) {
+  const [rows, setRows] = useState<{ id: string; question: SQ; subArea: string }[]>([]);
+  const [subs, setSubs] = useState<string[]>([]);
+  const [filter, setFilter] = useState("");
+  const [sel, setSel] = useState<globalThis.Set<string>>(new Set());
+  const [n, setN] = useState(5);
+  useEffect(() => { api.bankQuestions(filter || undefined).then(setRows as any).catch(() => setRows([])); }, [filter]);
+  useEffect(() => { api.bankSubAreas().then(setSubs).catch(() => {}); }, []);
+  const toggle = (id: string) => setSel((s) => { const x = new Set(s); x.has(id) ? x.delete(id) : x.add(id); return x; });
+  const insertSelected = () => { onInsert(rows.filter((r) => sel.has(r.id)).map((r) => r.question)); onClose(); };
+  const insertRandom = async () => { try { onInsert((await api.bankRandom(filter || undefined, n)) as SQ[]); onClose(); } catch { /* */ } };
+  return (
+    <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.5)", display: "grid", placeItems: "center", zIndex: 60, padding: 20 }}>
+      <div onClick={(e) => e.stopPropagation()} className="card" style={{ width: "100%", maxWidth: 640, maxHeight: "80vh", overflow: "auto" }}>
+        <div className="card-h"><h3 style={{ fontSize: 14 }}>Insérer depuis la banque</h3><button className="btn btn--sm" onClick={onClose}>✕ Fermer</button></div>
+        <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <select className="select" value={filter} onChange={(e) => { setFilter(e.target.value); setSel(new Set()); }}>
+              <option value="">Tous les sous-domaines</option>{subs.map((s) => <option key={s} value={s}>{s}</option>)}
+            </select>
+            <span style={{ marginLeft: "auto" }} className="muted">Tirer au hasard :</span>
+            <input style={{ ...field, width: 70 }} type="number" min={1} max={50} value={n} onChange={(e) => setN(Number(e.target.value))} />
+            <button className="btn btn--sm" onClick={insertRandom}>🎲 Insérer {n} au hasard</button>
+          </div>
+          {rows.length === 0 ? <div className="empty" style={{ padding: 20 }}>Aucune question dans la banque pour ce filtre.</div>
+            : rows.map((r) => (
+              <label key={r.id} className="row" style={{ gap: 8, alignItems: "flex-start", padding: "8px 10px", border: "1px solid var(--line)", borderRadius: 8, cursor: "pointer" }}>
+                <input type="checkbox" checked={sel.has(r.id)} onChange={() => toggle(r.id)} style={{ marginTop: 3 }} />
+                <span style={{ minWidth: 0 }}><b style={{ fontSize: 13 }}>{r.question.scenarioText}</b>{r.subArea && <span className="pill pill--info" style={{ fontSize: 10.5, marginLeft: 6 }}>{r.subArea}</span>}</span>
+              </label>
+            ))}
+        </div>
+        <div className="card-b" style={{ borderTop: "1px solid var(--line)" }}>
+          <button className="btn btn--primary" disabled={sel.size === 0} onClick={insertSelected}>Insérer la sélection ({sel.size})</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- scored questions (diagnostic / interblock / final) ---------------- */
 function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: Content) => SQ[]; set: Set }) {
+  const [picker, setPicker] = useState(false);
   const dnd = useDnd((from, to) => set((c) => { const a = path(c); a.splice(0, a.length, ...move(a, from, to)); }));
+  const freshId = (i: number) => `b${Date.now().toString(36)}${i}`;
+  const insertFromBank = (qs: SQ[]) => set((c) => { const a = path(c); qs.forEach((q, i) => a.push({ ...q, id: freshId(a.length + i) })); });
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
       {questions.map((q, qi) => (
         <div key={qi} {...dnd.row(qi)} style={{ border: `1px solid ${dnd.over === qi ? "var(--orange-400)" : "var(--line)"}`, borderRadius: 8, padding: 11 }}>
           <div className="row between" style={{ marginBottom: 8 }}>
             <span className="row" style={{ gap: 6, alignItems: "center" }}><Grip {...dnd.handleProps(qi)} /><b style={{ fontSize: 12.5 }}>Question {qi + 1}</b></span>
-            <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} disabled={questions.length <= 1} onClick={() => set((c) => { path(c).splice(qi, 1); })}>🗑️</button>
+            <span className="row" style={{ gap: 6 }}>
+              <button type="button" className="btn btn--sm" title="Enregistrer cette question dans la banque réutilisable" onClick={async () => { try { await api.addBankQuestion({ question: q, subArea: q.subArea }); alert("✓ Question ajoutée à la banque."); } catch (e) { alert(e instanceof Error ? e.message : "Échec"); } }}>➕ Banque</button>
+              <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} disabled={questions.length <= 1} onClick={() => set((c) => { path(c).splice(qi, 1); })}>🗑️</button>
+            </span>
           </div>
           <div className="row" style={{ gap: 8 }}>
             <div style={{ width: 90 }}><label style={lbl}>Id</label><input style={field} value={q.id} onChange={(e) => set((c) => { path(c)[qi].id = e.target.value; })} /></div>
@@ -134,7 +181,11 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
           <div style={{ marginTop: 8 }}><label style={lbl}>Feedback</label><textarea style={{ ...field, minHeight: 40 }} value={q.feedbackText} onChange={(e) => set((c) => { path(c)[qi].feedbackText = e.target.value; })} /></div>
         </div>
       ))}
-      <button type="button" className="btn btn--sm btn--primary" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { const a = path(c); a.push(newSQ(a.length + 1)); })}>+ Question</button>
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="btn btn--sm btn--primary" onClick={() => set((c) => { const a = path(c); a.push(newSQ(a.length + 1)); })}>+ Question</button>
+        <button type="button" className="btn btn--sm" onClick={() => setPicker(true)}>📥 Insérer depuis la banque</button>
+      </div>
+      {picker && <BankPicker onClose={() => setPicker(false)} onInsert={insertFromBank} />}
     </div>
   );
 }
