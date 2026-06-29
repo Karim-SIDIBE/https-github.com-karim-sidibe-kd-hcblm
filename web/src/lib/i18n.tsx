@@ -163,6 +163,11 @@ const fr: Dict = {
   // course item labels
   "ci.onboarding": "Introduction & point de départ", "ci.case": "Étude de cas", "ci.scenarios": "Mises en situation guidées",
   "ci.self": "Auto-évaluation", "ci.plan": "Plan d'action 30 jours", "ci.journal": "Journal J+{day}",
+  // quiz component (one question at a time)
+  "quiz.q": "Question {n} / {total}", "quiz.validate": "Valider", "quiz.good": "✓ Bonne réponse", "quiz.review": "À revoir",
+  "quiz.seeResult": "Voir mon résultat →", "quiz.nextQuestion": "Question suivante →",
+  "quiz.multiHint": "Plusieurs réponses possibles", "quiz.true": "Vrai", "quiz.false": "Faux",
+  "quiz.numPlaceholder": "Votre réponse (nombre)", "quiz.expected": "Réponse attendue : {n}",
 };
 
 const en: Dict = {
@@ -291,6 +296,10 @@ const en: Dict = {
   "vp.source": "Source (max)", "vp.720p": "720p (HD)", "vp.480p": "480p", "vp.240p": "240p — data saver", "vp.audio": "Audio only",
   "ci.onboarding": "Introduction & starting point", "ci.case": "Case study", "ci.scenarios": "Guided scenarios",
   "ci.self": "Self-assessment", "ci.plan": "30-day action plan", "ci.journal": "Logbook D+{day}",
+  "quiz.q": "Question {n} / {total}", "quiz.validate": "Submit", "quiz.good": "✓ Correct", "quiz.review": "Needs review",
+  "quiz.seeResult": "See my result →", "quiz.nextQuestion": "Next question →",
+  "quiz.multiHint": "Multiple answers possible", "quiz.true": "True", "quiz.false": "False",
+  "quiz.numPlaceholder": "Your answer (a number)", "quiz.expected": "Expected answer: {n}",
 };
 
 const DICTS: Record<Lang, Dict> = { fr, en };

@@ -9,6 +9,7 @@
  * quiz reaches the pass threshold" and "field application gates Bloc 3".
  */
 import type { CourseContent, Block } from "../content-model.js";
+import { isAnswerCorrect, type ScorableQuestion } from "../content-model.js";
 
 export type ItemTypeName =
   | "PROFILE" | "TRIGGER_QUIZ" | "PEER" | "MICRO_SESSION" | "DIAGNOSTIC_QUIZ"
@@ -206,13 +207,13 @@ export function computeProgress(
   return { blocks, completedBlockIndexes, currentBlockIndex, courseCompleted, productivity };
 }
 
-/** Score a quiz: answers map questionId → chosen option key. */
+/** Score a quiz: answers map questionId → the type-encoded answer. */
 export function scoreQuiz(
-  questions: { id: string; correctKey: string }[],
+  questions: ({ id: string } & ScorableQuestion)[],
   answers: Record<string, string>,
 ): { scorePct: number; correct: number; total: number } {
   const total = questions.length;
-  const correct = questions.filter((q) => answers[q.id] === q.correctKey).length;
+  const correct = questions.filter((q) => isAnswerCorrect(q, answers[q.id])).length;
   const scorePct = total === 0 ? 0 : Math.round((correct / total) * 100);
   return { scorePct, correct, total };
 }
@@ -226,13 +227,13 @@ export type SubAreaScore = { subArea: string; correct: number; total: number; pc
  * a single percentage.
  */
 export function diagnosticProfile(
-  questions: { id: string; correctKey: string; subArea?: string }[],
+  questions: ({ id: string; subArea?: string } & ScorableQuestion)[],
   answers: Record<string, string>,
 ) {
   const byArea = new Map<string, { correct: number; total: number }>();
   let correct = 0;
   for (const q of questions) {
-    const ok = answers[q.id] === q.correctKey;
+    const ok = isAnswerCorrect(q, answers[q.id]);
     if (ok) correct++;
     const area = q.subArea?.trim() || "général";
     const e = byArea.get(area) ?? { correct: 0, total: 0 };
