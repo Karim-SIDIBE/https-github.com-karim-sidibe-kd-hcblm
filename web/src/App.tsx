@@ -9,6 +9,7 @@ import { InstallPrompt } from "./ui/InstallPrompt";
 import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
 import { useT } from "./lib/i18n";
 import { LanguageSwitcher } from "./ui/LanguageSwitcher";
+import { initNative, isNative } from "./lib/native";
 
 const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
 const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
@@ -92,7 +93,7 @@ export function App() {
   const [sync, setSync] = useState<SyncState>("idle");
   const route = useRoute();
 
-  useEffect(() => { document.title = brand.name; }, []);
+  useEffect(() => { document.title = brand.name; initNative(); }, []);
   useEffect(() => { if (authed) return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
@@ -107,7 +108,7 @@ export function App() {
       <div className="shell">
         <div className="main">
           <div className="appbar appbar--standalone"><Brand /><div className="tools"><LanguageSwitcher /><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>{t("nav.account")}</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>{t("nav.logout")}</button></div></div>
-          <main className="screen"><Banner sync={sync} /><InstallPrompt /><Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
+          <main className="screen"><Banner sync={sync} />{!isNative() && <InstallPrompt />}<Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
     );
@@ -143,7 +144,7 @@ export function App() {
 
         <main className="screen">
           <Banner sync={sync} />
-          <InstallPrompt />
+          {!isNative() && <InstallPrompt />}
           <Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense>
         </main>
 

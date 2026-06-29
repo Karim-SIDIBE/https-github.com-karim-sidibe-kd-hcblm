@@ -1,0 +1,11 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.digital.declick.app",
+        "paths": ["/c/*", "/account", "/"]
+      }
+    ]
+  }
+}
