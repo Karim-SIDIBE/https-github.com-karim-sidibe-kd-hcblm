@@ -147,6 +147,13 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       if (!res.ok) throw new Error(j.message || "Inscription impossible");
       return j.data as { id: string };
     },
+    /** Register/unregister this device's push token (native app). Best-effort. */
+    async registerDevice(token: string, platform: string): Promise<void> {
+      try { await raw("POST", "/me/devices", { body: { token, platform } }); } catch { /* offline / not logged in */ }
+    },
+    async unregisterDevice(token: string): Promise<void> {
+      try { await raw("DELETE", "/me/devices", { body: { token } }); } catch { /* best-effort */ }
+    },
   };
 }
 

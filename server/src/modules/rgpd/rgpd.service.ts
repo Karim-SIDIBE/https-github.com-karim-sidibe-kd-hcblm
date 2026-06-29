@@ -116,6 +116,7 @@ export async function runRetentionPurge(now: Date = new Date()) {
     } else {
       await prisma.$transaction([
         prisma.refreshToken.updateMany({ where: { userId: u.id, revokedAt: null }, data: { revokedAt: now } }),
+        prisma.device.deleteMany({ where: { userId: u.id } }), // stop pushing to an anonymised account
         prisma.user.update({ where: { id: u.id }, data: { ...anonymizedUserPatch(u.id, now), deletionRequestedAt: null, deletionMode: null } }),
       ]);
       anonymized++;

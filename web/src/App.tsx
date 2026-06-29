@@ -9,7 +9,7 @@ import { InstallPrompt } from "./ui/InstallPrompt";
 import { IconHome, IconBook, IconJournal, IconBadge, IconBell } from "./ui/icons";
 import { useT } from "./lib/i18n";
 import { LanguageSwitcher } from "./ui/LanguageSwitcher";
-import { initNative, isNative } from "./lib/native";
+import { initNative, isNative, syncPushToken } from "./lib/native";
 
 const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
 const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
@@ -94,7 +94,7 @@ export function App() {
   const route = useRoute();
 
   useEffect(() => { document.title = brand.name; initNative(); }, []);
-  useEffect(() => { if (authed) return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
+  useEffect(() => { if (!authed) return; syncPushToken(); return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 

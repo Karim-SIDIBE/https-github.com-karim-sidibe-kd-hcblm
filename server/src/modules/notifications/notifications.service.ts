@@ -4,6 +4,7 @@
 import type { NotificationChannel, RecipientKind } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { deliver } from "../../lib/notify/dispatcher.js";
+import { tokensForRecipient } from "../devices/devices.service.js";
 
 export type EnqueueInput = {
   enrollmentId?: string | null;
@@ -44,9 +45,10 @@ export async function dispatchPending(batchSize = 100): Promise<DispatchResult> 
   let sent = 0;
   let failed = 0;
   for (const n of pending) {
+    const pushTokens = n.channel === "PUSH" ? await tokensForRecipient(n.recipient) : undefined;
     const result = await deliver({
       id: n.id, recipientKind: n.recipientKind, recipient: n.recipient,
-      channel: n.channel, subject: n.subject, body: n.body,
+      channel: n.channel, subject: n.subject, body: n.body, pushTokens,
     });
     await prisma.notification.update({
       where: { id: n.id },
