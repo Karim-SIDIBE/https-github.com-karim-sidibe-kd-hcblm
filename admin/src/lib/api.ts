@@ -105,6 +105,7 @@ export type MediaAsset = { id: string; kind: string; filename: string | null; mi
 export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[] };
 export type Seats = { seats: number; used: number; available: number };
 export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
+export type BankQuestion = { id: string; question: any; subArea: string; level: string; createdAt: string };
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
@@ -139,6 +140,12 @@ export const api = {
   courseReport: (courseId: string) => req<CourseReport>("GET", `/analytics/courses/${courseId}`),
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
+  // Question bank (reusable questions inserted into course quizzes).
+  bankQuestions: (subArea?: string) => req<BankQuestion[]>("GET", `/bank/questions${subArea ? `?subArea=${encodeURIComponent(subArea)}` : ""}`),
+  bankSubAreas: () => req<string[]>("GET", "/bank/subareas"),
+  addBankQuestion: (b: { question: unknown; subArea?: string; level?: string }) => req<BankQuestion>("POST", "/bank/questions", b),
+  deleteBankQuestion: (id: string) => req<{ id: string }>("DELETE", `/bank/questions/${id}`),
+  bankRandom: (subArea: string | undefined, count: number) => req<any[]>("GET", `/bank/questions/random?count=${count}${subArea ? `&subArea=${encodeURIComponent(subArea)}` : ""}`),
   reportSchedules: (courseId: string) => req<ReportSchedule[]>("GET", `/reports/schedules?courseId=${courseId}`),
   createReportSchedule: (b: { courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format?: "xlsx" | "csv" }) =>
     req<ReportSchedule>("POST", "/reports/schedules", b),
