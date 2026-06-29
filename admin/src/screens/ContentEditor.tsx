@@ -4,7 +4,11 @@ import { api, type MediaAsset } from "../lib/api";
 type Opt = { key: string; label: string };
 type Ex = { type: string; prompt: string; feedbackText: string; options?: Opt[]; correctKey?: string; minChars?: number; fields?: { label: string; placeholder?: string }[] };
 type Session = { id: string; title: string; durationEstimate: string; summaryPoints: string[]; video: any; exercise: Ex };
-type SQ = { id: string; scenarioText: string; options: Opt[]; correctKey: string; feedbackText: string; subArea?: string };
+type SQ = {
+  id: string; scenarioText: string; feedbackText: string; subArea?: string;
+  type?: "single" | "multiple" | "truefalse" | "numeric";
+  options?: Opt[]; correctKey?: string; correctKeys?: string[]; correctBool?: boolean; answerNumber?: number; tolerance?: number;
+};
 type TQ = { id: string; text: string; options: Opt[] };
 type Block = { index: number; type: string; title: string; payload?: any };
 type Content = { blocks: Block[]; [k: string]: unknown };
@@ -14,6 +18,7 @@ const field: React.CSSProperties = { width: "100%", padding: "8px 10px", border:
 const lbl: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--fg-1)", margin: "0 0 4px" };
 const KEYS = ["A", "B", "C", "D", "E"];
 const EX_TYPES = [{ v: "multi", l: "QCM" }, { v: "written", l: "Réponse écrite" }, { v: "guidedForm", l: "Formulaire guidé" }];
+const SQ_TYPES = [{ v: "single", l: "QCM (réponse unique)" }, { v: "multiple", l: "Choix multiples" }, { v: "truefalse", l: "Vrai / Faux" }, { v: "numeric", l: "Numérique" }];
 const TYPE_FR: Record<string, string> = { ONBOARDING: "Onboarding", COMPREHENSION: "Compréhension", PRACTICE: "Pratique", ANCHORING: "Ancrage", CERTIFICATION: "Certification" };
 
 const newSession = (bi: number, n: number): Session => ({ id: `${bi}.${n}`, title: "Nouvelle micro-session", durationEstimate: "15 min", summaryPoints: ["", "", ""], video: { title: "Vidéo", url: "", durationSec: 600, keyMessage: "", africanExample: "", errorToAvoid: "", scriptText: "" }, exercise: { type: "written", prompt: "", feedbackText: "", minChars: 120 } });
@@ -47,15 +52,18 @@ function useDnd(onMove: (from: number, to: number) => void) {
 const Grip = (p: any) => <span {...p}>⠿</span>;
 
 /* ---------------- options editor (shared) ---------------- */
-function Options({ opts, correctKey, scored, path, set }: { opts: Opt[]; correctKey?: string; scored: boolean; path: (c: Content) => { options: Opt[]; correctKey?: string }; set: Set }) {
+function Options({ opts, correctKey, correctKeys, scored, path, set }: { opts: Opt[]; correctKey?: string; correctKeys?: string[]; scored: boolean; path: (c: Content) => { options: Opt[]; correctKey?: string; correctKeys?: string[] }; set: Set }) {
+  const multi = Array.isArray(correctKeys); // multiple-select mode
   return (
     <div>
       {opts.map((o, i) => (
         <div className="row" key={i} style={{ gap: 6, marginBottom: 5, alignItems: "center" }}>
-          {scored && <input type="radio" checked={correctKey === o.key} onChange={() => set((c) => { path(c).correctKey = o.key; })} title="Bonne réponse" />}
+          {scored && (multi
+            ? <input type="checkbox" checked={(correctKeys ?? []).includes(o.key)} title="Bonne réponse" onChange={() => set((c) => { const p = path(c); const s = new Set(p.correctKeys ?? []); s.has(o.key) ? s.delete(o.key) : s.add(o.key); p.correctKeys = [...s].sort(); })} />
+            : <input type="radio" checked={correctKey === o.key} title="Bonne réponse" onChange={() => set((c) => { path(c).correctKey = o.key; })} />)}
           <span style={{ width: 16, fontWeight: 700, fontSize: 12 }}>{o.key}</span>
           <input style={{ ...field, flex: 1 }} value={o.label} placeholder={`Option ${o.key}`} onChange={(e) => set((c) => { path(c).options[i].label = e.target.value; })} />
-          <button type="button" className="btn btn--sm" disabled={opts.length <= 2} onClick={() => set((c) => { const p = path(c); p.options.splice(i, 1); if (scored && p.correctKey === o.key) p.correctKey = p.options[0]?.key; })}>✕</button>
+          <button type="button" className="btn btn--sm" disabled={opts.length <= 2} onClick={() => set((c) => { const p = path(c); p.options.splice(i, 1); if (p.correctKey === o.key) p.correctKey = p.options[0]?.key; if (p.correctKeys) p.correctKeys = p.correctKeys.filter((k) => k !== o.key); })}>✕</button>
         </div>
       ))}
       {opts.length < 5 && <button type="button" className="btn btn--sm" onClick={() => set((c) => { const p = path(c); p.options.push({ key: KEYS[p.options.length], label: "" }); })}>+ Option</button>}
@@ -79,9 +87,38 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
             <div style={{ flex: 1 }}><label style={lbl}>Sous-domaine <span className="muted" style={{ fontWeight: 400 }}>(optionnel)</span></label><input style={field} value={q.subArea ?? ""} onChange={(e) => set((c) => { path(c)[qi].subArea = e.target.value; })} /></div>
           </div>
           <div style={{ marginTop: 8 }}><label style={lbl}>Scénario / énoncé</label><textarea style={{ ...field, minHeight: 48 }} value={q.scenarioText} onChange={(e) => set((c) => { path(c)[qi].scenarioText = e.target.value; })} /></div>
-          <div style={{ marginTop: 8 }}><label style={lbl}>Options (cochez la bonne réponse)</label>
-            <Options opts={q.options} correctKey={q.correctKey} scored path={(c) => path(c)[qi]} set={set} />
+          <div style={{ marginTop: 8, width: 220 }}><label style={lbl}>Type de question</label>
+            <select style={field} value={q.type ?? "single"} onChange={(e) => set((c) => {
+              const x = path(c)[qi]; const nt = e.target.value as SQ["type"];
+              x.type = nt === "single" ? undefined : nt; // keep legacy single clean (no type field)
+              if (nt === "single" || nt === "multiple") { if (!x.options || x.options.length < 2) x.options = [{ key: "A", label: "" }, { key: "B", label: "" }]; }
+              if (nt === "single" && !x.correctKey) x.correctKey = "A";
+              if (nt === "multiple" && !x.correctKeys) x.correctKeys = [];
+              if (nt === "truefalse" && typeof x.correctBool !== "boolean") x.correctBool = true;
+              if (nt === "numeric" && typeof x.answerNumber !== "number") x.answerNumber = 0;
+            })}>{SQ_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
           </div>
+          {(() => { const ty = q.type ?? "single"; return <>
+            {(ty === "single" || ty === "multiple") && (
+              <div style={{ marginTop: 8 }}><label style={lbl}>{ty === "multiple" ? "Options (cochez les bonnes réponses)" : "Options (cochez la bonne réponse)"}</label>
+                <Options opts={q.options ?? []} correctKey={q.correctKey} correctKeys={ty === "multiple" ? (q.correctKeys ?? []) : undefined} scored path={(c) => path(c)[qi] as { options: Opt[]; correctKey?: string; correctKeys?: string[] }} set={set} />
+              </div>
+            )}
+            {ty === "truefalse" && (
+              <div style={{ marginTop: 8 }}><label style={lbl}>Bonne réponse</label>
+                <div className="row" style={{ gap: 16 }}>
+                  <label className="row" style={{ gap: 6, alignItems: "center" }}><input type="radio" checked={q.correctBool === true} onChange={() => set((c) => { path(c)[qi].correctBool = true; })} /> Vrai</label>
+                  <label className="row" style={{ gap: 6, alignItems: "center" }}><input type="radio" checked={q.correctBool === false} onChange={() => set((c) => { path(c)[qi].correctBool = false; })} /> Faux</label>
+                </div>
+              </div>
+            )}
+            {ty === "numeric" && (
+              <div className="row" style={{ gap: 8, marginTop: 8 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Réponse attendue</label><input style={field} type="number" value={q.answerNumber ?? 0} onChange={(e) => set((c) => { path(c)[qi].answerNumber = Number(e.target.value); })} /></div>
+                <div style={{ flex: 1 }}><label style={lbl}>Tolérance ± <span className="muted" style={{ fontWeight: 400 }}>(optionnel)</span></label><input style={field} type="number" min={0} value={q.tolerance ?? 0} onChange={(e) => set((c) => { path(c)[qi].tolerance = Number(e.target.value); })} /></div>
+              </div>
+            )}
+          </>; })()}
           <div style={{ marginTop: 8 }}><label style={lbl}>Feedback</label><textarea style={{ ...field, minHeight: 40 }} value={q.feedbackText} onChange={(e) => set((c) => { path(c)[qi].feedbackText = e.target.value; })} /></div>
         </div>
       ))}
