@@ -5,13 +5,14 @@ import { useT } from "../lib/i18n";
 export type QuizQuestion = {
   id: string;
   prompt: string;
-  type?: "single" | "multiple" | "truefalse" | "numeric";
+  type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
   options?: { key: string; label: string }[];
   correctKey?: string;
   correctKeys?: string[];
   correctBool?: boolean;
   answerNumber?: number;
   tolerance?: number;
+  accepted?: string[];
   feedbackText?: string;
 };
 export type QuestionMeta = Record<string, { timeMs: number; feedbackViewed: boolean }>;
@@ -47,7 +48,7 @@ export function Quiz({ questions, onSubmit }: {
     cur.has(key) ? cur.delete(key) : cur.add(key);
     set([...cur].sort().join(","));
   };
-  const hasAnswer = type === "numeric" ? chosen.trim() !== "" : chosen !== "";
+  const hasAnswer = type === "numeric" || type === "short" ? chosen.trim() !== "" : chosen !== "";
 
   function validate() {
     setMeta((m) => ({ ...m, [q.id]: { timeMs: Date.now() - start.current, feedbackViewed: true } }));
@@ -110,12 +111,18 @@ export function Quiz({ questions, onSubmit }: {
           disabled={!answered} onChange={(e) => set(e.target.value)} />
       )}
 
+      {type === "short" && (
+        <input className="hf-field" type="text" placeholder={t("quiz.shortPlaceholder")} value={chosen}
+          disabled={!answered} onChange={(e) => set(e.target.value)} />
+      )}
+
       {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!hasAnswer} onClick={validate}>{t("quiz.validate")}</button>}
 
       {phase === "feedback" && (
         <div className="stack pt-reveal">
           <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{correct ? t("quiz.good") : t("quiz.review")}</span>
           {type === "numeric" && !correct && q.answerNumber != null && <div className="meta">{t("quiz.expected", { n: q.answerNumber })}</div>}
+          {type === "short" && !correct && (q.accepted?.length ?? 0) > 0 && <div className="meta">{t("quiz.accepted", { list: q.accepted!.join(", ") })}</div>}
           {q.feedbackText && <div className="hf-card hf-card--mint"><p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{q.feedbackText}</p></div>}
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={next}>{busy ? "…" : last ? t("quiz.seeResult") : t("quiz.nextQuestion")}</button>
         </div>

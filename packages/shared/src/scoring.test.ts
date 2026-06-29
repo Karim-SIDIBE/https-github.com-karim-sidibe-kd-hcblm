@@ -33,3 +33,13 @@ test("numeric with optional tolerance + comma decimals", () => {
   assert.equal(isAnswerCorrect({ type: "numeric", answerNumber: 42 }, "42,0"), true);
   assert.equal(isAnswerCorrect({ type: "numeric", answerNumber: 42 }, "abc"), false);
 });
+
+test("short answer is case/accent/space-insensitive against accepted list", () => {
+  const q = { type: "short" as const, accepted: ["délégation", "déléguer"] };
+  assert.equal(isAnswerCorrect(q, "délégation"), true);
+  assert.equal(isAnswerCorrect(q, "DELEGATION"), true);
+  assert.equal(isAnswerCorrect(q, "  delegation "), true);
+  assert.equal(isAnswerCorrect(q, "Déléguer"), true);
+  assert.equal(isAnswerCorrect(q, "autre"), false);
+  assert.equal(isAnswerCorrect(q, ""), false);
+});
