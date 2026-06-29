@@ -4,6 +4,7 @@ import { authenticate } from "../../lib/auth.js";
 import { RgpdError, exportUserData, requestOwnErasure } from "../rgpd/rgpd.service.js";
 import { listConsents, setConsent } from "../consent/consent.service.js";
 import { isConsentType } from "../../domain/consent.js";
+import { registerDevice, removeDevice } from "../devices/devices.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof RgpdError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
@@ -35,5 +36,16 @@ export async function meRoutes(app: FastifyInstance) {
     if ((type === "terms" || type === "privacy") && !granted)
       return reply.status(400).send({ error: "required_consent", message: "Retirer ce consentement revient à supprimer le compte — utilisez « Supprimer mon compte »." });
     return { data: await setConsent(req.principal!.id, type, granted, req.ip) };
+  });
+
+  // Push device registry (native app): register/unregister this device's token.
+  app.post("/me/devices", { preHandler: authenticate }, async (req) => {
+    const { token, platform } = z.object({ token: z.string().min(1), platform: z.string().optional() }).parse(req.body);
+    return { data: await registerDevice(req.principal!.id, token, platform ?? "unknown") };
+  });
+
+  app.delete("/me/devices", { preHandler: authenticate }, async (req) => {
+    const { token } = z.object({ token: z.string().min(1) }).parse(req.body);
+    return { data: await removeDevice(token) };
   });
 }

@@ -22,6 +22,8 @@ export type DeliverableNotification = {
   channel: DeliveryChannel;
   subject?: string | null;
   body: string;
+  /** Native push tokens for this recipient (PUSH channel only). */
+  pushTokens?: string[];
 };
 
 async function postGateway(url: string, provider: string, n: DeliverableNotification): Promise<DeliveryResult> {
@@ -32,6 +34,7 @@ async function postGateway(url: string, provider: string, n: DeliverableNotifica
       body: JSON.stringify({
         id: n.id, to: n.recipient, kind: n.recipientKind, channel: n.channel,
         subject: n.subject ?? null, body: n.body,
+        ...(n.pushTokens?.length ? { tokens: n.pushTokens } : {}),
       }),
     });
     if (!res.ok) return { ok: false, provider, error: `${provider} ${res.status}` };

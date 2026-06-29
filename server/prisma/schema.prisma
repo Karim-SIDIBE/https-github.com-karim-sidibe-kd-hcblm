@@ -146,6 +146,7 @@ model User {
   evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
   verificationCodes VerificationCode[]
   consents          Consent[]
+  devices           Device[]
 
   @@index([role])
 }
@@ -898,6 +899,19 @@ model ReEngagementMessage {
   sentAt       DateTime          @default(now())
 
   @@index([enrollmentId, stage])
+}
+
+/// A registered push device (native app). One row per device token.
+model Device {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token      String   @unique
+  platform   String   @default("unknown") // ios | android | web
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// Scheduled e-mail delivery of a course report (Excel/CSV) to recipients.
