@@ -3,11 +3,13 @@
  * The server remains authoritative (the queued action re-scores + gates); this
  * only powers the immediate result screen, so it also works offline.
  */
-export type ScoredQuestion = { id: string; correctKey: string; subArea?: string };
+import { isAnswerCorrect, type ScorableQuestion } from "@kd/shared/scoring";
+
+export type ScoredQuestion = { id: string; subArea?: string } & ScorableQuestion;
 
 export function scoreQuiz(questions: ScoredQuestion[], answers: Record<string, string>) {
   const total = questions.length;
-  const correct = questions.reduce((n, q) => n + (answers[q.id] === q.correctKey ? 1 : 0), 0);
+  const correct = questions.reduce((n, q) => n + (isAnswerCorrect(q, answers[q.id]) ? 1 : 0), 0);
   return { correct, total, scorePct: total ? Math.round((correct / total) * 100) : 0 };
 }
 
@@ -20,7 +22,7 @@ export function diagnosticProfile(questions: ScoredQuestion[], answers: Record<s
     const area = q.subArea?.trim() || "général";
     const s = byArea.get(area) ?? { correct: 0, total: 0 };
     s.total += 1;
-    if (answers[q.id] === q.correctKey) s.correct += 1;
+    if (isAnswerCorrect(q, answers[q.id])) s.correct += 1;
     byArea.set(area, s);
   }
   const subAreaScores: SubAreaScore[] = [...byArea.entries()].map(([subArea, s]) => ({

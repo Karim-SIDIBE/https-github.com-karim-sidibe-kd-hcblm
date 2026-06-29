@@ -24,13 +24,16 @@ button{background:#1d4ed8;color:#fff;border:0;border-radius:8px;padding:10px 16p
 .result{font-weight:600;margin-top:10px}nav a{display:block;padding:6px 0}.ok{color:#15803d}.ko{color:#b91c1c}
 `;
 
-/** Render a scored quiz with client-side checking that reports the score. */
-function scoredQuiz(qs: { id: string; scenarioText: string; options: { key: string; label: string }[]; correctKey: string; feedbackText: string }[], reportScore: boolean): string {
-  const keys = qs.map((q) => q.correctKey);
+/** Render a scored quiz with client-side checking that reports the score.
+ *  The static export scores single-MCQ; richer types (multiple/true-false/
+ *  numeric) render but aren't interactively scored here — the live platform is
+ *  authoritative. */
+function scoredQuiz(qs: { id: string; scenarioText: string; options?: { key: string; label: string }[]; correctKey?: string; feedbackText: string; type?: string }[], reportScore: boolean): string {
+  const keys = qs.map((q) => q.correctKey ?? "");
   const body = qs.map((q, i) => `
   <div class="q" data-i="${i}">
     <p><strong>${i + 1}.</strong> ${esc(q.scenarioText)}</p>
-    ${q.options.map((o) => `<label><input type="radio" name="q${i}" value="${esc(o.key)}"> ${esc(o.key)}. ${esc(o.label)}</label>`).join("")}
+    ${(q.options ?? []).map((o) => `<label><input type="radio" name="q${i}" value="${esc(o.key)}"> ${esc(o.key)}. ${esc(o.label)}</label>`).join("")}
     <p class="fb muted" hidden>${esc(q.feedbackText)}</p>
   </div>`).join("");
   return `${body}

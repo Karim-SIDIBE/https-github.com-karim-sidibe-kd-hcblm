@@ -30,7 +30,11 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
     const src = block?.payload?.[cfg.source];
     if (!src?.questions?.length) return null;
     const raw: ScoredQuestion[] = src.questions;
-    const questions: QuizQuestion[] = raw.map((q: any) => ({ id: q.id, prompt: q.scenarioText ?? q.text, options: q.options, correctKey: q.correctKey, feedbackText: q.feedbackText }));
+    const questions: QuizQuestion[] = raw.map((q: any) => ({
+      id: q.id, prompt: q.scenarioText ?? q.text, feedbackText: q.feedbackText,
+      type: q.type, options: q.options, correctKey: q.correctKey, correctKeys: q.correctKeys,
+      correctBool: q.correctBool, answerNumber: q.answerNumber, tolerance: q.tolerance,
+    }));
     return { block, src, raw, questions, threshold: block?.payload?.finalQuiz?.passThreshold as number | undefined, profiles: src.profiles as any[] | undefined };
   }, [bundle, cfg]);
 

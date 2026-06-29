@@ -178,15 +178,54 @@ const ProfileChoice = z.object({
   description: nonEmpty("description du profil"),
 });
 
-/** Scored quiz question with mandatory correct key + feedback. */
-const ScoredQuestion = z.object({
-  id: nonEmpty("id de question"),
-  scenarioText: nonEmpty("scénario"),
-  options: z.array(Option).min(2),
-  correctKey: OptionKey,
-  feedbackText: nonEmpty("feedback"),
-  subArea: z.string().optional(),
-});
+/** Scored question kinds. `single` (default) is the historical single-answer
+ *  MCQ — content without a `type` parses as `single`, so all existing courses
+ *  stay valid with zero migration. */
+export const QuestionType = z.enum(["single", "multiple", "truefalse", "numeric"]);
+export type QuestionType = z.infer<typeof QuestionType>;
+
+/**
+ * Scored quiz question. Single-answer MCQ by default (backward-compatible);
+ * `type` unlocks multiple-select, true/false and numeric questions. Per-type
+ * required fields are enforced by the refinement below.
+ */
+export const ScoredQuestion = z
+  .object({
+    id: nonEmpty("id de question"),
+    scenarioText: nonEmpty("scénario"),
+    feedbackText: nonEmpty("feedback"),
+    subArea: z.string().optional(),
+    type: QuestionType.optional(), // absent ⇒ "single" (legacy MCQ — zero migration)
+    options: z.array(Option).min(2).optional(), // single | multiple
+    correctKey: OptionKey.optional(), // single
+    correctKeys: z.array(OptionKey).min(1).optional(), // multiple
+    correctBool: z.boolean().optional(), // truefalse
+    answerNumber: z.number().optional(), // numeric
+    tolerance: z.number().nonnegative().optional(), // numeric (± accepted, default 0)
+  })
+  .superRefine((q, ctx) => {
+    const ty = q.type ?? "single"; // absent ⇒ single
+    const issue = (path: string, message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    if (ty === "single" || ty === "multiple") {
+      if (!q.options || q.options.length < 2) issue("options", "au moins 2 options requises");
+    }
+    if (ty === "single") {
+      if (!q.correctKey) issue("correctKey", "une bonne réponse (correctKey) est requise");
+      else if (q.options && !q.options.some((o) => o.key === q.correctKey)) issue("correctKey", "correctKey doit correspondre à une option");
+    } else if (ty === "multiple") {
+      if (!q.correctKeys || q.correctKeys.length < 1) issue("correctKeys", "au moins une bonne réponse (correctKeys)");
+      else if (q.options && !q.correctKeys.every((k) => q.options!.some((o) => o.key === k))) issue("correctKeys", "chaque réponse doit correspondre à une option");
+    } else if (ty === "truefalse") {
+      if (typeof q.correctBool !== "boolean") issue("correctBool", "une réponse vrai/faux (correctBool) est requise");
+    } else if (ty === "numeric") {
+      if (q.answerNumber == null || !Number.isFinite(q.answerNumber)) issue("answerNumber", "une réponse numérique (answerNumber) est requise");
+    }
+  });
+export type ScoredQuestion = z.infer<typeof ScoredQuestion>;
+
+// Scoring helpers live in a zod-free module (so the learner PWA imports them
+// without bundling zod). Re-exported here for the server's `export *` surface.
+export { isAnswerCorrect, type ScorableQuestion } from "./scoring.js";
 
 const DiagnosticQuiz = z.object({
   questions: z.array(ScoredQuestion).min(1),

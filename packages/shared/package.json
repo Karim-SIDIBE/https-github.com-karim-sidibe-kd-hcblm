@@ -12,6 +12,10 @@
     "./content-model": {
       "types": "./src/content-model.ts",
       "import": "./src/content-model.ts"
+    },
+    "./scoring": {
+      "types": "./src/scoring.ts",
+      "import": "./src/scoring.ts"
     }
   },
   "scripts": {
