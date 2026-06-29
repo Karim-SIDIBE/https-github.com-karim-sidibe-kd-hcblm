@@ -6,8 +6,8 @@ type Ex = { type: string; prompt: string; feedbackText: string; options?: Opt[];
 type Session = { id: string; title: string; durationEstimate: string; summaryPoints: string[]; video: any; exercise: Ex };
 type SQ = {
   id: string; scenarioText: string; feedbackText: string; subArea?: string;
-  type?: "single" | "multiple" | "truefalse" | "numeric";
-  options?: Opt[]; correctKey?: string; correctKeys?: string[]; correctBool?: boolean; answerNumber?: number; tolerance?: number;
+  type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
+  options?: Opt[]; correctKey?: string; correctKeys?: string[]; correctBool?: boolean; answerNumber?: number; tolerance?: number; accepted?: string[];
 };
 type TQ = { id: string; text: string; options: Opt[] };
 type Block = { index: number; type: string; title: string; payload?: any };
@@ -18,7 +18,7 @@ const field: React.CSSProperties = { width: "100%", padding: "8px 10px", border:
 const lbl: React.CSSProperties = { display: "block", fontSize: 11.5, fontWeight: 700, color: "var(--fg-1)", margin: "0 0 4px" };
 const KEYS = ["A", "B", "C", "D", "E"];
 const EX_TYPES = [{ v: "multi", l: "QCM" }, { v: "written", l: "Réponse écrite" }, { v: "guidedForm", l: "Formulaire guidé" }];
-const SQ_TYPES = [{ v: "single", l: "QCM (réponse unique)" }, { v: "multiple", l: "Choix multiples" }, { v: "truefalse", l: "Vrai / Faux" }, { v: "numeric", l: "Numérique" }];
+const SQ_TYPES = [{ v: "single", l: "QCM (réponse unique)" }, { v: "multiple", l: "Choix multiples" }, { v: "truefalse", l: "Vrai / Faux" }, { v: "numeric", l: "Numérique" }, { v: "short", l: "Réponse courte" }];
 const TYPE_FR: Record<string, string> = { ONBOARDING: "Onboarding", COMPREHENSION: "Compréhension", PRACTICE: "Pratique", ANCHORING: "Ancrage", CERTIFICATION: "Certification" };
 
 const newSession = (bi: number, n: number): Session => ({ id: `${bi}.${n}`, title: "Nouvelle micro-session", durationEstimate: "15 min", summaryPoints: ["", "", ""], video: { title: "Vidéo", url: "", durationSec: 600, keyMessage: "", africanExample: "", errorToAvoid: "", scriptText: "" }, exercise: { type: "written", prompt: "", feedbackText: "", minChars: 120 } });
@@ -96,6 +96,7 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
               if (nt === "multiple" && !x.correctKeys) x.correctKeys = [];
               if (nt === "truefalse" && typeof x.correctBool !== "boolean") x.correctBool = true;
               if (nt === "numeric" && typeof x.answerNumber !== "number") x.answerNumber = 0;
+              if (nt === "short" && (!x.accepted || x.accepted.length === 0)) x.accepted = [""];
             })}>{SQ_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
           </div>
           {(() => { const ty = q.type ?? "single"; return <>
@@ -116,6 +117,17 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
               <div className="row" style={{ gap: 8, marginTop: 8 }}>
                 <div style={{ flex: 1 }}><label style={lbl}>Réponse attendue</label><input style={field} type="number" value={q.answerNumber ?? 0} onChange={(e) => set((c) => { path(c)[qi].answerNumber = Number(e.target.value); })} /></div>
                 <div style={{ flex: 1 }}><label style={lbl}>Tolérance ± <span className="muted" style={{ fontWeight: 400 }}>(optionnel)</span></label><input style={field} type="number" min={0} value={q.tolerance ?? 0} onChange={(e) => set((c) => { path(c)[qi].tolerance = Number(e.target.value); })} /></div>
+              </div>
+            )}
+            {ty === "short" && (
+              <div style={{ marginTop: 8 }}><label style={lbl}>Réponses acceptées <span className="muted" style={{ fontWeight: 400 }}>(insensible à la casse et aux accents)</span></label>
+                {(q.accepted ?? [""]).map((ans, ai) => (
+                  <div className="row" key={ai} style={{ gap: 6, marginBottom: 5, alignItems: "center" }}>
+                    <input style={{ ...field, flex: 1 }} value={ans} placeholder={`Réponse ${ai + 1}`} onChange={(e) => set((c) => { const x = path(c)[qi]; (x.accepted ??= [""])[ai] = e.target.value; })} />
+                    <button type="button" className="btn btn--sm" disabled={(q.accepted?.length ?? 1) <= 1} onClick={() => set((c) => { path(c)[qi].accepted?.splice(ai, 1); })}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn--sm" onClick={() => set((c) => { (path(c)[qi].accepted ??= [""]).push(""); })}>+ Réponse acceptée</button>
               </div>
             )}
           </>; })()}

@@ -168,6 +168,7 @@ const fr: Dict = {
   "quiz.seeResult": "Voir mon résultat →", "quiz.nextQuestion": "Question suivante →",
   "quiz.multiHint": "Plusieurs réponses possibles", "quiz.true": "Vrai", "quiz.false": "Faux",
   "quiz.numPlaceholder": "Votre réponse (nombre)", "quiz.expected": "Réponse attendue : {n}",
+  "quiz.shortPlaceholder": "Votre réponse", "quiz.accepted": "Réponses acceptées : {list}",
 };
 
 const en: Dict = {
@@ -300,6 +301,7 @@ const en: Dict = {
   "quiz.seeResult": "See my result →", "quiz.nextQuestion": "Next question →",
   "quiz.multiHint": "Multiple answers possible", "quiz.true": "True", "quiz.false": "False",
   "quiz.numPlaceholder": "Your answer (a number)", "quiz.expected": "Expected answer: {n}",
+  "quiz.shortPlaceholder": "Your answer", "quiz.accepted": "Accepted answers: {list}",
 };
 
 const DICTS: Record<Lang, Dict> = { fr, en };

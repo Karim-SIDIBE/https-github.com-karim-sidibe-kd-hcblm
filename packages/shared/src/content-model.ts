@@ -181,7 +181,7 @@ const ProfileChoice = z.object({
 /** Scored question kinds. `single` (default) is the historical single-answer
  *  MCQ — content without a `type` parses as `single`, so all existing courses
  *  stay valid with zero migration. */
-export const QuestionType = z.enum(["single", "multiple", "truefalse", "numeric"]);
+export const QuestionType = z.enum(["single", "multiple", "truefalse", "numeric", "short"]);
 export type QuestionType = z.infer<typeof QuestionType>;
 
 /**
@@ -202,6 +202,7 @@ export const ScoredQuestion = z
     correctBool: z.boolean().optional(), // truefalse
     answerNumber: z.number().optional(), // numeric
     tolerance: z.number().nonnegative().optional(), // numeric (± accepted, default 0)
+    accepted: z.array(z.string().trim().min(1)).min(1).optional(), // short (accepted answers)
   })
   .superRefine((q, ctx) => {
     const ty = q.type ?? "single"; // absent ⇒ single
@@ -219,6 +220,8 @@ export const ScoredQuestion = z
       if (typeof q.correctBool !== "boolean") issue("correctBool", "une réponse vrai/faux (correctBool) est requise");
     } else if (ty === "numeric") {
       if (q.answerNumber == null || !Number.isFinite(q.answerNumber)) issue("answerNumber", "une réponse numérique (answerNumber) est requise");
+    } else if (ty === "short") {
+      if (!q.accepted || q.accepted.length < 1) issue("accepted", "au moins une réponse acceptée (accepted)");
     }
   });
 export type ScoredQuestion = z.infer<typeof ScoredQuestion>;

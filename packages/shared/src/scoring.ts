@@ -8,13 +8,19 @@
  *   truefalse → "true"/"false" numeric  → "42"
  */
 export type ScorableQuestion = {
-  type?: "single" | "multiple" | "truefalse" | "numeric";
+  type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
   correctKey?: string;
   correctKeys?: string[];
   correctBool?: boolean;
   answerNumber?: number;
   tolerance?: number;
+  accepted?: string[];
 };
+
+/** Normalise free text for short-answer matching: trim, lowercase, strip accents
+ *  and collapse whitespace, so "Délégation " ≈ "delegation". */
+const norm = (s: string) =>
+  s.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\s+/g, " ");
 
 export function isAnswerCorrect(q: ScorableQuestion, answer: string | undefined): boolean {
   const a = (answer ?? "").trim();
@@ -29,6 +35,11 @@ export function isAnswerCorrect(q: ScorableQuestion, answer: string | undefined)
     case "numeric": {
       const n = Number(a.replace(",", "."));
       return Number.isFinite(n) && q.answerNumber != null && Math.abs(n - q.answerNumber) <= (q.tolerance ?? 0);
+    }
+    case "short": {
+      if (!a) return false;
+      const got = norm(a);
+      return (q.accepted ?? []).some((acc) => norm(acc) === got);
     }
     case "single":
     default:
