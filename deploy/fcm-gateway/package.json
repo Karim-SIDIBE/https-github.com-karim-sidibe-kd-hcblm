@@ -1,0 +1,13 @@
+{
+  "name": "fcm-gateway",
+  "private": true,
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Example FCM/APNs relay for KD-HCBLM push notifications (PUSH_WEBHOOK_URL target).",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.7.0"
+  }
+}
