@@ -230,9 +230,18 @@ export type ScoredQuestion = z.infer<typeof ScoredQuestion>;
 // without bundling zod). Re-exported here for the server's `export *` surface.
 export { isAnswerCorrect, type ScorableQuestion } from "./scoring.js";
 
+/** Optional random draw from the question bank, materialised per learner at
+ *  bundle time (so each learner gets a different set; stays offline-capable). */
+export const QuestionPool = z.object({
+  subArea: z.string().optional(),
+  draw: z.number().int().min(1).max(50),
+});
+export type QuestionPool = z.infer<typeof QuestionPool>;
+
 const DiagnosticQuiz = z.object({
   questions: z.array(ScoredQuestion).min(1),
   profiles: z.array(ProfileBand).min(1),
+  pool: QuestionPool.optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -298,6 +307,7 @@ const PracticePayload = z.object({
       title: z.string().default(""),
       scored: z.literal(false).default(false),
       questions: z.array(ScoredQuestion).min(1),
+      pool: QuestionPool.optional(),
     })
     .optional(),
   fieldApplication: z.object({
@@ -326,6 +336,7 @@ const AnchoringPayload = z.object({
   finalQuiz: z.object({
     questions: z.array(ScoredQuestion).min(1),
     passThreshold: z.number().int().min(0).max(100),
+    pool: QuestionPool.optional(),
   }),
 });
 
