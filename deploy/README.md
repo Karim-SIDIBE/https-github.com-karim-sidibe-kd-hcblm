@@ -58,9 +58,10 @@ nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KE
 > uploads média / documents / paquets SCORM sont scannés par le vrai moteur (clamd
 > INSTREAM). Aucune configuration à faire — au premier démarrage, ClamAV télécharge
 > sa base de signatures (~1-2 min) avant de répondre aux scans (voir `start_period`).
-> Par défaut, si clamd est injoignable l'upload passe (l'heuristique EICAR/exécutable
-> s'applique quand même) ; pour **bloquer** dans ce cas, mets `AV_FAIL_CLOSED=true`
-> dans `deploy/.env`. Prévoir ~1,5 Go de RAM pour ce conteneur.
+> Par défaut (**fail-closed**), si clamd est injoignable l'upload est **bloqué**
+> (défaut sûr) ; pour privilégier la disponibilité (upload autorisé si clamd est
+> down, l'heuristique EICAR/exécutable s'appliquant quand même), mets
+> `AV_FAIL_CLOSED=false` dans `deploy/.env`. Prévoir ~1,5 Go de RAM pour ce conteneur.
 
 ## 4. Lancer la stack
 

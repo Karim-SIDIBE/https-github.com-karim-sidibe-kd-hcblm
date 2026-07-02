@@ -161,6 +161,9 @@ model VerificationCode {
   purpose    String    @default("EMAIL_VERIFY")
   expiresAt  DateTime
   consumedAt DateTime?
+  /// Failed verification attempts against this code; the code is invalidated once
+  /// it reaches the cap (anti-brute-force on the 6-digit OTP).
+  attempts   Int       @default(0)
   createdAt  DateTime  @default(now())
 
   @@index([userId])

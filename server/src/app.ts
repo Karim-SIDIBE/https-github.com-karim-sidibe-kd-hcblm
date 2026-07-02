@@ -41,6 +41,9 @@ export async function buildApp(): Promise<FastifyInstance> {
     logger: isDev
       ? { level: env.LOG_LEVEL, transport: { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } } }
       : { level: env.LOG_LEVEL },
+    // Behind Caddy: honor X-Forwarded-For so req.ip is the real client IP (per-IP
+    // rate-limit isolation + accurate audit), not the proxy's socket address.
+    trustProxy: env.TRUST_PROXY,
   });
 
   // Restrict CORS to the configured front-end origins in production; reflect any

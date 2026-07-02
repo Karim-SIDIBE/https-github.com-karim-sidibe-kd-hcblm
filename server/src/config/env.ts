@@ -87,7 +87,10 @@ const EnvSchema = z.object({
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10), // per IP per minute (auth)
   /// Reject passwords found in known breaches (HIBP, k-anonymity). Opt-out for
   /// air-gapped / strict-no-egress deployments; graceful if HIBP is unreachable.
-  PASSWORD_BREACH_CHECK: z.coerce.boolean().default(true),
+  // NB: use the enum→boolean transform, not z.coerce.boolean() — the latter maps
+  // the string "false" to `true` (any non-empty string is truthy), so an operator
+  // setting PASSWORD_BREACH_CHECK=false could never actually disable it.
+  PASSWORD_BREACH_CHECK: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
   // --- RGPD data lifecycle (retention / erasure grace period), in days ---
   RGPD_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),     // restore window before a scheduled erasure is purged
   AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),  // audit-log (incl. IP) retention
@@ -98,7 +101,13 @@ const EnvSchema = z.object({
   CLAMAV_HOST: z.string().optional(),           // clamd host (blank = heuristic-only scan)
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
   AV_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
-  AV_FAIL_CLOSED: z.coerce.boolean().default(false), // if clamd is unreachable: false = allow (heuristic still applied), true = block
+  // If a scanner (CLAMAV_HOST) is configured but clamd is unreachable: true = block
+  // the upload (secure default), false = allow it (heuristic still applied). Only
+  // matters when CLAMAV_HOST is set; with no scanner every upload is heuristic-only.
+  AV_FAIL_CLOSED: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  /// Trust the reverse proxy (Caddy) so req.ip is the real client IP (correct
+  /// rate-limit isolation + audit) instead of the proxy's socket address.
+  TRUST_PROXY: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
   /// Dev-only `x-user-id` auth bypass. Strict opt-in: only enabled when set to
   /// "true" AND NODE_ENV is not production. Unset = disabled (fail-closed).
   AUTH_DEV_HEADER: z
@@ -140,6 +149,14 @@ export const isDev = env.NODE_ENV === "development";
 // production, even explicitly. A misconfigured NODE_ENV must not silently open it.
 if (env.AUTH_DEV_HEADER === true && env.NODE_ENV === "production") {
   console.error("AUTH_DEV_HEADER=true est interdit en production (contournement d'authentification x-user-id).");
+  process.exit(1);
+}
+
+// Encryption at rest must not silently degrade to plaintext in production: without
+// FIELD_ENCRYPTION_KEY, sensitive columns (e.g. the TOTP secret) would be stored in
+// clear. Fail the boot instead so the misconfiguration is caught immediately.
+if (env.NODE_ENV === "production" && !env.FIELD_ENCRYPTION_KEY) {
+  console.error("FIELD_ENCRYPTION_KEY est requis en production (chiffrement au repos des colonnes sensibles). Générez-en une : openssl rand -base64 32");
   process.exit(1);
 }
 

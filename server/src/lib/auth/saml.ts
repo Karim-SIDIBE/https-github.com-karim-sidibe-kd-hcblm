@@ -9,7 +9,7 @@
  * After a valid assertion the platform issues its OWN first-party tokens, so the
  * rest of the API keeps using the existing Bearer-JWT scheme unchanged.
  */
-import { SAML } from "@node-saml/node-saml";
+import { SAML, ValidateInResponseTo } from "@node-saml/node-saml";
 import { env, samlEnabled } from "../../config/env.js";
 
 export type SamlProfile = { email: string | null; name: string | null; nameID?: string };
@@ -24,7 +24,14 @@ function saml(): SAML {
     callbackUrl: env.SAML_CALLBACK_URL!,
     idpCert: env.SAML_IDP_CERT!,
     wantAssertionsSigned: true,
-    audience: false,
+    // Enforce the assertion's <AudienceRestriction> names our SP entityID, so a
+    // validly-signed assertion the IdP minted for a DIFFERENT relying party is
+    // rejected here (prevents cross-SP assertion replay).
+    audience: env.SAML_ISSUER,
+    // Correlate the SAMLResponse to an AuthnRequest we issued (single-use request
+    // IDs, in-memory cache) → blocks replay of a captured SP-initiated assertion.
+    // "ifPresent" still allows IdP-initiated SSO (no InResponseTo).
+    validateInResponseTo: ValidateInResponseTo.ifPresent,
     disableRequestedAuthnContext: true,
   });
   return instance;

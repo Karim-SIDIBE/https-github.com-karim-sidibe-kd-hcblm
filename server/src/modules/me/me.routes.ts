@@ -46,6 +46,6 @@ export async function meRoutes(app: FastifyInstance) {
 
   app.delete("/me/devices", { preHandler: authenticate }, async (req) => {
     const { token } = z.object({ token: z.string().min(1) }).parse(req.body);
-    return { data: await removeDevice(token) };
+    return { data: await removeDevice(req.principal!.id, token) };
   });
 }

@@ -61,19 +61,45 @@ export function toScim(user: { id: string; email: string; name: string }, extern
   };
 }
 
-/** Create (provision) — find/create the user, ensure org membership. */
+/** Create (provision) — find/create the user, ensure org membership.
+ *
+ * Tenant safety: an org's SCIM token must not be able to *adopt* a pre-existing
+ * account it did not create. If a user with this e-mail already exists and is not
+ * already a member of THIS org, we refuse when the account is privileged (any
+ * non-LEARNER role), locally credentialed (self-registered / staff), or already
+ * attached to another organization. We also never overwrite the global `name` of
+ * a user this org did not create. */
 export async function createUser(organizationId: string, body: ScimUserBody) {
   const email = emailOf(body);
   if (!email) throw new ScimError(400, "userName/emails requis", "invalidValue");
-  const user = await prisma.user.upsert({
-    where: { email }, update: { name: displayName(body, email) },
-    create: { email, name: displayName(body, email), role: "LEARNER" },
-  });
+
+  const existing = await prisma.user.findUnique({ where: { email } });
+  let userId: string;
+  if (existing) {
+    const memberHere = await prisma.organizationMembership.findUnique({
+      where: { organizationId_userId: { organizationId, userId: existing.id } },
+    });
+    if (!memberHere) {
+      if (existing.role !== "LEARNER" || existing.passwordHash) {
+        throw new ScimError(409, "Un compte existe déjà pour cet e-mail et ne peut pas être provisionné via SCIM", "uniqueness");
+      }
+      const elsewhere = await prisma.organizationMembership.count({
+        where: { userId: existing.id, organizationId: { not: organizationId } },
+      });
+      if (elsewhere > 0) throw new ScimError(409, "Ce compte est déjà rattaché à une autre organisation", "uniqueness");
+    }
+    userId = existing.id; // attach only — do NOT rename an account we didn't create
+  } else {
+    const created = await prisma.user.create({ data: { email, name: displayName(body, email), role: "LEARNER" } });
+    userId = created.id;
+  }
+
   const membership = await prisma.organizationMembership.upsert({
-    where: { organizationId_userId: { organizationId, userId: user.id } },
+    where: { organizationId_userId: { organizationId, userId } },
     update: { scimExternalId: body.externalId ?? undefined },
-    create: { organizationId, userId: user.id, scimExternalId: body.externalId ?? null, orgRole: "MEMBER" },
+    create: { organizationId, userId, scimExternalId: body.externalId ?? null, orgRole: "MEMBER" },
   });
+  const user = existing ?? (await prisma.user.findUnique({ where: { id: userId } }))!;
   return toScim(user, membership.scimExternalId, true);
 }
 
