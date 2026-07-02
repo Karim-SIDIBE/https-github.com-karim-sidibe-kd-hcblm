@@ -18,9 +18,11 @@ export async function registerDevice(userId: string, token: string, platform: st
   });
 }
 
-export async function removeDevice(token: string) {
-  await prisma.device.deleteMany({ where: { token } });
-  return { token };
+/** Unregister a device — scoped to its owner so a caller can't drop another
+ *  user's device by guessing/knowing its token. */
+export async function removeDevice(userId: string, token: string) {
+  const r = await prisma.device.deleteMany({ where: { token, userId } });
+  return { token, removed: r.count };
 }
 
 /** Push tokens for a recipient identified by user id OR e-mail (the notification

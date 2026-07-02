@@ -3,6 +3,7 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { authenticate, guard } from "../../lib/auth.js";
+import { hasPermission } from "../../domain/auth/permissions.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
 import { UserError, inviteUser, deleteUser, listUsers } from "./users.service.js";
@@ -74,8 +75,14 @@ export async function userRoutes(app: FastifyInstance) {
     }
   });
 
+  // A single user's record. Restricted to self or staff (user:manage): otherwise
+  // any authenticated learner could walk ids and harvest every user's e-mail/role.
   app.get("/users/:id", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
+    const p = req.principal!;
+    if (id !== p.id && !hasPermission(p.role, "user:manage")) {
+      return reply.status(403).send({ error: "forbidden", message: "Accès réservé au titulaire du compte ou au staff" });
+    }
     const user = await prisma.user.findUnique({ where: { id }, select: publicUser });
     if (!user) return reply.notFound("Utilisateur introuvable");
     return { data: user };

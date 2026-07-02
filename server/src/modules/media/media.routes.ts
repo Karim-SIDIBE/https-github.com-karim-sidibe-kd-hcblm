@@ -25,9 +25,18 @@ async function mediaAuth(req: FastifyRequest, reply: FastifyReply) {
   return (authenticate as unknown as (rq: FastifyRequest, rp: FastifyReply, done: () => void) => Promise<void> | void)(req, reply, () => {});
 }
 
+// MIME types that a browser would execute inline (stored-XSS vector if an author
+// uploads a crafted SVG/HTML). We serve these as an opaque download instead of
+// letting them render on the media origin. Video/audio/image stay inline.
+const INLINE_UNSAFE = /^(image\/svg\+xml|text\/html|application\/xhtml\+xml|application\/xml|text\/xml)\b/i;
+
 /** Stream a stored object with HTTP range support (video seeking + partial fetch). */
 async function sendObject(req: FastifyRequest, reply: FastifyReply, storageKey: string, mime: string) {
   const size = await storage.sizeOf(storageKey);
+  if (INLINE_UNSAFE.test(mime)) {
+    reply.header("Content-Disposition", "attachment");
+    mime = "application/octet-stream";
+  }
   reply.header("Accept-Ranges", "bytes").header("Content-Type", mime);
   const range = req.headers.range;
   if (range) {

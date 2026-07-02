@@ -22,10 +22,26 @@ const base = () => env.PUBLIC_BASE_URL.replace(/\/$/, "");
 
 // --- import -----------------------------------------------------------------
 
+// Zip-bomb guards: a small archive must not be allowed to expand without bound.
+const ZIP_MAX_ENTRIES = 5_000;
+const ZIP_MAX_ENTRY_BYTES = 100 * 1024 * 1024;   // 100 MB per file (uncompressed)
+const ZIP_MAX_TOTAL_BYTES = 500 * 1024 * 1024;   // 500 MB total (uncompressed)
+
 export async function importPackage(zipBuffer: Buffer, createdById?: string) {
   let zip: AdmZip;
   try { zip = new AdmZip(zipBuffer); } catch { throw new InteropError(422, "bad_zip", "Archive ZIP invalide"); }
   const entries = zip.getEntries();
+
+  // Reject a decompression bomb before extracting anything to storage.
+  if (entries.length > ZIP_MAX_ENTRIES) throw new InteropError(422, "too_many_entries", "Archive refusée : trop de fichiers");
+  let totalBytes = 0;
+  for (const e of entries) {
+    if (e.isDirectory) continue;
+    const size = e.header.size;
+    if (size > ZIP_MAX_ENTRY_BYTES) throw new InteropError(422, "entry_too_large", `Archive refusée : un fichier dépasse la taille maximale (${e.entryName})`);
+    totalBytes += size;
+    if (totalBytes > ZIP_MAX_TOTAL_BYTES) throw new InteropError(422, "archive_too_large", "Archive refusée : taille décompressée totale excessive");
+  }
 
   const find = (name: string) => entries.find((e) => e.entryName.toLowerCase().endsWith(name) && !e.isDirectory);
   const cmi5Entry = find("cmi5.xml");

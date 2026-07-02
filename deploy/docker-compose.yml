@@ -66,9 +66,10 @@ services:
       # Real upload antivirus: scan media/doc/SCORM uploads via clamd (INSTREAM).
       # Absent this, uploads fall back to the built-in heuristic (EICAR + exe magic).
       CLAMAV_HOST: "clamav"
-      # If clamd is unreachable, allow the upload (heuristic still applies). Set to
-      # "true" to fail closed (block) instead — availability vs. strictness trade-off.
-      AV_FAIL_CLOSED: "${AV_FAIL_CLOSED:-false}"
+      # Fail closed by default: if clamd is unreachable, block the upload (secure
+      # default). Set AV_FAIL_CLOSED=false in deploy/.env to prefer availability
+      # (unreachable clamd → allow, heuristic still applies).
+      AV_FAIL_CLOSED: "${AV_FAIL_CLOSED:-true}"
     depends_on:
       db:
         condition: service_healthy

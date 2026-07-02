@@ -107,9 +107,14 @@ export async function login(email: string, password: string, ip?: string, userAg
 
 const hashCode = (c: string) => sha256(c.replace(/\s+/g, ""));
 
-/** Generate fresh backup codes (returned once in clear; stored only as hashes). */
+/** Generate fresh backup codes (returned once in clear; stored only as hashes).
+ *  Formatted as two 8-hex-char groups (64 bits) — enough entropy that a leak of
+ *  the fast, unsalted hashes is not brute-forceable, while staying typeable. */
 function newBackupCodes(n = 10): { clear: string[]; hashes: string[] } {
-  const clear = Array.from({ length: n }, () => `${randomBytes(5).toString("hex")}`); // 10 hex chars
+  const clear = Array.from({ length: n }, () => {
+    const hex = randomBytes(8).toString("hex"); // 16 hex chars = 64 bits
+    return `${hex.slice(0, 8)}-${hex.slice(8)}`;
+  });
   return { clear, hashes: clear.map(hashCode) };
 }
 
@@ -278,9 +283,45 @@ export async function revokeAllSessions(userId: string, opts?: { exceptFamilyId?
 // --- B2C self-registration + e-mail verification (OTP) ----------------------
 
 const OTP_TTL_MIN = 15;
+const OTP_MAX_ATTEMPTS = 5; // invalidate a code after this many wrong guesses (anti-brute-force)
 const genOtp = () => String(randomInt(0, 1_000_000)).padStart(6, "0");
 
+/** Invalidate any outstanding (unconsumed) codes of this purpose before issuing a
+ *  fresh one — so a resend does not leave earlier codes independently guessable. */
+async function invalidateOutstandingCodes(userId: string, purpose: string) {
+  await prisma.verificationCode.updateMany({
+    where: { userId, purpose, consumedAt: null },
+    data: { consumedAt: new Date() },
+  });
+}
+
+/**
+ * Validate the latest active code for (user, purpose) against `code`. Returns the
+ * matching record (NOT yet consumed — the caller consumes it once its own checks
+ * pass). On a wrong code, increments the per-code attempt counter and invalidates
+ * the code once the cap is reached, then throws. Uniform `invalid_code` throughout.
+ */
+async function checkVerificationCode(userId: string, purpose: string, code: string, ip?: string) {
+  const rec = await prisma.verificationCode.findFirst({
+    where: { userId, purpose, consumedAt: null, expiresAt: { gt: new Date() } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  if (rec.codeHash !== sha256(code)) {
+    const attempts = rec.attempts + 1;
+    const capped = attempts >= OTP_MAX_ATTEMPTS;
+    await prisma.verificationCode.update({
+      where: { id: rec.id },
+      data: capped ? { attempts, consumedAt: new Date() } : { attempts },
+    });
+    if (capped) await audit({ actorId: userId, action: "auth.otp.locked", ip, meta: { purpose } });
+    throw new AuthError("invalid_code", "Code invalide ou expiré");
+  }
+  return rec;
+}
+
 async function issueOtpAndSend(user: { id: string; email: string; phone: string | null }) {
+  await invalidateOutstandingCodes(user.id, "EMAIL_VERIFY");
   const code = genOtp();
   await prisma.verificationCode.create({
     data: { userId: user.id, codeHash: sha256(code), purpose: "EMAIL_VERIFY", expiresAt: new Date(Date.now() + OTP_TTL_MIN * 60_000) },
@@ -312,11 +353,7 @@ export async function verifyEmail(email: string, code: string, ip?: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw new AuthError("invalid_code", "Code invalide ou expiré");
   if (user.emailVerifiedAt) throw new AuthError("already_verified", "Compte déjà vérifié — connectez-vous");
-  const rec = await prisma.verificationCode.findFirst({
-    where: { userId: user.id, purpose: "EMAIL_VERIFY", consumedAt: null, expiresAt: { gt: new Date() }, codeHash: sha256(code) },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  const rec = await checkVerificationCode(user.id, "EMAIL_VERIFY", code, ip);
   await prisma.$transaction([
     prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
     prisma.user.update({ where: { id: user.id }, data: { emailVerifiedAt: new Date() } }),
@@ -336,6 +373,7 @@ export async function resendVerification(email: string) {
 export async function forgotPassword(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (user && user.passwordHash) {
+    await invalidateOutstandingCodes(user.id, "PASSWORD_RESET");
     const code = genOtp();
     await prisma.verificationCode.create({
       data: { userId: user.id, codeHash: sha256(code), purpose: "PASSWORD_RESET", expiresAt: new Date(Date.now() + OTP_TTL_MIN * 60_000) },
@@ -352,12 +390,10 @@ export async function forgotPassword(email: string) {
 export async function resetPassword(email: string, code: string, newPassword: string, ip?: string) {
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) throw new AuthError("invalid_code", "Code invalide ou expiré");
-  const rec = await prisma.verificationCode.findFirst({
-    where: { userId: user.id, purpose: "PASSWORD_RESET", consumedAt: null, expiresAt: { gt: new Date() }, codeHash: sha256(code) },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!rec) throw new AuthError("invalid_code", "Code invalide ou expiré");
+  // Check the reset password BEFORE consuming the code, so a rejected (breached)
+  // password does not burn the user's one valid code.
   if (await isPasswordPwned(newPassword)) throw new AuthError("password_breached", "Ce mot de passe figure dans des fuites de données connues — choisissez-en un autre.");
+  const rec = await checkVerificationCode(user.id, "PASSWORD_RESET", code, ip);
   const passwordHash = await hashPassword(newPassword);
   await prisma.$transaction([
     prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
