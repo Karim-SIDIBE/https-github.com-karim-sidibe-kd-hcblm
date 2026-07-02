@@ -2,7 +2,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, deleteMedia, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
-import { scanStreamHead } from "../../lib/av/scan.js";
+import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
+import { env } from "../../config/env.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { verifyMediaToken } from "../../lib/auth/jwt.js";
 
@@ -52,10 +53,23 @@ export async function mediaRoutes(app: FastifyInstance) {
   app.post("/media", { preHandler: guard("media:manage") }, async (req, reply) => {
     const file = await req.file();
     if (!file) return reply.badRequest("Fichier manquant (champ multipart)");
+    const opts = { filename: file.filename, mime: file.mimetype };
     try {
-      const { result, body } = await scanStreamHead(file.file, { filename: file.filename, mime: file.mimetype });
+      // 1) Cheap, memory-safe head heuristic (EICAR + executable magic) for early reject.
+      const { result, body } = await scanStreamHead(file.file, opts);
       if (!result.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${result.reason}` });
-      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data: body, createdById: req.principal?.id });
+      // 2) When a real engine is configured, scan the FULL object via ClamAV — the
+      //    head heuristic alone misses payloads past the first 256 KB. Buffer the
+      //    remaining stream (bounded by MEDIA_MAX_BYTES) and hand the buffer on.
+      let data: typeof body = body;
+      if (env.CLAMAV_HOST) {
+        const buf = Buffer.isBuffer(body) ? body : await readAll(body);
+        if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
+        const full = await scanUpload(buf, opts);
+        if (!full.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${full.reason}` });
+        data = buf;
+      }
+      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data, createdById: req.principal?.id });
       if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
       return reply.status(201).send({ data: asset });
     } catch (err) { return handle(reply, err); }

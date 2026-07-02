@@ -19,9 +19,19 @@ export class ReportError extends Error {
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const INTERVAL_DAYS: Record<ReportFrequency, number> = { WEEKLY: 7, MONTHLY: 30 };
 
-export async function listSchedules(courseId?: string) {
+/**
+ * List schedules, optionally filtered by course, and confined to the courses the
+ * caller may see (`visible`: "all" for platform staff, else an org-scoped id list).
+ */
+export async function listSchedules(courseId?: string, visible: "all" | string[] = "all") {
+  const courseFilter =
+    visible === "all"
+      ? courseId
+        ? { courseId }
+        : {}
+      : { courseId: courseId ? (visible.includes(courseId) ? courseId : "__none__") : { in: visible } };
   return prisma.reportSchedule.findMany({
-    where: courseId ? { courseId } : {},
+    where: courseFilter,
     orderBy: { createdAt: "desc" },
   });
 }
@@ -41,9 +51,13 @@ export async function createSchedule(input: {
   });
 }
 
-export async function deleteSchedule(id: string) {
+export async function deleteSchedule(id: string, visible: "all" | string[] = "all") {
   const found = await prisma.reportSchedule.findUnique({ where: { id } });
-  if (!found) throw new ReportError(404, "not_found", "Planification introuvable");
+  // Answer 404 (not 403) for a schedule outside the caller's tenant scope, so a
+  // cross-tenant probe cannot confirm it exists.
+  if (!found || (visible !== "all" && !visible.includes(found.courseId))) {
+    throw new ReportError(404, "not_found", "Planification introuvable");
+  }
   await prisma.reportSchedule.delete({ where: { id } });
   return { id };
 }

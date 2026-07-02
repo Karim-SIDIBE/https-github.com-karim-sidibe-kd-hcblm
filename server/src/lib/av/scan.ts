@@ -61,6 +61,16 @@ export async function scanUpload(buf: Buffer, opts: { filename?: string; mime?: 
   return h;
 }
 
+/** Read a readable stream fully into a single Buffer. */
+export function readAll(src: Readable): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    src.on("data", (c: Buffer) => chunks.push(c));
+    src.on("end", () => resolve(Buffer.concat(chunks)));
+    src.on("error", reject);
+  });
+}
+
 function readHead(src: Readable, n: number): Promise<{ head: Buffer; ended: boolean }> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []; let read = 0; let settled = false;

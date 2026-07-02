@@ -68,7 +68,8 @@ Validation follows the JWT BCP (RFC 8725): fixed `ES256` algorithm allowlist
 **Refresh tokens** are opaque, stored only as SHA-256 hashes, **rotated on every
 use with reuse detection** (replaying a rotated token revokes the whole family —
 RFC 9700). Passwords are hashed with **Argon2id** (OWASP params). A dev-only
-`x-user-id` header remains available outside production (`AUTH_DEV_HEADER`).
+`x-user-id` header is available only when `AUTH_DEV_HEADER=true` is set
+explicitly (opt-in) and never in production.
 The authorization layer (permissions + ownership) is unchanged underneath.
 
 **Authoring workflow:** `DRAFT → (submit-review) → IN_REVIEW → (approve) →
@@ -249,7 +250,7 @@ hidden (404) from non-members. SUPER_ADMIN is cross-tenant.
 | GET | `/.well-known/jwks.json` | public keys for verifying our access tokens |
 
 All endpoints except `/health*` and `/auth/*` (+ JWKS) require a Bearer token
-(or the dev `x-user-id` header outside production).
+(or the dev `x-user-id` header when `AUTH_DEV_HEADER=true`, never in production).
 
 ## Local development
 
