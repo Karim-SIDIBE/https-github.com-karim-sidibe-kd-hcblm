@@ -6,6 +6,8 @@ import {
 import * as storage from "../../lib/storage/storage.js";
 import { scanUpload } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
+import { isStaff } from "../../domain/auth/permissions.js";
+import { TenantScopeError, assertCourseAccess } from "../../lib/security/tenant-scope.js";
 
 const MIME: Record<string, string> = {
   html: "text/html", htm: "text/html", js: "text/javascript", css: "text/css", json: "application/json",
@@ -101,7 +103,7 @@ export async function interopRoutes(app: FastifyInstance) {
 
   // LRS query (§8.1) — read stored statements by learner, course, date range
   // and statement type (verb). For KOMPETENCES DECLICK analytics infrastructure.
-  app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req) => {
+  app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req, reply) => {
     const q = z.object({
       learnerId: z.string().optional(),
       courseId: z.string().optional(),
@@ -110,6 +112,16 @@ export async function interopRoutes(app: FastifyInstance) {
       until: z.string().datetime().optional(),
       limit: z.coerce.number().int().positive().max(1000).optional(),
     }).parse(req.query ?? {});
+    // Tenant isolation: a non-staff customer role must pin the query to one of its
+    // own courses (the courseId filter then confines statements to that course).
+    if (!isStaff(req.principal!.role)) {
+      if (!q.courseId) return reply.status(403).send({ error: "forbidden", message: "courseId requis pour ce rôle" });
+      try { await assertCourseAccess(req.principal!, q.courseId); }
+      catch (err) {
+        if (err instanceof TenantScopeError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
+        throw err;
+      }
+    }
     return {
       data: await queryStatements({
         learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,

@@ -30,10 +30,16 @@ async function principalById(id: string): Promise<Principal | null> {
 async function principalFromExternal(payload: Record<string, unknown>): Promise<Principal | null> {
   const email = typeof payload.email === "string" ? payload.email : null;
   if (!email) return null;
+  const emailVerified = payload.email_verified === true;
   let user = await prisma.user.findUnique({ where: { email } });
-  if (!user) {
+  if (user) {
+    // Never let an external token adopt a privileged or locally-credentialed
+    // account by e-mail match — those require explicit linking (privilege-escalation guard).
+    if (isStaff(user.role) || user.passwordHash) return null;
+  } else {
     const { env } = await import("../config/env.js");
-    if (!env.OIDC_JIT_PROVISION) return null;
+    // Only JIT-provision when the IdP asserts the e-mail is verified.
+    if (!env.OIDC_JIT_PROVISION || !emailVerified) return null;
     user = await prisma.user.create({
       data: { email, name: typeof payload.name === "string" ? payload.name : email, role: "LEARNER" },
     });

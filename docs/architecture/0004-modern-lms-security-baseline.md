@@ -126,6 +126,15 @@ Légende : ✅ en place · ⚠️ partiel / à valider · ❌ absent (à constru
 3. **Effacement RGPD** : suppression dure, ou **anonymisation** (préserve les
    statistiques agrégées) ? Recommandation : anonymisation.
 
+## Revue applicative ciblée (2026-07-02)
+
+Une revue applicative dédiée (auth/jetons, autorisation/multi-tenant,
+injection/SSRF/parsing, uploads/crypto) a fermé 6 findings — 2 Critiques
+(élévation de privilège SSO fédéré, fuite de PII inter-tenant sur analytics/rapports)
+et 4 Hautes (AV média non câblé, LRS non scopé, sessions non révoquées au reset/2FA,
+bypass `x-user-id` fail-open). Détail, correctifs et preuves de vérification :
+`../security/lot1-securite-remediation.md`.
+
 ## Fait dans ce passage (Lot 1, vérifié : typecheck + 100 tests + boot/headers)
 
 - `@fastify/helmet@11` (compatible Fastify v4) enregistré avec une config

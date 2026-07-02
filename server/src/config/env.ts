@@ -99,7 +99,8 @@ const EnvSchema = z.object({
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
   AV_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
   AV_FAIL_CLOSED: z.coerce.boolean().default(false), // if clamd is unreachable: false = allow (heuristic still applied), true = block
-  /// Dev-only `x-user-id` escape hatch. Defaults on outside production.
+  /// Dev-only `x-user-id` auth bypass. Strict opt-in: only enabled when set to
+  /// "true" AND NODE_ENV is not production. Unset = disabled (fail-closed).
   AUTH_DEV_HEADER: z
     .enum(["true", "false"]).transform((s) => s === "true").optional(),
 
@@ -135,8 +136,20 @@ if (!parsed.success) {
 export const env = parsed.data;
 export const isDev = env.NODE_ENV === "development";
 
-/** Dev `x-user-id` header allowed? Explicit flag wins; else on outside production. */
-export const authDevHeader = env.AUTH_DEV_HEADER ?? env.NODE_ENV !== "production";
+// Hard-fail: the `x-user-id` authentication bypass must never be enabled in
+// production, even explicitly. A misconfigured NODE_ENV must not silently open it.
+if (env.AUTH_DEV_HEADER === true && env.NODE_ENV === "production") {
+  console.error("AUTH_DEV_HEADER=true est interdit en production (contournement d'authentification x-user-id).");
+  process.exit(1);
+}
+
+/**
+ * Dev `x-user-id` header allowed? Strict opt-in — must be explicitly set to
+ * "true" AND not production. Previously this defaulted on for any non-production
+ * NODE_ENV, so a deployment that forgot NODE_ENV=production was a full auth
+ * bypass; it now fails closed unless deliberately enabled.
+ */
+export const authDevHeader = env.AUTH_DEV_HEADER === true && env.NODE_ENV !== "production";
 
 /** External IdP fully configured? */
 export const oidcEnabled = Boolean(env.OIDC_ISSUER && env.OIDC_JWKS_URI && env.OIDC_AUDIENCE);

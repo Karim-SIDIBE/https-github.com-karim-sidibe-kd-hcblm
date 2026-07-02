@@ -11,6 +11,7 @@
 import { createHmac } from "node:crypto";
 import type { WebhookEvent } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
+import { assertPublicUrl } from "../net/ssrf-guard.js";
 
 /** HMAC-SHA256 of the raw JSON body, hex-encoded (sent as `x-kd-signature`). */
 export function signPayload(secret: string, body: string): string {
@@ -61,6 +62,8 @@ export async function flushPendingWebhooks(batchSize = 100) {
     const body = JSON.stringify(d.payload);
     const signature = signPayload(d.webhook.secret, body);
     try {
+      // SSRF guard: never deliver to loopback / link-local / private hosts.
+      await assertPublicUrl(d.webhook.url);
       const res = await fetch(d.webhook.url, {
         method: "POST",
         headers: {

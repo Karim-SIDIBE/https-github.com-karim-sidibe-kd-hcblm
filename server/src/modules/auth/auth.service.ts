@@ -14,6 +14,7 @@ import { signAccessToken, signTwoFactorChallenge, verifyTwoFactorChallenge } fro
 import { generateTotpSecret, verifyTotp, otpauthUrl } from "../../lib/auth/totp.js";
 import { encryptField, decryptField } from "../../lib/crypto/field.js";
 import { isPasswordPwned } from "../../lib/auth/pwned.js";
+import { isStaff } from "../../domain/auth/permissions.js";
 import { audit } from "../../lib/audit.js";
 import { summarizeSessions } from "../../domain/rgpd.js";
 import { recordRegistrationConsents } from "../consent/consent.service.js";
@@ -138,6 +139,8 @@ export async function enableTotp(userId: string, code: string, ip?: string) {
   if (!verifyTotp(decryptField(user.totpSecret), code)) throw new AuthError("invalid_code", "Code 2FA invalide");
   const { clear, hashes } = newBackupCodes();
   await prisma.user.update({ where: { id: userId }, data: { totpEnabledAt: new Date(), totpBackupCodes: hashes } });
+  // Changing the second factor invalidates other active sessions (force re-auth).
+  await revokeAllSessions(userId, { actorId: userId, ip });
   await audit({ actorId: userId, action: "auth.2fa.enabled", ip });
   return { enabled: true as const, backupCodes: clear };
 }
@@ -150,6 +153,8 @@ export async function disableTotp(userId: string, code: string, ip?: string) {
   const okBackup = user.totpBackupCodes.includes(hashCode(code));
   if (!okTotp && !okBackup) throw new AuthError("invalid_code", "Code 2FA invalide");
   await prisma.user.update({ where: { id: userId }, data: { totpSecret: null, totpEnabledAt: null, totpBackupCodes: [] } });
+  // Changing the second factor invalidates other active sessions (force re-auth).
+  await revokeAllSessions(userId, { actorId: userId, ip });
   await audit({ actorId: userId, action: "auth.2fa.disabled", ip });
   return { disabled: true as const };
 }
@@ -180,15 +185,31 @@ export async function verifyTwoFactorLogin(challenge: string, code: string, ip?:
 }
 
 /**
- * Federated login (SAML/OIDC): map a verified external identity to a local user
- * (JIT-provision a LEARNER when allowed) and issue first-party tokens.
+ * Federated login (SAML/OIDC/LTI): map a verified external identity to a local
+ * user (JIT-provision a LEARNER when allowed) and issue first-party tokens.
+ *
+ * Identity binding is by e-mail, so we must never let a signed external identity
+ * silently *adopt* a pre-existing privileged or locally-credentialed account —
+ * an LTI platform (or an LMS where an instructor edits a learner's e-mail) could
+ * otherwise assert `admin@…` and receive an admin session. Such a match is
+ * refused; those accounts require explicit linking. `emailVerified === false`
+ * (an OIDC claim, when present) also blocks JIT provisioning of that address.
  */
-export async function federatedLogin(params: { email: string; name?: string | null; jit: boolean; via: string; ip?: string }) {
+export async function federatedLogin(params: { email: string; name?: string | null; jit: boolean; via: string; ip?: string; emailVerified?: boolean }) {
   let user = await prisma.user.findUnique({ where: { email: params.email } });
-  if (!user) {
+  if (user) {
+    if (isStaff(user.role) || user.passwordHash) {
+      await audit({ actorId: user.id, action: "auth.federated.denied", ip: params.ip, meta: { email: params.email, via: params.via, reason: "account_conflict" } });
+      throw new AuthError("account_conflict", "Cette identité fédérée ne peut pas être liée automatiquement à ce compte — liaison explicite requise.");
+    }
+  } else {
     if (!params.jit) {
       await audit({ action: "auth.federated.denied", ip: params.ip, meta: { email: params.email, via: params.via, reason: "no_account" } });
       throw new AuthError("no_account", "Aucun compte pour cette identité fédérée");
+    }
+    if (params.emailVerified === false) {
+      await audit({ action: "auth.federated.denied", ip: params.ip, meta: { email: params.email, via: params.via, reason: "email_unverified" } });
+      throw new AuthError("email_unverified", "E-mail non vérifié par le fournisseur d'identité");
     }
     user = await prisma.user.create({ data: { email: params.email, name: params.name || params.email, role: "LEARNER", emailVerifiedAt: new Date() } });
     await audit({ actorId: user.id, action: "auth.federated.provisioned", ip: params.ip, meta: { email: params.email, via: params.via } });
@@ -342,6 +363,9 @@ export async function resetPassword(email: string, code: string, newPassword: st
     prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
     prisma.user.update({ where: { id: user.id }, data: { passwordHash, failedLoginCount: 0, lockedUntil: null, emailVerifiedAt: user.emailVerifiedAt ?? new Date() } }),
   ]);
+  // A password reset is often the response to a compromise — cut every existing
+  // refresh-token family before issuing the fresh auto-login session below.
+  await revokeAllSessions(user.id, { actorId: user.id, ip });
   await audit({ actorId: user.id, action: "auth.password.reset", ip });
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
