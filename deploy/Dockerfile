@@ -8,7 +8,7 @@ WORKDIR /app
 # get a light stream and good connections get HD. Without it, only the source
 # rendition exists.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends openssl ca-certificates wget ffmpeg \
+ && apt-get install -y --no-install-recommends openssl ca-certificates wget ffmpeg gosu \
  && rm -rf /var/lib/apt/lists/*
 
 # 1) Install dependencies using the workspace manifests (better layer caching).
@@ -26,9 +26,16 @@ COPY server ./server
 WORKDIR /app/server
 RUN npx prisma generate
 
+# 4) Run as the unprivileged "node" user (uid 1000, shipped in the base image).
+#    Own the app + a media dir so the runtime can write; the entrypoint fixes the
+#    mounted volume's ownership at boot then drops privileges via gosu.
+RUN mkdir -p /app/server/.media && chown -R node:node /app/server
+COPY deploy/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
 ENV NODE_ENV=production
 EXPOSE 4000
 
-# Apply pending migrations, then start the server. @kd/shared is source-only TS,
-# so the server runs through tsx (no separate build step / no dual-package hazard).
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start:prod"]
+# The entrypoint applies pending migrations then starts the server as non-root.
+# @kd/shared is source-only TS, so the server runs through tsx (no build step).
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

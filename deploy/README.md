@@ -63,6 +63,24 @@ nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KE
 > down, l'heuristique EICAR/exécutable s'appliquant quand même), mets
 > `AV_FAIL_CLOSED=false` dans `deploy/.env`. Prévoir ~1,5 Go de RAM pour ce conteneur.
 
+> **Durcissement runtime (Vague A).** Le conteneur API démarre en root uniquement
+> le temps de corriger les droits du volume média, puis **abandonne les privilèges**
+> et tourne en utilisateur non‑root `node` (via `gosu`, voir `deploy/entrypoint.sh`).
+> Le compose ajoute `no-new-privileges` et `cap_drop: ALL` (seules `CHOWN` + les
+> capabilities `setuid/setgid` de gosu sont réajoutées). **Caddy** émet des en‑têtes
+> de sécurité (HSTS, `nosniff`, `Referrer-Policy`, `Permissions-Policy`,
+> `X-Frame-Options`) et une **CSP en mode *Report‑Only*** sur les fronts : elle ne
+> bloque rien, elle signale seulement les violations. Une fois vérifié qu'aucune
+> violation légitime n'apparaît, renommer `Content-Security-Policy-Report-Only` en
+> `Content-Security-Policy` dans `deploy/Caddyfile` pour l'appliquer.
+>
+> **Déploiement à surveiller + rollback.** Cette vague modifie l'image et l'entrée
+> du conteneur. Déployez en gardant les logs ouverts :
+> `docker compose -f deploy/docker-compose.yml logs -f api`. Si l'API ne démarre pas
+> (droits média, gosu…), rollback immédiat : `git revert <commit> && git push`, puis
+> `docker compose ... up -d --build`. Vérifier ensuite que le process tourne non‑root :
+> `docker compose ... exec api id` doit afficher `uid=1000(node)`.
+
 ## 4. Lancer la stack
 
 ```bash

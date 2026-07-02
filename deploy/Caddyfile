@@ -4,14 +4,52 @@
 #   app.declick.digital    A  185.98.136.230
 #   admin.declick.digital  A  185.98.136.230
 
+# --- Reusable security headers -------------------------------------------------
+# Safe, always-on headers (no functional impact). Applied to every site.
+(sec_common) {
+	header {
+		# Force HTTPS for a year (Caddy already redirects http→https).
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		# Never let the browser MIME-sniff a response into an executable type.
+		X-Content-Type-Options "nosniff"
+		# Send only the origin on cross-origin navigations.
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# Lock down powerful browser features we don't use.
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+		# Don't advertise the server software.
+		-Server
+	}
+}
+
+# Extra headers for the static single-page front-ends (PWA / admin / entreprise).
+# The CSP ships in REPORT-ONLY first: it never blocks, only reports violations,
+# so we harden without risking the app. Once the field shows no legitimate
+# violations, rename the header to "Content-Security-Policy" to enforce it.
+(sec_spa) {
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), browsing-topics=()"
+		# Only same-origin pages may frame these apps (anti-clickjacking).
+		X-Frame-Options "SAMEORIGIN"
+		-Server
+	}
+	header Content-Security-Policy-Report-Only "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://api.declick.digital; media-src 'self' blob: https://api.declick.digital; worker-src 'self' blob:; manifest-src 'self'"
+}
+
 # --- API (Fastify, reverse-proxied) ---
+# No CSP / frame headers here: the API serves the SAML ACS auto-POST form and the
+# LTI launch HTML (framed by the consumer LMS), which those headers would break.
 api.declick.digital {
+	import sec_common
 	encode zstd gzip
 	reverse_proxy api:4000
 }
 
 # --- PWA (learner app, static) — built into web/dist, mounted at /srv/pwa ---
 app.declick.digital {
+	import sec_spa
 	encode zstd gzip
 	root * /srv/pwa
 	try_files {path} /index.html   # SPA fallback (deep links / refresh)
@@ -26,6 +64,7 @@ app.declick.digital {
 
 # --- Admin console (staff, static SPA) — built into admin/dist, mounted at /srv/admin ---
 admin.declick.digital {
+	import sec_spa
 	encode zstd gzip
 	root * /srv/admin
 	try_files {path} /index.html   # hash-routed SPA fallback
@@ -37,6 +76,7 @@ admin.declick.digital {
 
 # --- Enterprise console (org admins, static SPA) — built into entreprise/dist ---
 entreprise.declick.digital {
+	import sec_spa
 	encode zstd gzip
 	root * /srv/entreprise
 	try_files {path} /index.html
@@ -55,6 +95,7 @@ entreprise.declick.digital {
 # and set MEDIA_PUBLIC_BASE_URL=https://cdn.declick.digital in deploy/.env.
 #
 # media.declick.digital {
+# 	import sec_common
 # 	encode zstd gzip
 # 	root * /srv/media
 # 	file_server                                  # honours HTTP Range (video seek)
