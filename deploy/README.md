@@ -53,16 +53,14 @@ nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KE
 > illisibles → les utilisateurs devront réactiver la 2FA). Pour le disque lui-même,
 > active le **chiffrement de volume** chez LWS (ou LUKS) — défense complémentaire.
 
-> **Antivirus des uploads (optionnel mais recommandé).** Sans configuration, les
-> uploads subissent un scan heuristique (signature de test EICAR + refus des
-> exécutables). Pour un vrai moteur, ajoute un service ClamAV au compose puis
-> `CLAMAV_HOST=clamav` dans `deploy/.env` :
-> ```yaml
->   clamav:
->     image: clamav/clamav:stable
->     restart: unless-stopped
->     mem_limit: 1536m
-> ```
+> **Antivirus des uploads.** Un service **ClamAV** est désormais inclus dans le
+> compose et l'API le cible via `CLAMAV_HOST=clamav` (défini dans le compose) : les
+> uploads média / documents / paquets SCORM sont scannés par le vrai moteur (clamd
+> INSTREAM). Aucune configuration à faire — au premier démarrage, ClamAV télécharge
+> sa base de signatures (~1-2 min) avant de répondre aux scans (voir `start_period`).
+> Par défaut, si clamd est injoignable l'upload passe (l'heuristique EICAR/exécutable
+> s'applique quand même) ; pour **bloquer** dans ce cas, mets `AV_FAIL_CLOSED=true`
+> dans `deploy/.env`. Prévoir ~1,5 Go de RAM pour ce conteneur.
 
 ## 4. Lancer la stack
 
