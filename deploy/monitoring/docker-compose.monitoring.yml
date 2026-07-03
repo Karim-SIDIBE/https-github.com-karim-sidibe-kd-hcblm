@@ -1,0 +1,98 @@
+# Monitoring overlay — Prometheus + Alertmanager + Loki + promtail + Grafana.
+# Sidecar stack that joins the main app network to scrape the API's /metrics and
+# ship Docker logs. Separate compose project (kd-monitoring) so it starts/stops
+# independently of the app.
+#
+# Prereqs (once):
+#   1) In deploy/.env of the MAIN stack:  METRICS_ENABLED=true  and  METRICS_TOKEN=<token>
+#      then redeploy the app so /metrics is live.
+#   2) echo -n "<same METRICS_TOKEN>" > deploy/monitoring/secrets/metrics_token
+#   3) cp deploy/monitoring/.env.example deploy/monitoring/.env   # set GRAFANA_ADMIN_PASSWORD
+#
+# Run:
+#   docker compose -f deploy/monitoring/docker-compose.monitoring.yml --env-file deploy/monitoring/.env up -d
+#
+# All UIs bind to 127.0.0.1 only (no public exposure). Reach Grafana via an SSH
+# tunnel:  ssh -L 3000:127.0.0.1:3000 root@<vps>   then open http://localhost:3000
+name: kd-monitoring
+
+# Join the main stack's default network so "api:4000" resolves.
+networks:
+  kd:
+    external: true
+    name: kd-hcblm_default
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  alertmanager_data:
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=15d
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules.yml:/etc/prometheus/rules.yml:ro
+      - ./secrets/metrics_token:/etc/prometheus/metrics_token:ro
+      - prometheus_data:/prometheus
+    networks: [kd]
+    ports:
+      - "127.0.0.1:9090:9090"
+    mem_limit: 512m
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    restart: unless-stopped
+    command:
+      - --config.file=/etc/alertmanager/alertmanager.yml
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    networks: [kd]
+    ports:
+      - "127.0.0.1:9093:9093"
+    mem_limit: 128m
+
+  loki:
+    image: grafana/loki:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki_data:/loki
+    networks: [kd]
+    mem_limit: 512m
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yml
+    volumes:
+      - ./promtail/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [kd]
+    mem_limit: 128m
+    depends_on: [loki]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:?set GRAFANA_ADMIN_PASSWORD in deploy/monitoring/.env}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    networks: [kd]
+    ports:
+      - "127.0.0.1:3000:3000"
+    mem_limit: 256m
+    depends_on: [prometheus, loki]

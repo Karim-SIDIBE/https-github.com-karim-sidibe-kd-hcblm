@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["alertmanager:9093"]
+
+scrape_configs:
+  # The KD API — /metrics is top-level and bearer-token protected. The token is
+  # mounted as a file (see docker-compose.monitoring.yml); it must equal the
+  # METRICS_TOKEN set in the MAIN stack's deploy/.env.
+  - job_name: kd-api
+    metrics_path: /metrics
+    scheme: http
+    authorization:
+      type: Bearer
+      credentials_file: /etc/prometheus/metrics_token
+    static_configs:
+      - targets: ["api:4000"]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]

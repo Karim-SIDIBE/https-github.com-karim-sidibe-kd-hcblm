@@ -3,6 +3,12 @@
 Runbook opérationnel pour la stack KD‑HCBLM. Objectif : passer de « ça tourne »
 à « on **sait** que ça tourne, on est **alerté** sinon, et on peut **restaurer** ».
 
+> **Raccourci clé‑en‑main :** un overlay Docker prêt à l'emploi (Prometheus +
+> Alertmanager + Loki + promtail + Grafana préconfigurés, sources et dashboard
+> provisionnés) est fourni dans `deploy/monitoring/` — voir
+> `deploy/monitoring/README.md`. Les sections ci‑dessous expliquent le détail
+> sous‑jacent (utile pour une supervision hébergée ailleurs).
+
 ## 1. Ce que l'API expose
 
 | Endpoint | Usage |

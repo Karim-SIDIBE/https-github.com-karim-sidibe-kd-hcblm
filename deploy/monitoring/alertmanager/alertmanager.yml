@@ -1,0 +1,20 @@
+route:
+  receiver: default
+  group_by: ['alertname']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 3h
+
+receivers:
+  # Default receiver drops alerts silently until you wire a real channel. To get
+  # notified, uncomment ONE of the blocks below (or add email_configs).
+  - name: default
+    # --- Slack ---
+    # slack_configs:
+    #   - api_url: 'https://hooks.slack.com/services/XXX/YYY/ZZZ'
+    #     channel: '#alerts'
+    #     send_resolved: true
+    # --- Generic webhook (e.g. the app's NOTIFY_WEBHOOK_URL relay) ---
+    # webhook_configs:
+    #   - url: 'https://your-endpoint.example/alerts'
+    #     send_resolved: true
