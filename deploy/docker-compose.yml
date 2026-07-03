@@ -77,6 +77,20 @@ services:
       # so it need not wait for clamd's virus-DB download (~2 min) to boot.
       clamav:
         condition: service_started
+    # Runtime hardening: the container starts as root only to fix the media
+    # volume's ownership, then drops to the non-root "node" user (see entrypoint).
+    # no-new-privileges blocks privilege escalation; all Linux capabilities are
+    # dropped except the few the entrypoint needs (chown + gosu's setuid/setgid).
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETUID
+      - SETGID
     volumes:
       - media:/app/server/.media
     healthcheck:
