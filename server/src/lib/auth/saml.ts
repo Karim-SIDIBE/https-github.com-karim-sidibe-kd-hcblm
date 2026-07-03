@@ -11,13 +11,20 @@
  */
 import { SAML, ValidateInResponseTo } from "@node-saml/node-saml";
 import { env, samlEnabled } from "../../config/env.js";
+import { getRedis } from "../redis.js";
+import { redisSamlCache } from "./saml-cache.js";
 
 export type SamlProfile = { email: string | null; name: string | null; nameID?: string };
+
+const REQUEST_ID_TTL_MS = 10 * 60_000; // 10 min — an AuthnRequest's response window
 
 let instance: SAML | undefined;
 
 function saml(): SAML {
   if (!samlEnabled) throw new Error("SAML non configuré");
+  // Share the InResponseTo request-id cache via Redis when configured, so the
+  // anti-replay correlation stays coherent across cluster workers / API nodes.
+  const redis = getRedis();
   instance ??= new SAML({
     entryPoint: env.SAML_ENTRY_POINT!,
     issuer: env.SAML_ISSUER,
@@ -29,9 +36,11 @@ function saml(): SAML {
     // rejected here (prevents cross-SP assertion replay).
     audience: env.SAML_ISSUER,
     // Correlate the SAMLResponse to an AuthnRequest we issued (single-use request
-    // IDs, in-memory cache) → blocks replay of a captured SP-initiated assertion.
-    // "ifPresent" still allows IdP-initiated SSO (no InResponseTo).
+    // IDs) → blocks replay of a captured SP-initiated assertion. "ifPresent" still
+    // allows IdP-initiated SSO (no InResponseTo).
     validateInResponseTo: ValidateInResponseTo.ifPresent,
+    requestIdExpirationPeriodMs: REQUEST_ID_TTL_MS,
+    ...(redis ? { cacheProvider: redisSamlCache(redis, REQUEST_ID_TTL_MS) } : {}),
     disableRequestedAuthnContext: true,
   });
   return instance;

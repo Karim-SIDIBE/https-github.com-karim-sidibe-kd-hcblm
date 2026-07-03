@@ -36,6 +36,7 @@ import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 import { render as renderMetrics, recordHttp, requestStarted, requestEnded } from "./lib/metrics.js";
+import { getRedis } from "./lib/redis.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -77,7 +78,18 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(sensible);
   // Global IP rate limit (per minute). Auth routes get a stricter cap below.
-  await app.register(rateLimit, { global: true, max: env.RATE_LIMIT_MAX, timeWindow: "1 minute" });
+  // With a shared Redis store the limit is coherent across workers/nodes; without
+  // it, each process counts independently (fine for a single process).
+  const redis = getRedis();
+  if (env.API_WORKERS > 1 && !redis) {
+    app.log.warn("API_WORKERS > 1 sans REDIS_URL : le rate-limit est compté par worker (limite effective ≈ ×workers) et le cache anti-rejeu SAML est par worker. Définissez REDIS_URL.");
+  }
+  await app.register(rateLimit, {
+    global: true,
+    max: env.RATE_LIMIT_MAX,
+    timeWindow: "1 minute",
+    ...(redis ? { redis } : {}),
+  });
 
   // Multipart uploads (media assets), capped by MEDIA_MAX_BYTES.
   await app.register(multipart, { limits: { fileSize: env.MEDIA_MAX_BYTES } });

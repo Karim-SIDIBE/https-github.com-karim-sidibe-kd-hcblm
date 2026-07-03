@@ -1,4 +1,6 @@
 /** Process entry point. */
+import cluster from "node:cluster";
+import { availableParallelism } from "node:os";
 import { buildApp } from "./app.js";
 import { env } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
@@ -23,4 +25,25 @@ async function main() {
   }
 }
 
-void main();
+// Optional multi-worker mode: fork API_WORKERS processes that share the listening
+// socket (Node cluster) to use the vCPUs. Default (1) runs a single process,
+// unchanged. Needs REDIS_URL for coherent rate-limit / SAML state across workers.
+const workers = Math.min(env.API_WORKERS, availableParallelism());
+if (workers > 1 && cluster.isPrimary) {
+  let shuttingDown = false;
+  for (let i = 0; i < workers; i++) cluster.fork();
+  cluster.on("exit", (worker, code, signal) => {
+    if (shuttingDown) return;
+    console.error(`worker ${worker.process.pid} arrêté (${signal || code}) — relance`);
+    cluster.fork();
+  });
+  const stop = (sig: NodeJS.Signals) => {
+    shuttingDown = true;
+    for (const w of Object.values(cluster.workers ?? {})) w?.kill(sig);
+    process.exit(0);
+  };
+  process.on("SIGINT", () => stop("SIGINT"));
+  process.on("SIGTERM", () => stop("SIGTERM"));
+} else {
+  void main();
+}

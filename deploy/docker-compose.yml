@@ -122,6 +122,21 @@ services:
     expose:
       - "3310"
 
+  # --- Redis (OPTIONAL) — shared rate-limit + SAML request cache for scaling ---
+  # Uncomment to run the API with >1 worker/node coherently. Then in deploy/.env:
+  #   API_WORKERS=2
+  #   REDIS_URL=redis://redis:6379
+  # and, for 2 workers under the api mem_limit, cap each worker's heap:
+  #   NODE_OPTIONS via the api service (e.g. --max-old-space-size=320) OR raise
+  #   the api mem_limit. See docs/ops/capacity-scaling.md.
+  # redis:
+  #   image: redis:7-alpine
+  #   restart: unless-stopped
+  #   command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+  #   mem_limit: 160m
+  #   expose:
+  #     - "6379"
+
   caddy:
     image: caddy:2
     restart: unless-stopped
