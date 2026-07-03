@@ -9,3 +9,6 @@ dist/
 deploy/presets/*.env
 # Local backup artifacts (DB dumps, media archives, env copies).
 deploy/backups/
+
+# monitoring overlay secrets
+deploy/monitoring/secrets/metrics_token

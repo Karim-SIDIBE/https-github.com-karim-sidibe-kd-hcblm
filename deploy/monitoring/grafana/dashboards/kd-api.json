@@ -1,0 +1,74 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "graphTooltip": 0,
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["kd", "api"],
+  "title": "KD API — vue d'ensemble",
+  "uid": "kd-api-overview",
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "API up",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "mappings": [ { "type": "value", "options": { "0": { "text": "DOWN", "color": "red" }, "1": { "text": "UP", "color": "green" } } } ] }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "up{job=\"kd-api\"}" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Requêtes in-flight",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "http_requests_in_flight" } ]
+    },
+    {
+      "type": "stat",
+      "title": "RSS mémoire (Mo)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "decmbytes" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "process_resident_memory_bytes{job=\"kd-api\"} / 1e6" } ]
+    },
+    {
+      "type": "stat",
+      "title": "Uptime (h)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "process_uptime_seconds{job=\"kd-api\"} / 3600" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Débit — requêtes/s",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum(rate(http_requests_total[1m]))", "legendFormat": "req/s" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Taux d'erreurs 5xx (%)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "fieldConfig": { "defaults": { "unit": "percent" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "100 * sum(rate(http_requests_total{status=~\"5..\"}[5m])) / clamp_min(sum(rate(http_requests_total[5m])), 1)", "legendFormat": "5xx %" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Latence moyenne (s) par route",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (route) (rate(http_request_duration_seconds_sum[5m])) / clamp_min(sum by (route) (rate(http_request_duration_seconds_count[5m])), 1)", "legendFormat": "{{route}}" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Requêtes par statut (rate)",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "targets": [ { "refId": "A", "datasource": { "type": "prometheus", "uid": "prometheus" }, "expr": "sum by (status) (rate(http_requests_total[1m]))", "legendFormat": "{{status}}" } ]
+    }
+  ]
+}

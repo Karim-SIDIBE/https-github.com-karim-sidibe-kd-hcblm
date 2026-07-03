@@ -62,6 +62,15 @@ nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KE
 > (défaut sûr) ; pour privilégier la disponibilité (upload autorisé si clamd est
 > down, l'heuristique EICAR/exécutable s'appliquant quand même), mets
 > `AV_FAIL_CLOSED=false` dans `deploy/.env`. Prévoir ~1,5 Go de RAM pour ce conteneur.
+>
+> **Taille de scan.** `deploy/clamav/clamd.conf` (monté dans le conteneur) relève
+> `StreamMaxLength`/`MaxScanSize`/`MaxFileSize` à **512 Mo** — sinon clamd refuse
+> les fichiers > ~100 Mo (limite par défaut) et l'upload est bloqué avec
+> « ClamAV: indisponible ». Note capacité : sur un VPS 4 Go, un upload proche de
+> `MEDIA_MAX_BYTES` (500 Mo) est bufferisé côté API (mem_limit 768m) puis scanné —
+> gardez des vidéos raisonnables (~≤ 300 Mo) ou augmentez la RAM. Après modif de ce
+> fichier : `docker compose … restart clamav` puis vérifier `ps` → clamav `healthy`
+> (rollback : retirer la ligne de montage dans le compose et `up -d`).
 
 > **Durcissement runtime (Vague A).** Le conteneur API démarre en root uniquement
 > le temps de corriger les droits du volume média, puis **abandonne les privilèges**
