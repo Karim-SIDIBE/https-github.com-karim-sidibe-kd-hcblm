@@ -116,6 +116,13 @@ const EnvSchema = z.object({
   METRICS_ENABLED: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
   /// Optional bearer token required to scrape /metrics (recommended if exposed).
   METRICS_TOKEN: z.string().optional(),
+  // --- horizontal scaling ---
+  /// Number of Node cluster workers (uses the vCPUs). 1 = single process (default).
+  API_WORKERS: z.coerce.number().int().positive().default(1),
+  /// Shared Redis (ioredis URL). When set, the rate-limit counter and the SAML
+  /// InResponseTo cache use Redis instead of per-process memory — required to run
+  /// more than one worker/node coherently. Unset → in-memory (single process).
+  REDIS_URL: z.string().optional(),
   /// Dev-only `x-user-id` auth bypass. Strict opt-in: only enabled when set to
   /// "true" AND NODE_ENV is not production. Unset = disabled (fail-closed).
   AUTH_DEV_HEADER: z
