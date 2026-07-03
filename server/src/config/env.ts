@@ -100,7 +100,10 @@ const EnvSchema = z.object({
   // --- upload antivirus ---
   CLAMAV_HOST: z.string().optional(),           // clamd host (blank = heuristic-only scan)
   CLAMAV_PORT: z.coerce.number().int().positive().default(3310),
-  AV_TIMEOUT_MS: z.coerce.number().int().positive().default(8000),
+  // Idle timeout for a clamd INSTREAM scan. Large media (a 238 MB video) takes far
+  // longer than a few seconds to scan, so the default is generous — an oversized
+  // upload otherwise fails with "ClamAV: délai dépassé" and is blocked (fail-closed).
+  AV_TIMEOUT_MS: z.coerce.number().int().positive().default(120_000),
   // If a scanner (CLAMAV_HOST) is configured but clamd is unreachable: true = block
   // the upload (secure default), false = allow it (heuristic still applied). Only
   // matters when CLAMAV_HOST is set; with no scanner every upload is heuristic-only.

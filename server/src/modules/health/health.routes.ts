@@ -23,8 +23,10 @@ export async function healthRoutes(app: FastifyInstance) {
   app.get("/health/ready", async (_req, reply) => {
     let db = false;
     try { await prisma.$queryRaw`SELECT 1`; db = true; } catch { /* db down */ }
+    // A readiness probe must stay fast — use a short fixed timeout, NOT the (large)
+    // scan timeout, so a down clamd doesn't make /health/ready hang for minutes.
     const clamav: boolean | "disabled" = env.CLAMAV_HOST
-      ? await pingTcp(env.CLAMAV_HOST, env.CLAMAV_PORT, env.AV_TIMEOUT_MS)
+      ? await pingTcp(env.CLAMAV_HOST, env.CLAMAV_PORT, 2000)
       : "disabled";
     return reply.status(db ? 200 : 503).send({
       status: db ? "ready" : "not_ready",
