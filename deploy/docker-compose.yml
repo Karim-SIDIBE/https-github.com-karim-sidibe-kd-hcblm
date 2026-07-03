@@ -110,6 +110,9 @@ services:
     mem_limit: 1536m
     volumes:
       - clamav_db:/var/lib/clamav        # persist the virus DB across restarts
+      # Raised scan size limits (StreamMaxLength etc.) so large media is scanned
+      # instead of rejected as "indisponible". See deploy/clamav/clamd.conf.
+      - ./clamav/clamd.conf:/etc/clamav/clamd.conf:ro
     healthcheck:
       test: ["CMD", "clamdcheck.sh"]
       interval: 30s
