@@ -35,6 +35,7 @@ import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
+import { render as renderMetrics, recordHttp, requestStarted, requestEnded } from "./lib/metrics.js";
 
 export async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify({
@@ -80,6 +81,25 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Multipart uploads (media assets), capped by MEDIA_MAX_BYTES.
   await app.register(multipart, { limits: { fileSize: env.MEDIA_MAX_BYTES } });
+
+  // Observability: record per-request metrics (rate/latency/errors) and expose
+  // them for Prometheus. Off unless METRICS_ENABLED; the route label is the
+  // Fastify route pattern (bounded cardinality), not the raw URL.
+  if (env.METRICS_ENABLED) {
+    app.addHook("onRequest", async () => { requestStarted(); });
+    app.addHook("onResponse", async (req, reply) => {
+      requestEnded();
+      const route = (req.routeOptions?.url as string | undefined) ?? "unmatched";
+      recordHttp(req.method, route, reply.statusCode, (reply.elapsedTime ?? 0) / 1000);
+    });
+    // Top-level /metrics (not under the /api/v1 prefix), optionally token-guarded.
+    app.get("/metrics", async (req, reply) => {
+      if (env.METRICS_TOKEN && req.headers["authorization"] !== `Bearer ${env.METRICS_TOKEN}`) {
+        return reply.status(401).send({ error: "unauthenticated" });
+      }
+      return reply.header("content-type", "text/plain; version=0.0.4; charset=utf-8").send(renderMetrics());
+    });
+  }
 
   // Parse application/x-www-form-urlencoded (SAML IdP posts the ACS form-encoded).
   app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {

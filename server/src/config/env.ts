@@ -108,6 +108,11 @@ const EnvSchema = z.object({
   /// Trust the reverse proxy (Caddy) so req.ip is the real client IP (correct
   /// rate-limit isolation + audit) instead of the proxy's socket address.
   TRUST_PROXY: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  // --- observability ---
+  /// Expose Prometheus metrics at GET /metrics (off by default). Scrape internally.
+  METRICS_ENABLED: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+  /// Optional bearer token required to scrape /metrics (recommended if exposed).
+  METRICS_TOKEN: z.string().optional(),
   /// Dev-only `x-user-id` auth bypass. Strict opt-in: only enabled when set to
   /// "true" AND NODE_ENV is not production. Unset = disabled (fail-closed).
   AUTH_DEV_HEADER: z

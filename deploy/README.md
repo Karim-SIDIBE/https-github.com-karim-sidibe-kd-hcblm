@@ -81,6 +81,14 @@ nano deploy/.env   # remplir POSTGRES_PASSWORD + clés JWT + FIELD_ENCRYPTION_KE
 > `docker compose ... up -d --build`. Vérifier ensuite que le process tourne non‑root :
 > `docker compose ... exec api id` doit afficher `uid=1000(node)`.
 
+> **Observabilité & résilience (Vague B).** L'API expose `/health`, `/health/db`,
+> `/health/ready` (readiness DB + état clamd) et, si `METRICS_ENABLED=true`,
+> `/metrics` (Prometheus, protégé par `METRICS_TOKEN`, à scraper sur le réseau
+> Docker interne). Drill de restauration non‑destructif : `deploy/verify-restore.sh`
+> (restaure le dernier dump dans une base jetable et vérifie le schéma). Tests de
+> charge : `deploy/loadtest/learner-load.js` (k6). Détails, scrape config, règles
+> d'alerte et cibles SLA : `docs/ops/observability.md`.
+
 ## 4. Lancer la stack
 
 ```bash
