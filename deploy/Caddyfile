@@ -22,9 +22,9 @@
 }
 
 # Extra headers for the static single-page front-ends (PWA / admin / entreprise).
-# The CSP ships in REPORT-ONLY first: it never blocks, only reports violations,
-# so we harden without risking the app. Once the field shows no legitimate
-# violations, rename the header to "Content-Security-Policy" to enforce it.
+# The CSP shipped in Report-Only first (2026-07-02 → 2026-07-07); the observation
+# window showed no legitimate violations, so it is now ENFORCED. If a front ever
+# needs a new external origin, add it to the policy below — don't remove the header.
 (sec_spa) {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
@@ -35,7 +35,7 @@
 		X-Frame-Options "SAMEORIGIN"
 		-Server
 	}
-	header Content-Security-Policy-Report-Only "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://api.declick.digital; media-src 'self' blob: https://api.declick.digital; worker-src 'self' blob:; manifest-src 'self'"
+	header Content-Security-Policy "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'self'; form-action 'self'; img-src 'self' data: blob:; font-src 'self' data: https://fonts.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; script-src 'self'; connect-src 'self' https://api.declick.digital; media-src 'self' blob: https://api.declick.digital; worker-src 'self' blob:; manifest-src 'self'"
 }
 
 # --- API (Fastify, reverse-proxied) ---
