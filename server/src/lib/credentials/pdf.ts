@@ -51,29 +51,43 @@ function templatePath(level: 1 | 2 | 3, dir?: string): string | null {
   return null;
 }
 
+type Fonts = { regular: string; bold: string };
+
+/** Brand font (Montserrat, OFL — assets/fonts/); falls back to Helvetica. */
+function registerFonts(doc: PDFKit.PDFDocument): Fonts {
+  const reg = resolve("assets/fonts/Montserrat-Regular.ttf");
+  const bold = resolve("assets/fonts/Montserrat-Bold.ttf");
+  if (existsSync(reg) && existsSync(bold)) {
+    doc.registerFont("cert", reg);
+    doc.registerFont("cert-bold", bold);
+    return { regular: "cert", bold: "cert-bold" };
+  }
+  return { regular: "Helvetica", bold: "Helvetica-Bold" };
+}
+
 type Run = { text: string; bold?: boolean };
 
 /** Draw one line of mixed regular/bold runs, centered at width/2. */
-function centeredRuns(doc: PDFKit.PDFDocument, runs: Run[], y: number, size: number, color: string) {
+function centeredRuns(doc: PDFKit.PDFDocument, f: Fonts, runs: Run[], y: number, size: number, color: string) {
   const width = runs.reduce(
-    (sum, r) => sum + doc.font(r.bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).widthOfString(r.text),
+    (sum, r) => sum + doc.font(r.bold ? f.bold : f.regular).fontSize(size).widthOfString(r.text),
     0,
   );
   let x = (doc.page.width - width) / 2;
   for (const r of runs) {
-    doc.font(r.bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).fillColor(color);
+    doc.font(r.bold ? f.bold : f.regular).fontSize(size).fillColor(color);
     doc.text(r.text, x, y, { lineBreak: false });
     x += doc.widthOfString(r.text);
   }
 }
 
 /** Largest font size ≤ max where every line of runs fits in maxWidth. */
-function fitSize(doc: PDFKit.PDFDocument, lines: Run[][], max: number, min: number, maxWidth: number): number {
+function fitSize(doc: PDFKit.PDFDocument, f: Fonts, lines: Run[][], max: number, min: number, maxWidth: number): number {
   for (let size = max; size >= min; size -= 0.5) {
     const fits = lines.every(
       (runs) =>
         runs.reduce(
-          (sum, r) => sum + doc.font(r.bold ? "Helvetica-Bold" : "Helvetica").fontSize(size).widthOfString(r.text),
+          (sum, r) => sum + doc.font(r.bold ? f.bold : f.regular).fontSize(size).widthOfString(r.text),
           0,
         ) <= maxWidth,
     );
@@ -91,6 +105,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
   const W = doc.page.width;   // 841.89
   const H = doc.page.height;  // 595.28
   const tpl = templatePath(d.level, d.templateDir);
+  const f = registerFonts(doc);
   const style = LEVEL_STYLE[d.level];
   const dateStr = d.issuedOn.toLocaleDateString("fr-FR"); // 07/07/2026 — matches the template
   const qr = await QRCode.toBuffer(d.verifyUrl, { margin: 0, width: 160 });
@@ -101,8 +116,8 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
 
     // Learner name — big, centered, level accent color, shrink-to-fit.
     const nameLine: Run[] = [{ text: d.recipientName, bold: true }];
-    const nameSize = fitSize(doc, [nameLine], 38, 20, W * 0.82);
-    centeredRuns(doc, nameLine, H * 0.40, nameSize, style.name);
+    const nameSize = fitSize(doc, f, [nameLine], 38, 20, W * 0.82);
+    centeredRuns(doc, f, nameLine, H * 0.40, nameSize, style.name);
 
     // Attestation paragraph — 4 centered lines, formation + domain in bold.
     const lines: Run[][] = [
@@ -115,16 +130,16 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
       [{ text: "« " }, { text: d.domainLabel || "—", bold: true }, { text: " » et confirme son" }],
       [{ text: "expertise pour le niveau formé." }],
     ];
-    const pSize = fitSize(doc, lines, 14.5, 10, W * 0.86);
+    const pSize = fitSize(doc, f, lines, 14.5, 10, W * 0.86);
     const lineH = pSize * 1.55;
-    lines.forEach((runs, i) => centeredRuns(doc, runs, H * 0.505 + i * lineH, pSize, "#1c1c1c"));
+    lines.forEach((runs, i) => centeredRuns(doc, f, runs, H * 0.505 + i * lineH, pSize, "#1c1c1c"));
 
     // Date + licence values, centered over the template's ruled lines.
-    doc.font("Helvetica-Bold").fontSize(13.5).fillColor("#111");
+    doc.font(f.bold).fontSize(13.5).fillColor("#111");
     doc.text(dateStr, W * 0.263 - doc.widthOfString(dateStr) / 2, H * 0.765, { lineBreak: false });
     const lic = d.licenseId;
-    const licSize = fitSize(doc, [[{ text: lic, bold: true }]], 13.5, 8, W * 0.30);
-    doc.font("Helvetica-Bold").fontSize(licSize);
+    const licSize = fitSize(doc, f, [[{ text: lic, bold: true }]], 13.5, 8, W * 0.30);
+    doc.font(f.bold).fontSize(licSize);
     doc.text(lic, W * 0.5 - doc.widthOfString(lic) / 2, H * 0.765, { lineBreak: false });
 
     // Discreet verification QR (white pad keeps it scannable on any corner art).
@@ -133,7 +148,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     const qy = H * 0.60;
     doc.roundedRect(qx - 4, qy - 4, qs + 8, qs + 8, 4).fill("#ffffff");
     doc.image(qr, qx, qy, { width: qs, height: qs });
-    doc.font("Helvetica").fontSize(5.5).fillColor("#555");
+    doc.font(f.regular).fontSize(5.5).fillColor("#555");
     doc.text("Vérifier l'authenticité", qx - 12, qy + qs + 6, { width: qs + 24, align: "center" });
   } else {
     // ----- fallback drawn mode (no asset for this level) ---------------------
@@ -142,8 +157,8 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     doc.moveDown(0.5).fillColor("#111").fontSize(32).text("Certificat de formation", { width: W - 100, align: "center" });
     doc.moveDown(0.2).fontSize(14).fillColor("#444").text("Attestation de Compétences", { width: W - 100, align: "center" });
     doc.moveDown(1).fontSize(13).text("Ce certificat est fièrement décerné à :", { width: W - 100, align: "center" });
-    doc.moveDown(0.3).fontSize(28).fillColor(style.name).font("Helvetica-Bold").text(d.recipientName, { width: W - 100, align: "center" });
-    doc.moveDown(0.8).font("Helvetica").fontSize(13).fillColor("#333")
+    doc.moveDown(0.3).fontSize(28).fillColor(style.name).font(f.bold).text(d.recipientName, { width: W - 100, align: "center" });
+    doc.moveDown(0.8).font(f.regular).fontSize(13).fillColor("#333")
       .text(`Formation « ${d.courseTitle} » — domaine « ${d.domainLabel || "—"} » (niveau ${d.level})`, { width: W - 100, align: "center" });
     doc.moveDown(0.3).fontSize(12).fillColor("#555").text(d.achievementName, { width: W - 100, align: "center" });
     doc.moveDown(1).fontSize(11).fillColor("#666").text(`Date de délivrance : ${dateStr}`, { width: W - 100, align: "center" });
