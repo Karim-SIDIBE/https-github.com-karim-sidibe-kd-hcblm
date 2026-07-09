@@ -35,11 +35,12 @@ export type CertificateData = {
   templateDir?: string;
 };
 
-/** Per-level accents matching the branded templates (N1 blue, N2 green, N3 gold). */
-const LEVEL_STYLE: Record<1 | 2 | 3, { name: string; accent: string }> = {
-  1: { name: "#1E5AA6", accent: "#2B5EA7" },
-  2: { name: "#17513F", accent: "#1E5B4F" },
-  3: { name: "#111111", accent: "#B4691E" },
+/** Per-level accents matching the branded templates (N1 blue, N2 green, N3 gold).
+ *  dateX = measured center of each template's "Date de délivrance" rule line. */
+const LEVEL_STYLE: Record<1 | 2 | 3, { name: string; accent: string; dateX: number }> = {
+  1: { name: "#1E5AA6", accent: "#2B5EA7", dateX: 0.212 },
+  2: { name: "#17513F", accent: "#1E5B4F", dateX: 0.228 },
+  3: { name: "#111111", accent: "#B4691E", dateX: 0.212 },
 };
 
 function templatePath(level: 1 | 2 | 3, dir?: string): string | null {
@@ -136,7 +137,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
 
     // Date + licence values, centered over the template's ruled lines.
     doc.font(f.bold).fontSize(13.5).fillColor("#111");
-    doc.text(dateStr, W * 0.263 - doc.widthOfString(dateStr) / 2, H * 0.765, { lineBreak: false });
+    doc.text(dateStr, W * style.dateX - doc.widthOfString(dateStr) / 2, H * 0.765, { lineBreak: false });
     const lic = d.licenseId;
     const licSize = fitSize(doc, f, [[{ text: lic, bold: true }]], 13.5, 8, W * 0.30);
     doc.font(f.bold).fontSize(licSize);
@@ -144,7 +145,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
 
     // Discreet verification QR (white pad keeps it scannable on any corner art).
     const qs = 50;
-    const qx = W * 0.925 - qs;
+    const qx = W * 0.075;
     const qy = H * 0.60;
     doc.roundedRect(qx - 4, qy - 4, qs + 8, qs + 8, 4).fill("#ffffff");
     doc.image(qr, qx, qy, { width: qs, height: qs });
