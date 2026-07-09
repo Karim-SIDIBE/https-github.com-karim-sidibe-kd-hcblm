@@ -183,10 +183,16 @@ export async function certificate(id: string): Promise<Buffer> {
   });
   if (!c) throw new CredentialError(404, "not_found", "Credential introuvable");
   const a = c.assertion as { badge?: { name?: string } };
+  // Level selects the branded template (N1/N2/N3); domain feeds the paragraph.
+  const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3; domain?: { label?: string } } | null;
+  const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
   return certificatePdf({
     recipientName: c.enrollment.user.name,
     achievementName: a.badge?.name ?? c.achievementType,
     courseTitle: c.enrollment.courseVersion.title,
+    domainLabel: content?.domain?.label ?? "",
+    level,
+    licenseId: c.id,
     issuedOn: c.issuedAt,
     verifyUrl: credentialUrl(c.id),
   });
