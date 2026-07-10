@@ -153,7 +153,7 @@ export async function registerExternal(params: { url: string; mime: string; dura
 }
 
 /** Media library listing (authoring). Newest first, with available renditions. */
-export async function listMedia(limit = 200) {
+export async function listMedia(limit = 500) {
   const assets = await prisma.mediaAsset.findMany({
     orderBy: { createdAt: "desc" }, take: limit,
     include: { renditions: { select: { label: true, available: true } } },
@@ -161,8 +161,105 @@ export async function listMedia(limit = 200) {
   return assets.map((a) => ({
     id: a.id, kind: a.kind, filename: a.originalFilename, mime: a.mime,
     sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, error: a.error, createdAt: a.createdAt,
+    folderId: a.folderId,
     renditions: a.renditions.filter((r) => r.available).map((r) => r.label),
   }));
+}
+
+// --- library folders (one folder ≈ one course) --------------------------------
+
+function validFolderName(raw: string): string {
+  const name = raw.trim().replace(/\s+/g, " ");
+  if (!name || name.length > 80) throw new MediaError(422, "invalid_name", "Nom de dossier invalide (1 à 80 caractères)");
+  return name;
+}
+
+function isUniqueViolation(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: string }).code === "P2002";
+}
+
+/** Folders sorted by name, with how many assets each contains. */
+export async function listFolders() {
+  const folders = await prisma.mediaFolder.findMany({
+    orderBy: { name: "asc" },
+    include: { _count: { select: { assets: true } } },
+  });
+  return folders.map((f) => ({ id: f.id, name: f.name, assetCount: f._count.assets, createdAt: f.createdAt }));
+}
+
+/** Case-insensitive duplicate check ("Parcours A" vs "parcours a" is confusing). */
+async function assertNameFree(name: string, excludeId?: string) {
+  const dup = await prisma.mediaFolder.findFirst({
+    where: { name: { equals: name, mode: "insensitive" }, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+  });
+  if (dup) throw new MediaError(409, "duplicate_name", `Un dossier « ${dup.name} » existe déjà`);
+}
+
+export async function createFolder(rawName: string) {
+  const name = validFolderName(rawName);
+  await assertNameFree(name);
+  try {
+    const f = await prisma.mediaFolder.create({ data: { name } });
+    return { id: f.id, name: f.name, assetCount: 0, createdAt: f.createdAt };
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new MediaError(409, "duplicate_name", `Un dossier « ${name} » existe déjà`);
+    throw e;
+  }
+}
+
+export async function renameFolder(id: string, rawName: string) {
+  const name = validFolderName(rawName);
+  await assertNameFree(name, id);
+  try {
+    const f = await prisma.mediaFolder.update({ where: { id }, data: { name }, include: { _count: { select: { assets: true } } } });
+    return { id: f.id, name: f.name, assetCount: f._count.assets, createdAt: f.createdAt };
+  } catch (e) {
+    if (isUniqueViolation(e)) throw new MediaError(409, "duplicate_name", `Un dossier « ${name} » existe déjà`);
+    if (typeof e === "object" && e !== null && (e as { code?: string }).code === "P2025") {
+      throw new MediaError(404, "not_found", "Dossier introuvable");
+    }
+    throw e;
+  }
+}
+
+/** Delete a folder — only when empty (move its media out first). */
+export async function deleteFolder(id: string) {
+  const f = await prisma.mediaFolder.findUnique({ where: { id }, include: { _count: { select: { assets: true } } } });
+  if (!f) throw new MediaError(404, "not_found", "Dossier introuvable");
+  if (f._count.assets > 0) {
+    throw new MediaError(409, "not_empty", `Le dossier « ${f.name} » contient ${f._count.assets} média(s) — déplacez-les d'abord`);
+  }
+  await prisma.mediaFolder.delete({ where: { id } });
+  return { id };
+}
+
+/** Rename an asset and/or move it to a folder (folderId null = library root). */
+export async function updateAsset(id: string, patch: { filename?: string; folderId?: string | null }) {
+  const asset = await prisma.mediaAsset.findUnique({ where: { id } });
+  if (!asset) throw new MediaError(404, "not_found", "Média introuvable");
+  const data: { originalFilename?: string; folderId?: string | null } = {};
+  if (patch.filename !== undefined) {
+    const filename = patch.filename.trim().replace(/\s+/g, " ");
+    if (!filename || filename.length > 140) throw new MediaError(422, "invalid_name", "Nom de média invalide (1 à 140 caractères)");
+    data.originalFilename = filename;
+  }
+  if (patch.folderId !== undefined) {
+    if (patch.folderId !== null) {
+      const folder = await prisma.mediaFolder.findUnique({ where: { id: patch.folderId } });
+      if (!folder) throw new MediaError(404, "folder_not_found", "Dossier introuvable");
+    }
+    data.folderId = patch.folderId;
+  }
+  const a = await prisma.mediaAsset.update({
+    where: { id }, data,
+    include: { renditions: { select: { label: true, available: true } } },
+  });
+  return {
+    id: a.id, kind: a.kind, filename: a.originalFilename, mime: a.mime,
+    sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, error: a.error, createdAt: a.createdAt,
+    folderId: a.folderId,
+    renditions: a.renditions.filter((r) => r.available).map((r) => r.label),
+  };
 }
 
 export async function getAsset(id: string) {
