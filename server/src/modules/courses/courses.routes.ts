@@ -20,6 +20,7 @@ import {
 } from "./courses.service.js";
 import { guard, authenticate } from "../../lib/auth.js";
 import { resolveTenant, memberOrgIds } from "../../lib/tenant.js";
+import { importFromCourse } from "../bank/bank.service.js";
 import { audit } from "../../lib/audit.js";
 import { scanUpload } from "../../lib/av/scan.js";
 
@@ -170,11 +171,19 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- publish / archive (admin path) ---
   app.post("/versions/:versionId/publish", { preHandler: guard("course:publish") }, async (req, reply) => {
     const { versionId } = versionParam.parse(req.params);
+    // Opt-in harvest: when the author ticks « Alimenter la banque de questions »
+    // the published version's scored questions are upserted into the bank.
+    const { feedBank } = z.object({ feedBank: z.boolean().default(false) }).parse(req.body ?? {});
     try {
       const published = await publishVersion(versionId);
       if (!published) return reply.notFound("Version introuvable");
       await audit({ actorId: req.principal!.id, action: "course.publish", targetType: "CourseVersion", targetId: versionId, ip: req.ip });
-      return { data: published };
+      let bank: { total: number; created: number; updated: number } | undefined;
+      if (feedBank) {
+        bank = await importFromCourse(published.courseId, { createdById: req.principal?.id });
+        await audit({ actorId: req.principal!.id, action: "bank.import", targetType: "Course", targetId: published.courseId, ip: req.ip });
+      }
+      return { data: published, bank };
     } catch (err) { return mapErr(reply, err); }
   });
 

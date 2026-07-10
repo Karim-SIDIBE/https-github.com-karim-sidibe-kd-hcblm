@@ -106,7 +106,7 @@ export type MediaFolder = { id: string; name: string; assetCount: number; create
 export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[] };
 export type Seats = { seats: number; used: number; available: number };
 export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
-export type BankQuestion = { id: string; question: any; subArea: string; level: string; createdAt: string };
+export type BankQuestion = { id: string; question: any; subArea: string; level: string; status: string; origin: string; note: string; sourceCourseId: string | null; createdAt: string };
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
@@ -142,7 +142,15 @@ export const api = {
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
   // Question bank (reusable questions inserted into course quizzes).
-  bankQuestions: (subArea?: string) => req<BankQuestion[]>("GET", `/bank/questions${subArea ? `?subArea=${encodeURIComponent(subArea)}` : ""}`),
+  bankQuestions: (subArea?: string, status?: string) => {
+    const q = new URLSearchParams();
+    if (subArea) q.set("subArea", subArea);
+    if (status) q.set("status", status);
+    const qs = q.toString();
+    return req<BankQuestion[]>("GET", `/bank/questions${qs ? `?${qs}` : ""}`);
+  },
+  approveBankQuestion: (id: string) => req<BankQuestion>("POST", `/bank/questions/${id}/approve`, {}),
+  importBankFromCourse: (courseId: string) => req<{ total: number; created: number; updated: number }>("POST", `/bank/import/${courseId}`, {}),
   bankSubAreas: () => req<string[]>("GET", "/bank/subareas"),
   addBankQuestion: (b: { question: unknown; subArea?: string; level?: string }) => req<BankQuestion>("POST", "/bank/questions", b),
   deleteBankQuestion: (id: string) => req<{ id: string }>("DELETE", `/bank/questions/${id}`),
@@ -221,7 +229,7 @@ export const api = {
   newVersion: (courseId: string, content: unknown) => req<{ id: string; version: number; status: string }>("POST", `/courses/${courseId}/versions`, { content }),
   submitReview: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/submit-review`, {}),
   reviewVersion: (versionId: string, decision: "approve" | "request_changes", notes?: string) => req<{ status: string }>("POST", `/versions/${versionId}/review`, { decision, notes }),
-  publishVersion: (versionId: string) => req<unknown>("POST", `/versions/${versionId}/publish`, {}),
+  publishVersion: (versionId: string, feedBank = false) => req<unknown>("POST", `/versions/${versionId}/publish`, { feedBank }),
   issuer: () => req<Issuer>("GET", "/credentials/issuer"),
   webhooks: () => req<Webhook[]>("GET", "/webhooks"),
 };

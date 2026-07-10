@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { BankError, createBankQuestion, deleteBankQuestion, distinctSubAreas, listBankQuestions, randomBankQuestions } from "./bank.service.js";
+import { BankError, approveBankQuestion, createBankQuestion, deleteBankQuestion, distinctSubAreas, importFromCourse, listBankQuestions, randomBankQuestions } from "./bank.service.js";
 import { guard } from "../../lib/auth.js";
 
 function handle(reply: FastifyReply, err: unknown) {
@@ -10,8 +10,21 @@ function handle(reply: FastifyReply, err: unknown) {
 
 export async function bankRoutes(app: FastifyInstance) {
   app.get("/bank/questions", { preHandler: guard("course:read") }, async (req) => {
-    const { subArea } = z.object({ subArea: z.string().optional() }).parse(req.query ?? {});
-    return { data: await listBankQuestions(subArea) };
+    const { subArea, status } = z.object({ subArea: z.string().optional(), status: z.enum(["approved", "pending"]).optional() }).parse(req.query ?? {});
+    return { data: await listBankQuestions(subArea, status) };
+  });
+
+  // Approve a pending (imported/AI) question — it becomes drawable by pools.
+  app.post("/bank/questions/:id/approve", { preHandler: guard("course:update") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await approveBankQuestion(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Harvest all scored questions of a published course into the bank (idempotent).
+  app.post("/bank/import/:courseId", { preHandler: guard("course:update") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    try { return { data: await importFromCourse(courseId, { createdById: req.principal?.id }) }; }
+    catch (err) { return handle(reply, err); }
   });
 
   app.get("/bank/subareas", { preHandler: guard("course:read") }, async () => ({ data: await distinctSubAreas() }));

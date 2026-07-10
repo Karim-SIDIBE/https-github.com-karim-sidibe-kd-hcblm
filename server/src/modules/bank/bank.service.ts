@@ -6,17 +6,70 @@
  */
 import { prisma } from "../../db/prisma.js";
 import { ScoredQuestion } from "../../domain/content-model.js";
+import { extractScoredQuestions } from "../../domain/bank/extract.js";
 
 export class BankError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
 }
 
-export async function listBankQuestions(subArea?: string) {
+export async function listBankQuestions(subArea?: string, status?: string) {
   return prisma.bankQuestion.findMany({
-    where: subArea ? { subArea } : {},
+    where: { ...(subArea ? { subArea } : {}), ...(status ? { status } : {}) },
     orderBy: { createdAt: "desc" },
-    take: 500,
+    take: 1000,
   });
+}
+
+/** Approve a pending question (make it drawable by pools). */
+export async function approveBankQuestion(id: string) {
+  const q = await prisma.bankQuestion.findUnique({ where: { id } });
+  if (!q) throw new BankError(404, "not_found", "Question introuvable");
+  return prisma.bankQuestion.update({ where: { id }, data: { status: "approved" } });
+}
+
+/**
+ * Harvest every scored question of a course's latest PUBLISHED version into
+ * the bank. Idempotent: re-importing (or re-publishing) upserts by provenance
+ * (courseId + quiz-scoped question id) instead of duplicating. Harvested
+ * questions are human-authored and already went through the publish gate, so
+ * they enter as "approved".
+ */
+export async function importFromCourse(courseId: string, opts: { createdById?: string } = {}) {
+  const version = await prisma.courseVersion.findFirst({
+    where: { courseId, status: "PUBLISHED" },
+    orderBy: { version: "desc" },
+  });
+  if (!version) throw new BankError(404, "not_published", "Aucune version publiée pour ce parcours");
+  const content = version.content as { level?: number; domain?: { label?: string } };
+  const items = extractScoredQuestions(version.content as never);
+  const fallbackSubArea = content.domain?.label?.trim() ?? "";
+  const level = content.level != null ? String(content.level) : "";
+  let created = 0;
+  let updated = 0;
+  for (const it of items) {
+    const subArea = it.question.subArea?.trim() || fallbackSubArea;
+    const existing = await prisma.bankQuestion.findUnique({
+      where: { sourceCourseId_sourceQuestionId: { sourceCourseId: courseId, sourceQuestionId: it.key } },
+    });
+    if (existing) {
+      await prisma.bankQuestion.update({
+        where: { id: existing.id },
+        data: { question: it.question as object, subArea, level },
+      });
+      updated++;
+    } else {
+      await prisma.bankQuestion.create({
+        data: {
+          question: it.question as object, subArea, level,
+          status: "approved", origin: "course", note: it.quiz,
+          sourceCourseId: courseId, sourceQuestionId: it.key,
+          createdById: opts.createdById ?? null,
+        },
+      });
+      created++;
+    }
+  }
+  return { total: items.length, created, updated };
 }
 
 export async function distinctSubAreas(): Promise<string[]> {
@@ -59,9 +112,10 @@ export async function materializeQuiz(enrollmentId: string, quizKey: string, con
   return questions;
 }
 
-/** Draw up to `count` questions (optionally filtered by sub-area), shuffled. */
+/** Draw up to `count` APPROVED questions (optionally by sub-area), shuffled.
+ *  Pending (unreviewed) questions are never served to learners. */
 export async function randomBankQuestions(subArea: string | undefined, count: number): Promise<unknown[]> {
-  const all = await prisma.bankQuestion.findMany({ where: subArea ? { subArea } : {}, select: { question: true } });
+  const all = await prisma.bankQuestion.findMany({ where: { status: "approved", ...(subArea ? { subArea } : {}) }, select: { question: true } });
   for (let i = all.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [all[i], all[j]] = [all[j]!, all[i]!];

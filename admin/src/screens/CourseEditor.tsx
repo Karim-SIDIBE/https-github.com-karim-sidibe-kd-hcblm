@@ -92,7 +92,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
   async function publish() {
     if (!versionId) return;
     setBusy("publish"); setMsg(null);
-    try { await api.publishVersion(versionId); setMsg("✅ Version publiée."); onSaved(); }
+    try { await api.publishVersion(versionId, feedBank); setMsg(`✅ Version publiée.${feedBank ? " Questions versées à la banque." : ""}`); onSaved(); }
     catch (e: any) { setMsg("Publication refusée : " + (e?.message || "la version doit passer la validation")); } finally { setBusy(""); }
   }
   /** One-click: save the current content as a new version AND publish it. */
@@ -101,7 +101,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
     try {
       const vid = await saveDraft();
       if (!vid) { setBusy(""); return; }
-      await api.publishVersion(vid);
+      await api.publishVersion(vid, feedBank);
       setMsg("✅ Cours publié — visible des apprenants. Pour un apprenant déjà inscrit : Apprenants → « Maj version » ou « Réinitialiser ».");
       onSaved();
     } catch (e: any) { setMsg("Publication refusée : " + (e?.message || "la version doit passer la validation complète")); } finally { setBusy(""); }
@@ -113,6 +113,8 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
     catch (e: any) { setMsg("Soumission refusée : " + (e?.message || "la version doit être un brouillon valide")); } finally { setBusy(""); }
   }
   const canPublish = CAN_PUBLISH.includes(auth.user()?.role ?? "");
+  // Opt-in harvest at publish time (checked by default — author keeps control).
+  const [feedBank, setFeedBank] = useState(true);
 
   const issues: ValidationIssue[] = useMemo(() => {
     if (!result) return [];
@@ -141,6 +143,9 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
           <button className={`btn ${preview ? "btn--primary" : ""}`} onClick={() => setPreview((v) => !v)}>{preview ? "← Retour à l'édition" : "👁 Voir comme apprenant"}</button>
           <button className="btn" disabled={busy === "validate"} onClick={validate} title="Vérifie la validité du parcours (ne publie pas)">{busy === "validate" ? "…" : "Valider"}</button>
           <button className="btn" disabled={busy === "save"} onClick={save}>{busy === "save" ? "…" : "Enregistrer (brouillon)"}</button>
+          {canPublish && <label className="row" style={{ gap: 6, alignItems: "center", fontSize: 12.5, marginRight: 8 }} title="À la publication, les questions notées du parcours sont versées dans la banque de questions (mise à jour sans doublons)">
+            <input type="checkbox" checked={feedBank} onChange={(e) => setFeedBank(e.target.checked)} /> Alimenter la banque de questions
+          </label>}
           {canPublish && <button className="btn btn--primary" disabled={busy === "publish"} onClick={saveAndPublish} title="Enregistre et publie : le parcours devient visible des apprenants">{busy === "publish" ? "…" : "🚀 Publier"}</button>}
         </div>
       </div>
