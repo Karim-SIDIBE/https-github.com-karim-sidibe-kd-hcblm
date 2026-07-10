@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, assertAssetAccessible, assetIdFromKey, createFromUpload, deleteMedia, getAsset, listMedia, playbackManifest, registerExternal, resolveRendition } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, createFolder, createFromUpload, deleteFolder, deleteMedia, getAsset, listFolders, listMedia, playbackManifest, registerExternal, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
 import { env } from "../../config/env.js";
@@ -57,6 +57,34 @@ async function sendObject(req: FastifyRequest, reply: FastifyReply, storageKey: 
 export async function mediaRoutes(app: FastifyInstance) {
   // Media library (authoring) — authors/admins.
   app.get("/media", { preHandler: guard("media:manage") }, async () => ({ data: await listMedia() }));
+
+  // --- library folders (create / rename / delete-when-empty) ---
+  app.get("/media/folders", { preHandler: guard("media:manage") }, async () => ({ data: await listFolders() }));
+
+  app.post("/media/folders", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { name } = z.object({ name: z.string() }).parse(req.body);
+    try { return reply.status(201).send({ data: await createFolder(name) }); } catch (err) { return handle(reply, err); }
+  });
+
+  app.patch("/media/folders/:id", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { name } = z.object({ name: z.string() }).parse(req.body);
+    try { return { data: await renameFolder(id, name) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.delete("/media/folders/:id", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await deleteFolder(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Rename an asset and/or move it into a folder (folderId null = root).
+  app.patch("/media/:id", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const body = z.object({ filename: z.string().optional(), folderId: z.string().nullable().optional() })
+      .refine((b) => b.filename !== undefined || b.folderId !== undefined, { message: "Aucun champ à modifier" })
+      .parse(req.body);
+    try { return { data: await updateAsset(id, body) }; } catch (err) { return handle(reply, err); }
+  });
 
   // Upload a media file (multipart). Authors only.
   app.post("/media", { preHandler: guard("media:manage") }, async (req, reply) => {

@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { api, type MediaAsset, ApiError } from "../lib/api";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { api, type MediaAsset, type MediaFolder, ApiError } from "../lib/api";
 import { ago } from "../lib/ui";
 
 const STATUS: Record<string, { cls: string; label: string }> = {
@@ -18,24 +18,72 @@ function dur(s: number | null) { if (!s) return "—"; const m = Math.floor(s / 
 
 export function Medias() {
   const [rows, setRows] = useState<MediaAsset[] | null>(null);
+  const [folders, setFolders] = useState<MediaFolder[]>([]);
+  // Library filter: "all" | "root" (sans dossier) | a folder id.
+  const [sel, setSel] = useState<string>("all");
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function load() { try { setRows(await api.media()); } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); setRows([]); } }
+  async function load() {
+    try {
+      const [assets, fold] = await Promise.all([api.media(), api.mediaFolders()]);
+      setRows(assets); setFolders(fold);
+    } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); setRows([]); }
+  }
   useEffect(() => { void load(); }, []);
 
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
     setBusy(true); setNote(null);
+    // Uploads land in the folder currently open (root if "Tous" / "Racine").
+    const target = sel !== "all" && sel !== "root" ? sel : null;
     let ok = 0;
     for (const f of Array.from(files)) {
-      try { const a = await api.uploadMedia(f); ok++; setNote(`✅ « ${a.filename ?? f.name} » téléversé (${a.status}).`); }
+      try {
+        const a = await api.uploadMedia(f);
+        if (target) await api.updateMedia(a.id, { folderId: target });
+        ok++; setNote(`✅ « ${a.filename ?? f.name} » téléversé (${a.status})${target ? ` dans « ${folders.find((x) => x.id === target)?.name} »` : ""}.`);
+      }
       catch (e) { setNote(`✗ ${f.name} : ${e instanceof ApiError ? e.message : "échec"}`); }
     }
     setBusy(false);
     if (fileRef.current) fileRef.current.value = "";
     if (ok) load();
+  }
+
+  // --- dossiers ---
+  async function createFolder() {
+    const name = window.prompt("Nom du nouveau dossier (ex. le nom du parcours) :");
+    if (!name?.trim()) return;
+    try { const f = await api.createMediaFolder(name); setNote(`📁 Dossier « ${f.name} » créé.`); setSel(f.id); load(); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Création impossible"); }
+  }
+  async function renameFolder(f: MediaFolder) {
+    const name = window.prompt("Nouveau nom du dossier :", f.name);
+    if (!name?.trim() || name.trim() === f.name) return;
+    try { const r = await api.renameMediaFolder(f.id, name); setNote(`📁 Dossier renommé en « ${r.name} ».`); load(); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Renommage impossible"); }
+  }
+  async function removeFolder(f: MediaFolder) {
+    if (!window.confirm(`Supprimer le dossier vide « ${f.name} » ?`)) return;
+    try { await api.deleteMediaFolder(f.id); setNote(`🗑️ Dossier « ${f.name} » supprimé.`); if (sel === f.id) setSel("all"); load(); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
+  }
+
+  // --- médias : renommer / déplacer ---
+  async function renameAsset(m: MediaAsset) {
+    const name = window.prompt("Nouveau nom du média :", m.filename ?? "");
+    if (!name?.trim() || name.trim() === m.filename) return;
+    try { const a = await api.updateMedia(m.id, { filename: name }); setNote(`✏️ Renommé en « ${a.filename} ».`); load(); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Renommage impossible"); }
+  }
+  async function moveAsset(m: MediaAsset, folderId: string | null) {
+    try {
+      await api.updateMedia(m.id, { folderId });
+      setNote(`📁 « ${m.filename ?? m.id} » déplacé vers ${folderId ? `« ${folders.find((f) => f.id === folderId)?.name} »` : "la racine"}.`);
+      load();
+    } catch (e) { setNote(e instanceof ApiError ? e.message : "Déplacement impossible"); }
   }
 
   function copyId(id: string) { navigator.clipboard?.writeText(id).then(() => setNote(`Identifiant copié : ${id}`)).catch(() => {}); }
@@ -59,13 +107,24 @@ export function Medias() {
     } catch (e) { setPreview({ asset: m, renditions: [], sel: "" }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
   }
 
+  const all = rows ?? [];
+  const rootCount = all.filter((m) => !m.folderId).length;
+  const visible = sel === "all" ? all : sel === "root" ? all.filter((m) => !m.folderId) : all.filter((m) => m.folderId === sel);
+  const selFolder = folders.find((f) => f.id === sel) ?? null;
+  const chip = (active: boolean): CSSProperties => ({
+    padding: "5px 12px", borderRadius: 999, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap",
+    border: `1px solid ${active ? "var(--accent, #F36F21)" : "var(--border, #d8dce4)"}`,
+    background: active ? "var(--accent-tint, #FFF3E8)" : "transparent",
+    fontWeight: active ? 600 : 400,
+  });
+
   return (
     <div className="content">
       <div className="pagehead">
         <div>
-          <div className="eyebrow">{rows ? `${rows.length} média${rows.length > 1 ? "s" : ""}` : "…"}</div>
+          <div className="eyebrow">{rows ? `${visible.length} média${visible.length > 1 ? "s" : ""}${sel !== "all" ? ` · ${selFolder ? selFolder.name : "racine"}` : ""}` : "…"}</div>
           <h1>Médiathèque</h1>
-          <div className="sub">Téléversez vos vidéos et ressources. Elles seront transcodées et liables aux micro-sessions.</div>
+          <div className="sub">Téléversez vos vidéos et ressources, organisées en dossiers (un dossier ≈ un parcours). Le téléversement va dans le dossier ouvert.</div>
         </div>
         <div>
           <input ref={fileRef} type="file" accept="video/*,audio/*,image/*,text/vtt" multiple style={{ display: "none" }} onChange={(e) => upload(e.target.files)} />
@@ -73,18 +132,42 @@ export function Medias() {
         </div>
       </div>
 
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+        <span style={chip(sel === "all")} onClick={() => setSel("all")}>Tous ({all.length})</span>
+        <span style={chip(sel === "root")} onClick={() => setSel("root")}>Racine ({rootCount})</span>
+        {folders.map((f) => (
+          <span key={f.id} style={chip(sel === f.id)} onClick={() => setSel(f.id)}>📁 {f.name} ({f.assetCount})</span>
+        ))}
+        <button className="btn btn--sm" onClick={createFolder} title="Créer un dossier (ex. un par parcours)">＋ Dossier</button>
+        {selFolder && (
+          <>
+            <button className="btn btn--sm" onClick={() => renameFolder(selFolder)} title="Renommer ce dossier">✏️ Renommer</button>
+            {selFolder.assetCount === 0 && (
+              <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => removeFolder(selFolder)} title="Supprimer ce dossier vide">🗑️</button>
+            )}
+          </>
+        )}
+      </div>
+
       {note && <div className="card" style={{ background: note.startsWith("✅") || note.startsWith("Identifiant") ? "var(--success-tint)" : "var(--warning-tint)", border: "none", padding: "11px 14px", marginBottom: 14, fontSize: 13 }} onClick={() => setNote(null)}>{note}</div>}
 
       <div className="card">
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Fichier</th><th>Type</th><th>Durée</th><th>Taille</th><th>Qualités</th><th>État</th><th>Ajouté</th><th>Identifiant</th></tr></thead>
+            <thead><tr><th>Fichier</th><th>Dossier</th><th>Type</th><th>Durée</th><th>Taille</th><th>Qualités</th><th>État</th><th>Ajouté</th><th>Identifiant</th></tr></thead>
             <tbody>
-              {(rows ?? []).map((m) => {
+              {visible.map((m) => {
                 const st = STATUS[m.status] ?? { cls: "pill--soft", label: m.status };
                 return (
                   <tr key={m.id}>
                     <td><b style={{ fontSize: 13 }}>{m.filename ?? "(sans nom)"}</b><div style={{ fontSize: 11, color: "var(--fg-3)" }}>{m.mime}</div></td>
+                    <td>
+                      <select value={m.folderId ?? ""} title="Déplacer vers un dossier" style={{ fontSize: 12, maxWidth: 140 }}
+                        onChange={(e) => moveAsset(m, e.target.value || null)}>
+                        <option value="">(racine)</option>
+                        {folders.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
+                    </td>
                     <td>{KIND[m.kind] ?? m.kind}</td>
                     <td>{dur(m.durationSec)}</td>
                     <td>{size(m.sizeBytes)}</td>
@@ -93,6 +176,7 @@ export function Medias() {
                     <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(m.createdAt)}</span></td>
                     <td><div style={{ display: "flex", gap: 6 }}>
                       <button className="btn btn--sm" onClick={() => openPreview(m)} title="Prévisualiser le média">▶ Aperçu</button>
+                      <button className="btn btn--sm" onClick={() => renameAsset(m)} title="Renommer ce média">✏️</button>
                       <button className="btn btn--sm" onClick={() => copyId(m.id)} title="Copier l'identifiant du média">⧉ Copier</button>
                       <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => remove(m)} title="Supprimer ce média">🗑️</button>
                     </div></td>
@@ -102,7 +186,7 @@ export function Medias() {
             </tbody>
           </table>
           {!rows && <div className="empty">Chargement…</div>}
-          {rows && rows.length === 0 && <div className="empty"><div className="big">🎬</div>Aucun média. Téléversez votre première vidéo.</div>}
+          {rows && visible.length === 0 && <div className="empty"><div className="big">🎬</div>{sel === "all" ? "Aucun média. Téléversez votre première vidéo." : "Dossier vide. Téléversez ici ou déplacez des médias via la colonne Dossier."}</div>}
         </div>
       </div>
 

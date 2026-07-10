@@ -101,7 +101,8 @@ type SubScore = { subArea: string; pct: number };
 export type LearnerDiagnostic = { taken: boolean; scorePct?: number | null; profile?: string | null; completedAt?: string; subAreaScores?: SubScore[]; strengths?: SubScore[]; weaknesses?: SubScore[] };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; anonymized: boolean; deletionDaysLeft: number | null; enrollments: number; createdAt: string };
-export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; renditions: string[]; createdAt: string };
+export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; folderId: string | null; renditions: string[]; createdAt: string };
+export type MediaFolder = { id: string; name: string; assetCount: number; createdAt: string };
 export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[] };
 export type Seats = { seats: number; used: number; available: number };
 export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
@@ -166,6 +167,11 @@ export const api = {
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   media: () => req<MediaAsset[]>("GET", "/media"),
+  mediaFolders: () => req<MediaFolder[]>("GET", "/media/folders"),
+  createMediaFolder: (name: string) => req<MediaFolder>("POST", "/media/folders", { name }),
+  renameMediaFolder: (id: string, name: string) => req<MediaFolder>("PATCH", `/media/folders/${id}`, { name }),
+  deleteMediaFolder: (id: string) => req<{ id: string }>("DELETE", `/media/folders/${id}`),
+  updateMedia: (id: string, patch: { filename?: string; folderId?: string | null }) => req<MediaAsset>("PATCH", `/media/${id}`, patch),
   deleteMedia: (id: string) => req<{ id: string; removedObjects: number }>("DELETE", `/media/${id}`),
   async mediaPlayback(id: string): Promise<MediaPlayback> {
     const data = await req<any>("GET", `/media/${id}/playback`);
