@@ -939,11 +939,23 @@ model BankQuestion {
   question    Json // a ScoredQuestion (validated against @kd/shared on write)
   subArea     String   @default("")
   level       String   @default("")
+  /// "approved" (usable by pools/draws) or "pending" (awaiting human review).
+  status      String   @default("approved")
+  /// Where the question came from: "manual" | "course" (harvested at publish/
+  /// import) | "ai" (generated variant awaiting review).
+  origin      String   @default("manual")
+  /// Provenance for idempotent course harvesting and variant traceability.
+  sourceCourseId   String?
+  sourceQuestionId String?
+  /// Free label, e.g. the imposed angle of an AI variant ("contexte terrain").
+  note        String   @default("")
   createdById String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  @@unique([sourceCourseId, sourceQuestionId])
   @@index([subArea])
+  @@index([status])
 }
 
 /// A registered push device (native app). One row per device token.
