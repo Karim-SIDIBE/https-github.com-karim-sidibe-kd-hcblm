@@ -195,6 +195,9 @@ export const ScoredQuestion = z
     scenarioText: nonEmpty("scénario"),
     feedbackText: nonEmpty("feedback"),
     subArea: z.string().optional(),
+    /// Profiling question (e.g. self-positioning): all answers are valid and
+    /// reveal a profile. Not graded right/wrong; excluded from priorities.
+    profiling: z.boolean().optional(),
     type: QuestionType.optional(), // absent ⇒ "single" (legacy MCQ — zero migration)
     options: z.array(Option).min(2).optional(), // single | multiple
     correctKey: OptionKey.optional(), // single
@@ -210,6 +213,7 @@ export const ScoredQuestion = z
     if (ty === "single" || ty === "multiple") {
       if (!q.options || q.options.length < 2) issue("options", "au moins 2 options requises");
     }
+    if (q.profiling) return; // profiling: no correct answer to enforce
     if (ty === "single") {
       if (!q.correctKey) issue("correctKey", "une bonne réponse (correctKey) est requise");
       else if (q.options && !q.options.some((o) => o.key === q.correctKey)) issue("correctKey", "correctKey doit correspondre à une option");

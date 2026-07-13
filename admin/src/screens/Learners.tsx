@@ -123,6 +123,19 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
     finally { setBusyId(null); }
   }
 
+  // Progress peer: view + set/replace (server notifies the peer on badge events).
+  async function editPeer(l: LearnerRow) {
+    try {
+      const cur = await api.enrollmentPeer(l.enrollmentId).catch(() => ({ name: null as string | null, notified: false }));
+      const name = window.prompt(`Pair de progression de ${l.name}${cur.name ? ` (actuel : ${cur.name})` : " (aucun défini)"} — nom :`, cur.name ?? "");
+      if (!name?.trim()) return;
+      const email = window.prompt("E-mail du pair :", "");
+      if (!email?.trim() || !/.+@.+\..+/.test(email)) { setNote("E-mail du pair invalide."); return; }
+      await api.setPeer(l.enrollmentId, name.trim(), email.trim());
+      setNote(`✅ Pair de progression de ${l.name} : ${name.trim()} <${email.trim()}>.`);
+    } catch (e) { setNote(e instanceof Error ? e.message : "Modification impossible"); }
+  }
+
   // Manual re-engagement: send the learner a personalised "come back" nudge.
   async function relancer(l: LearnerRow) {
     setBusyId(l.id); setNote(null);
@@ -240,6 +253,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
                       <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
                         {l.status !== "CERTIFIED" && <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => relancer(l)} title="Envoyer une relance d'engagement personnalisée à l'apprenant">📣 Relancer</button>}
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resend(l)} title="Réinitialise le mot de passe et renvoie l'invitation">{busyId === l.id ? "…" : "↻ Renvoyer"}</button>
+                        <button className="btn btn--sm" onClick={() => editPeer(l)} title="Voir / modifier le pair de progression">🤝 Pair</button>
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "version")} title="Mettre à jour vers la dernière version publiée (garde la progression)">⟳ Maj version</button>
                         <button className="btn btn--sm" disabled={busyId === l.id} onClick={() => resetCourse(l, "full")} title="Réinitialiser le parcours (remet la progression à zéro + dernière version)" style={{ color: "var(--danger)", borderColor: "var(--danger)" }}>↺ Réinitialiser</button>
                       </div>

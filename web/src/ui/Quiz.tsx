@@ -120,7 +120,7 @@ export function Quiz({ questions, onSubmit }: {
 
       {phase === "feedback" && (
         <div className="stack pt-reveal">
-          <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{correct ? t("quiz.good") : t("quiz.review")}</span>
+          <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{(q as any).profiling ? t("quiz.profileSaved") : correct ? t("quiz.good") : t("quiz.review")}</span>
           {type === "numeric" && !correct && q.answerNumber != null && <div className="meta">{t("quiz.expected", { n: q.answerNumber })}</div>}
           {type === "short" && !correct && (q.accepted?.length ?? 0) > 0 && <div className="meta">{t("quiz.accepted", { list: q.accepted!.join(", ") })}</div>}
           {q.feedbackText && <div className="hf-card hf-card--mint"><p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{q.feedbackText}</p></div>}

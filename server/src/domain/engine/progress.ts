@@ -235,6 +235,10 @@ export function diagnosticProfile(
   for (const q of questions) {
     const ok = isAnswerCorrect(q, answers[q.id]);
     if (ok) correct++;
+    // Profiling questions reveal a profile, they don't measure a competency:
+    // keep them in the overall count (always "correct" once answered) but out
+    // of the sub-area analysis so they never surface as a learning priority.
+    if ((q as { profiling?: boolean }).profiling) continue;
     const area = q.subArea?.trim() || "général";
     const e = byArea.get(area) ?? { correct: 0, total: 0 };
     e.total++; if (ok) e.correct++;
