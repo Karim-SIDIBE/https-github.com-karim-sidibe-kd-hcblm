@@ -30,8 +30,11 @@ test("resolveSource prefers manifest, falls back to offline ladder then raw url"
   assert.equal(online.url, "/240");
   assert.equal(online.captionsUrl, "/cap");
 
+  // OFFLINE: only the lightest (downloadable) rendition was cached by
+  // « Rendre disponible hors ligne » — the picker must select it, whatever the
+  // reported connection, or playback cache-misses.
   const offline = resolveSource(video, null, ladder, { effectiveType: "4g" });
-  assert.equal(offline.url, "/720");
+  assert.equal(offline.url, "/240");
   assert.equal(offline.captionsUrl, "https://cdn/fr.vtt"); // content subtitles
 
   const rawOnly = resolveSource(video, null, null, {});

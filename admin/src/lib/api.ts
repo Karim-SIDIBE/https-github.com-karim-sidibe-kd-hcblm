@@ -171,6 +171,11 @@ export const api = {
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
   resetEnrollment: (enrollmentId: string, mode: "full" | "version") => req<{ mode: string; version: number }>("POST", `/enrollments/${enrollmentId}/reset`, { mode }),
   nudgeLearner: (enrollmentId: string) => req<{ sent: boolean; stage: string; email: string }>("POST", `/enrollments/${enrollmentId}/nudge`, {}),
+  enrollmentPeer: async (enrollmentId: string) => {
+    const d = await req<any>("GET", `/enrollments/${enrollmentId}`);
+    return { name: d?.peer?.name ?? null, notified: d?.peer?.notified ?? false };
+  },
+  setPeer: (enrollmentId: string, name: string, email: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/peer`, { name, email }),
   invite: (userId: string, password?: string) => req<InviteResult>("POST", `/users/${userId}/invite`, password ? { password } : {}),
   deleteUser: (userId: string) => req<{ id: string; email: string }>("DELETE", `/users/${userId}`),
   users: (q = "") => req<UserRow[]>("GET", `/users${q ? `?q=${encodeURIComponent(q)}` : ""}`),

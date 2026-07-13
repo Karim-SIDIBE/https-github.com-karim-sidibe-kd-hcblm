@@ -54,12 +54,21 @@ export function Home({ eid }: { eid: string }) {
   const pct = Math.round((blocksDone / blocks.length) * 100);
   const prod = progress?.productivity;
 
-  const allSessions: Session[] = blocks.flatMap((b) => {
+  // Remaining effort = every not-yet-done item (videos, quizzes, deliverables,
+  // journal…), not just the videos. Split: current block vs whole course.
+  const itemsOf = (b: (typeof blocks)[number]): Session[] => {
+    const st = stateOf(b.index);
     const done = new Set(progress?.blocks.find((x) => x.index === b.index)?.completedKeys ?? []);
-    return blockItems(b as any).filter((it) => it.kind === "session").map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: done.has(it.key) }));
-  });
-  const remSec = remainingSeconds(allSessions);
-  const remaining = remSec > 0 ? t("home.remaining", { dur: formatDuration(remSec) }) : null;
+    return blockItems(b as any).map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: st === "completed" || done.has(it.key) }));
+  };
+  const remSec = remainingSeconds(blocks.flatMap(itemsOf));
+  const currentBlock = blocks.find((b) => stateOf(b.index) === "available");
+  const remBlockSec = currentBlock ? remainingSeconds(itemsOf(currentBlock)) : 0;
+  const remaining = remSec > 0
+    ? (remBlockSec > 0 && remBlockSec < remSec
+        ? t("home.remainingSplit", { block: formatDuration(remBlockSec), all: formatDuration(remSec) })
+        : t("home.remaining", { dur: formatDuration(remSec) }))
+    : null;
 
   const openResume = () => { if (!resume) return; resume.blockIndex === 0 ? navigate(routes.onboarding(eid)) : navigate(routes.session(eid, resume.blockIndex, resume.itemKey)); };
 

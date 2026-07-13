@@ -71,10 +71,10 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     void engine.record(eid, "position", { blockIndex: block, itemKey: item, positionSec, durationSec: dur ?? undefined });
   }
 
-  async function completeSession(data: unknown, meta?: ExerciseMeta) {
+  async function completeSession(data: unknown, meta?: ExerciseMeta, goBack = true) {
     const r = await engine.commit(eid, "complete_item", { blockIndex: block, itemType: "MICRO_SESSION", itemKey: item, data, meta });
     if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
-    navigate(routes.course(eid));
+    if (goBack) navigate(routes.course(eid));
   }
 
   if (error) return <div><button className="ghost" onClick={() => navigate(routes.course(eid))}>← {t("common.back")}</button><p className="banner offline">{error}</p></div>;
@@ -106,6 +106,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             onHeartbeat={heartbeat}
             onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
           />
+          {source.url && <p className="meta" style={{ marginTop: -4 }}>{t("sess.fullscreenHint")}</p>}
           {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">{t("sess.keyTakeaway")}</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
           {!source.url && (
             <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>{t("sess.videoUnavailable")}</p></div>
@@ -118,7 +119,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       )}
 
       {phase === "exercise" && session.exercise && (
-        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta)} />
+        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => navigate(routes.course(eid))} />
       )}
     </div>
   );

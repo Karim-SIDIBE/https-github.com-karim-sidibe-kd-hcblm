@@ -365,7 +365,7 @@ export const n1Variants: BankVariant[] = [
   // ───────────────────────── d10 — auto-positionnement ─────────────────────────
   {
     variantOf: "diagnostic:d10", angle: "bilan mensuel", subArea: "auto-positionnement",
-    question: { id: "d10v1", subArea: "auto-positionnement", scenarioText: "En repensant à votre dernier mois de travail, quelle phrase décrit le mieux votre rapport aux échéances ?", options: [
+    question: { id: "d10v1", profiling: true, subArea: "auto-positionnement", scenarioText: "En repensant à votre dernier mois de travail, quelle phrase décrit le mieux votre rapport aux échéances ?", options: [
       { key: "A", label: "J'ai livré l'essentiel à temps, en gardant la main sur mon agenda." },
       { key: "B", label: "J'ai passé le mois à éteindre les feux des autres ; mes propres échéances ont glissé." },
       { key: "C", label: "J'ai repoussé plusieurs fois les mêmes tâches, avec un poids grandissant." },
@@ -374,7 +374,7 @@ export const n1Variants: BankVariant[] = [
   },
   {
     variantOf: "diagnostic:d10", angle: "rapport au téléphone", subArea: "auto-positionnement",
-    question: { id: "d10v2", subArea: "auto-positionnement", scenarioText: "Quelle phrase décrit le mieux votre relation à votre téléphone au travail ?", options: [
+    question: { id: "d10v2", profiling: true, subArea: "auto-positionnement", scenarioText: "Quelle phrase décrit le mieux votre relation à votre téléphone au travail ?", options: [
       { key: "A", label: "Je le consulte à des moments choisis ; il me sert plus qu'il ne me commande." },
       { key: "B", label: "Chaque notification m'arrache à ce que je fais ; je termine mes journées vidé sans avoir avancé mes dossiers." },
       { key: "C", label: "Je m'y réfugie quand une tâche me pèse, puis je culpabilise du temps perdu." },
@@ -383,7 +383,7 @@ export const n1Variants: BankVariant[] = [
   },
   {
     variantOf: "diagnostic:d10", angle: "fin de journée", subArea: "auto-positionnement",
-    question: { id: "d10v3", subArea: "auto-positionnement", scenarioText: "À 18h, en fermant votre journée de travail, quelle pensée vous est la plus familière ?", options: [
+    question: { id: "d10v3", profiling: true, subArea: "auto-positionnement", scenarioText: "À 18h, en fermant votre journée de travail, quelle pensée vous est la plus familière ?", options: [
       { key: "A", label: "« L'important d'aujourd'hui est fait ; demain est déjà cadré. »" },
       { key: "B", label: "« Je n'ai pas arrêté une seconde… et rien de MA liste n'a avancé. »" },
       { key: "C", label: "« Encore une journée où j'ai évité LE dossier qui compte. »" },
@@ -392,7 +392,7 @@ export const n1Variants: BankVariant[] = [
   },
   {
     variantOf: "diagnostic:d10", angle: "regard des collègues", subArea: "auto-positionnement",
-    question: { id: "d10v4", subArea: "auto-positionnement", scenarioText: "Si vos collègues décrivaient honnêtement votre façon de travailler, que diraient-ils probablement ?", options: [
+    question: { id: "d10v4", profiling: true, subArea: "auto-positionnement", scenarioText: "Si vos collègues décrivaient honnêtement votre façon de travailler, que diraient-ils probablement ?", options: [
       { key: "A", label: "« Fiable et organisé — on sait quand et comment le solliciter. »" },
       { key: "B", label: "« Toujours disponible pour tout le monde… souvent au détriment de ses propres dossiers. »" },
       { key: "C", label: "« Plein de bonne volonté, mais ses gros dossiers traînent toujours. »" },

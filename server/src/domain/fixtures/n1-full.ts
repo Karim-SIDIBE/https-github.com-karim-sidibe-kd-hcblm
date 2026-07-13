@@ -62,9 +62,15 @@ const ms11: MicroSession = {
     feedbackText:
       "Analyse de votre répartition + recommandations personnalisées selon votre profil de gestion du temps.",
     fields: [
-      { label: "Réponse à des demandes non planifiées (messages, visites, appels)", placeholder: "____% — changer ? cible :", prefillFromMomentAncrage: false },
-      { label: "Réunions (planifiées et non planifiées)", placeholder: "____% — changer ? cible :", prefillFromMomentAncrage: false },
-      { label: "Travail de fond sur mes priorités réelles", placeholder: "____% — changer ? cible :", prefillFromMomentAncrage: false },
+      { label: "Demandes non planifiées (messages, visites, appels) — % de mon temps réel", placeholder: "ex. 25 %", prefillFromMomentAncrage: false },
+      { label: "Demandes non planifiées — le changer ? (oui / non)", placeholder: "oui / non", prefillFromMomentAncrage: false },
+      { label: "Demandes non planifiées — % cible (« — » si non)", placeholder: "ex. 15 %", prefillFromMomentAncrage: false },
+      { label: "Réunions (planifiées et non planifiées) — % de mon temps réel", placeholder: "ex. 15 %", prefillFromMomentAncrage: false },
+      { label: "Réunions — le changer ? (oui / non)", placeholder: "oui / non", prefillFromMomentAncrage: false },
+      { label: "Réunions — % cible (« — » si non)", placeholder: "ex. 5 %", prefillFromMomentAncrage: false },
+      { label: "Travail de fond sur mes priorités réelles — % de mon temps réel", placeholder: "ex. 60 %", prefillFromMomentAncrage: false },
+      { label: "Travail de fond — le changer ? (oui / non)", placeholder: "oui / non", prefillFromMomentAncrage: false },
+      { label: "Travail de fond — % cible (« — » si non)", placeholder: "ex. 80 %", prefillFromMomentAncrage: false },
       { label: "Mon principal voleur de temps dans mon organisation africaine", placeholder: "…", prefillFromMomentAncrage: false },
     ],
   },
@@ -558,7 +564,7 @@ export const n1Full: CourseContent = {
               { key: "C", label: "Je demande un temps de réflexion, analyse la cause du retard et propose un plan avec plusieurs options." },
               { key: "D", label: "Je négocie 2 weekends au lieu d'un mois." },
             ], correctKey: "C", feedbackText: "C déplace la conversation du « comment » au « quoi » ; proposer un plan alternatif démontre la maîtrise tout en protégeant l'énergie.", subArea: "négociation" },
-            { id: "d10", scenarioText: "En repensant à votre semaine, quelle phrase vous ressemble le plus ?", options: [
+            { id: "d10", profiling: true, scenarioText: "En repensant à votre semaine, quelle phrase vous ressemble le plus ?", options: [
               { key: "A", label: "Épuisé mais satisfait — j'ai accompli ce qui comptait." },
               { key: "B", label: "Épuisé et frustré — les urgences des autres ont pris la place de mes priorités." },
               { key: "C", label: "Une liste de choses non faites et un sentiment de retard permanent." },

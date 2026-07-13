@@ -17,13 +17,45 @@ export const ITEM_TYPE: Partial<Record<ItemKind, string>> = {
   self: "SELF_ASSESSMENT", plan: "ACTION_PLAN", journal: "JOURNAL_ENTRY", project: "PROJECT",
 };
 
+/** Parse "20 min" / "1 h" style estimates to seconds (0 when unparsable). */
+export function parseEstimate(est?: string): number {
+  if (!est) return 0;
+  const h = /([\d,.]+)\s*h/i.exec(est); const m = /(\d+)\s*m/i.exec(est);
+  return Math.round((h ? parseFloat(h[1]!.replace(",", ".")) * 3600 : 0) + (m ? parseInt(m[1]!, 10) * 60 : 0));
+}
+/** Default effort estimates (seconds) per item kind, when the content gives none. */
+const KIND_ESTIMATE: Record<string, number> = {
+  onboarding: 600, diagnostic: 0, session: 600, case: 600, scenarios: 600,
+  interblock: 0, field: 900, self: 300, plan: 600, final: 0, journal: 300, project: 1800,
+};
+const quizEstimate = (n: number) => n * 90; // ~1 min 30 par question
+
 const sessionItems = (ms: MicroSession[]): BlockItem[] =>
-  ms.map((m) => ({ key: m.id, kind: "session" as const, label: `${m.id} — ${m.title}`, durationSec: m.video?.durationSec }));
+  ms.map((m) => ({ key: m.id, kind: "session" as const, label: `${m.id} — ${m.title}`, durationSec: m.video?.durationSec || parseEstimate((m as { durationEstimate?: string }).durationEstimate) || KIND_ESTIMATE.session }));
 
 /** Optional translator (passed by the renderer); falls back to French. */
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
 
 export function blockItems(block: Block, t?: Translate): BlockItem[] {
+  const items = rawBlockItems(block, t);
+  // Every item carries an effort estimate so remaining-time maths cover quizzes,
+  // deliverables and journals — not just the videos.
+  const qCount = (c?: { questions?: unknown[] } | null) => c?.questions?.length ?? 0;
+  const quizN: Record<string, number> = {
+    diagnostic: block.type === "COMPREHENSION" ? qCount(block.payload.diagnosticQuiz) : 0,
+    interblock: block.type === "PRACTICE" ? qCount(block.payload.interBlockQuiz) : 0,
+    final: block.type === "ANCHORING" ? qCount(block.payload.finalQuiz) : 0,
+  };
+  return items.map((it) => ({
+    ...it,
+    durationSec: it.durationSec
+      || (it.kind in quizN && quizN[it.kind as keyof typeof quizN] ? quizEstimate(quizN[it.kind as keyof typeof quizN]!) : 0)
+      || KIND_ESTIMATE[it.kind]
+      || 300,
+  }));
+}
+
+function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
   const tr = (key: string, fr: string, vars?: Record<string, string | number>) => (t ? t(key, vars) : fr);
   switch (block.type) {
     case "ONBOARDING": {

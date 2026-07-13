@@ -9,6 +9,9 @@
  */
 export type ScorableQuestion = {
   type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
+  /** Profiling question: every non-empty answer is "correct" (it reveals a
+   *  profile, it is not graded right/wrong). Excluded from priority analysis. */
+  profiling?: boolean;
   correctKey?: string;
   correctKeys?: string[];
   correctBool?: boolean;
@@ -24,6 +27,7 @@ const norm = (s: string) =>
 
 export function isAnswerCorrect(q: ScorableQuestion, answer: string | undefined): boolean {
   const a = (answer ?? "").trim();
+  if (q.profiling) return a !== ""; // any answer reveals a profile — never "wrong"
   switch (q.type ?? "single") {
     case "multiple": {
       const got = new Set(a.split(",").map((s) => s.trim()).filter(Boolean));

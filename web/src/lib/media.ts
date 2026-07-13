@@ -44,8 +44,14 @@ export function resolveSource(
   offlineRenditions: Rendition[] | null,
   conn: Conn = {},
 ): VideoSource {
-  const ladder = manifest?.renditions?.length ? manifest.renditions : (offlineRenditions ?? []);
-  const pick = pickRendition(ladder, conn);
+  const online = Boolean(manifest?.renditions?.length);
+  const ladder = online ? manifest!.renditions : (offlineRenditions ?? []);
+  // OFFLINE, only the lightest (downloadable) rendition was cached by
+  // « Rendre disponible hors ligne » — picking anything else guarantees a
+  // cache miss. Online keeps the connection-aware choice.
+  const pick = online
+    ? pickRendition(ladder, conn)
+    : ladder.filter((r) => r.downloadable !== false && r.url).sort((a, b) => (a.bitrateKbps ?? 1e9) - (b.bitrateKbps ?? 1e9))[0] ?? pickRendition(ladder, conn);
   const url = pick?.url ?? (video.url && video.url.trim() ? video.url : null);
   const captionsUrl = manifest?.captions?.[0]?.url ?? (video.subtitlesUrl || null);
   return { url, captionsUrl, quality: pick?.label ?? null };

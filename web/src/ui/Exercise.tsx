@@ -11,7 +11,7 @@ export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?:
  * green feedback). It is the completion gate: the learner cannot advance until
  * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
-export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void> }) {
+export function Exercise({ exercise, onComplete, onNext }: { exercise: ExerciseSpec; onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void>; onNext: () => void }) {
   const t = useT();
   const start = useRef(Date.now());
   const [phase, setPhase] = useState<"answer" | "feedback">("answer");
@@ -31,12 +31,14 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
     if (exercise.type === "written") return text.trim();
     return JSON.stringify(values);
   }
-  async function finish() {
+  // « Valider ma réponse » PERSISTS the answer immediately (queued offline if
+  // needed) — leaving after reading the feedback can no longer lose the work.
+  async function validate() {
     setBusy(true);
     const correct = exercise.type === "multi" ? choice === exercise.correctKey : undefined;
     const meta: ExerciseMeta = { timeMs: Date.now() - start.current, feedbackViewed: true, response: response(), correct };
     const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() } : { fields: values };
-    try { await onComplete(data, meta); } finally { setBusy(false); }
+    try { await onComplete(data, meta); setPhase("feedback"); } finally { setBusy(false); }
   }
   const isCorrect = exercise.type === "multi" && choice === exercise.correctKey;
 
@@ -72,7 +74,7 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
             </label>
           ))}
 
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer} onClick={() => setPhase("feedback")}>{t("ex.validate")}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer || busy} onClick={validate}>{busy ? "…" : t("ex.validate")}</button>
         </div>
       )}
 
@@ -85,7 +87,7 @@ export function Exercise({ exercise, onComplete }: { exercise: ExerciseSpec; onC
             <strong className="ok">{t("ex.feedback")}</strong>
             <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{exercise.feedbackText}</p>
           </div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={finish}>{busy ? "…" : t("ex.next")}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={onNext}>{t("ex.next")}</button>
         </div>
       )}
     </div>
