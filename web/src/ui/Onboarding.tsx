@@ -23,7 +23,6 @@ export function Onboarding({ eid }: { eid: string }) {
   const [step, setStep] = useState<Step | null>(null);
   const [pam, setPam] = useState("");
   const [profileKey, setProfileKey] = useState("");
-  const [answers, setAnswers] = useState<Record<string, string>>({});
   const [peer, setPeer] = useState({ name: "", email: "" });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -43,13 +42,12 @@ export function Onboarding({ eid }: { eid: string }) {
         profileDone = keys.includes("profile"); triggerDone = keys.includes("trigger"); peerDone = keys.includes("peer");
       } catch { /* offline */ }
       if (!alive) return;
-      setStep(!pamDone ? "pam" : (!triggerDone || !profileDone) ? "profile" : !peerDone ? "peer" : "done");
+      setStep(!pamDone ? "pam" : !profileDone ? "profile" : !peerDone ? "peer" : "done");
     })();
     return () => { alive = false; };
   }, [eid]);
 
   const minChars = payload?.momentAncrage.minChars ?? 50;
-  const allAnswered = useMemo(() => (payload?.triggerQuiz.questions ?? []).every((q) => answers[q.id]), [payload, answers]);
 
   async function submitPam() {
     if (pam.trim().length < minChars) return;
@@ -57,9 +55,9 @@ export function Onboarding({ eid }: { eid: string }) {
     try { await engine.commit(eid, "moment_ancrage", { text: pam.trim() }); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
   }
   async function submitProfile() {
-    if (!profileKey || !allAnswered) return;
+    if (!profileKey) return;
     setBusy(true);
-    try { const r = await engine.commit(eid, "quiz_trigger", { answers, profileKey }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("peer"); } finally { setBusy(false); }
+    try { const r = await engine.commit(eid, "quiz_trigger", { answers: {}, profileKey }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("peer"); } finally { setBusy(false); }
   }
   async function submitPeer() {
     if (!peer.name.trim() || !/.+@.+\..+/.test(peer.email)) { setMsg(t("ob.invalidPeer")); return; }
@@ -109,17 +107,7 @@ export function Onboarding({ eid }: { eid: string }) {
               </div>
             ))}
           </div>
-          {payload.triggerQuiz.questions.map((q) => (
-            <div key={q.id} className="hf-card stack">
-              <strong className="h4">{q.text}</strong>
-              {q.options.map((o) => (
-                <div key={o.key} className={`pt-opt ${answers[q.id] === o.key ? "sel" : ""}`} role="button" onClick={() => setAnswers((a) => ({ ...a, [q.id]: o.key }))}>
-                  <span className="body" style={{ color: "var(--fg-1)" }}>{o.label}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !profileKey || !allAnswered} onClick={submitProfile}>{busy ? "…" : t("ob.continue")}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !profileKey} onClick={submitProfile}>{busy ? "…" : t("ob.continue")}</button>
         </div>
       )}
 

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api, engine, store, getIdentity } from "../lib/app";
 import { setCachedPosition, setCachedProgress, getCachedPosition } from "../lib/cache";
 import { currentConn, resolveSource, type Rendition } from "../lib/media";
+import { cachedUrlsOf } from "../lib/offline";
 import { previousSession } from "../lib/content";
 import { navigate, routes } from "../lib/router";
 import { VideoPlayer } from "./VideoPlayer";
@@ -17,11 +18,16 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
   const [source, setSource] = useState<{ url: string | null; captionsUrl: string | null; quality: string | null } | null>(null);
   const [ladder, setLadder] = useState<Rendition[]>([]);
   const [startAt, setStartAt] = useState(0);
-  const [phase, setPhase] = useState<"video" | "exercise">("video");
+  const [phase, setPhase] = useState<"video" | "exercise" | "tquiz">("video");
+  const [tqAnswers, setTqAnswers] = useState<Record<string, string>>({});
+  const [tqBusy, setTqBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const blk = useMemo(() => bundle?.content.blocks.find((b: any) => b.index === block), [bundle, block]);
+  // The Bloc 0 trigger QUIZ plays right AFTER the trigger video, inside this
+  // same micro-session (design: video → quick quiz → done).
+  const triggerQuiz = blk?.type === "ONBOARDING" && item === "declencheur" ? (blk.payload?.triggerQuiz ?? null) : null;
   const session: Session | null = useMemo(() => {
-    const blk = bundle?.content.blocks.find((b: any) => b.index === block);
     if (!blk) return null;
     const m = (blk.payload?.microSessions ?? []).find((s: any) => s.id === item);
     if (m) return m;
@@ -39,6 +45,15 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     })();
     return () => { alive = false; };
   }, [eid]);
+
+  async function submitTriggerQuiz() {
+    setTqBusy(true);
+    try {
+      const r = await engine.commit(eid, "quiz_trigger", { answers: tqAnswers });
+      if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
+      await completeSession({ watched: true });
+    } finally { setTqBusy(false); }
+  }
 
   useEffect(() => {
     if (!bundle || !session) return;
@@ -59,7 +74,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       if (!alive) return;
       setStartAt(at);
       setLadder(manifest?.renditions?.length ? manifest.renditions : (offline ?? []));
-      setSource(resolveSource(session.video ?? {}, manifest, offline, currentConn()));
+      setSource(resolveSource(session.video ?? {}, manifest, offline, currentConn(), cachedUrlsOf(eid, block, item)));
     })();
     return () => { alive = false; };
   }, [bundle, session, eid, block, item]);
@@ -104,7 +119,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             startAt={startAt} durationSec={session.video?.durationSec} quality={source.quality}
             watermark={(() => { const me = getIdentity(); return me ? `${me.name} · ${me.email}` : null; })()}
             onHeartbeat={heartbeat}
-            onEnded={() => { if (session.exercise) setPhase("exercise"); else void completeSession({ watched: true }); }}
+            onEnded={() => { if (session.exercise) setPhase("exercise"); else if (triggerQuiz) setPhase("tquiz"); else void completeSession({ watched: true }); }}
           />
           {source.url && <p className="meta" style={{ marginTop: -4 }}>{t("sess.fullscreenHint")}</p>}
           {session.video?.keyMessage && <div className="hf-card hf-card--icy"><div className="eyebrow">{t("sess.keyTakeaway")}</div><p className="body" style={{ margin: "6px 0 0" }}>{session.video.keyMessage}</p></div>}
@@ -114,12 +129,33 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
           {/* Always offer a way forward so a missing/failing video never blocks progression. */}
           {session.exercise
             ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>{t("sess.skipExercise")}</button>
-            : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>{t("sess.finishSession")}</button>}
+            : triggerQuiz
+              ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("tquiz")}>{t("sess.toTriggerQuiz")}</button>
+              : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>{t("sess.finishSession")}</button>}
         </>
       )}
 
       {phase === "exercise" && session.exercise && (
         <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => navigate(routes.course(eid))} />
+      )}
+
+      {phase === "tquiz" && triggerQuiz && (
+        <div className="stack">
+          <div className="hf-card hf-card--icy"><strong className="h4">{t("sess.triggerQuizTitle", { n: triggerQuiz.questions.length })}</strong></div>
+          {triggerQuiz.questions.map((q: any) => (
+            <div key={q.id} className="hf-card stack">
+              <strong className="h4">{q.text}</strong>
+              {q.options.map((o: any) => (
+                <div key={o.key} className={`pt-opt ${tqAnswers[q.id] === o.key ? "sel" : ""}`} role="button" onClick={() => setTqAnswers((a) => ({ ...a, [q.id]: o.key }))}>
+                  <span className="body" style={{ color: "var(--fg-1)" }}>{o.label}</span>
+                </div>
+              ))}
+            </div>
+          ))}
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={tqBusy || !triggerQuiz.questions.every((q: any) => tqAnswers[q.id])} onClick={() => void submitTriggerQuiz()}>
+            {tqBusy ? "…" : t("sess.triggerQuizGo")}
+          </button>
+        </div>
       )}
     </div>
   );

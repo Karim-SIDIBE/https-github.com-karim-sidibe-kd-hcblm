@@ -75,7 +75,11 @@ function BlockView({ b }: { b: Block }) {
         {p.momentAncrage && <div style={{ ...card, background: "var(--orange-50)" }}><div style={eye}>🎯 Moment d'Ancrage</div><div style={{ fontSize: 12.5 }}>{p.momentAncrage.promptText}</div></div>}
         <Vid v={p.triggerVideo} />
         {p.profileChoices && <div style={{ fontSize: 12.5 }}><b>Profils :</b> {p.profileChoices.map((x: any) => x.name).join(", ")}</div>}
-        {p.triggerQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz déclencheur</div><Qs items={p.triggerQuiz.questions} scored={false} /></div>}
+        {p.triggerQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz déclencheur — joué APRÈS la vidéo déclencheur (2ᵉ micro-session)</div><Qs items={p.triggerQuiz.questions} scored={false} /></div>}
+        <div style={{ marginTop: 8 }}>
+          <div style={eye}>Pair de progression (fin de la 1ʳᵉ micro-session)</div>
+          <div className="muted" style={{ fontSize: 13 }}>Obligatoire : l'apprenant nomme un pair (nom + e-mail) à la fin de l'introduction. Le pair est notifié à chaque badge. Visible/modifiable ensuite via Apprenants → 🤝 Pair.</div>
+        </div>
       </>)}
 
       {p.diagnosticQuiz && <div style={{ marginTop: 6 }}><div style={eye}>Quiz diagnostique</div><Qs items={p.diagnosticQuiz.questions} /></div>}

@@ -18,7 +18,7 @@
  *
  * Pure helpers (itemMediaUrls) are unit-tested.
  */
-type Rendition = { kind?: string; bitrateKbps?: number | null; url?: string | null; downloadable?: boolean };
+type Rendition = { label?: string; kind?: string; bitrateKbps?: number | null; url?: string | null; downloadable?: boolean };
 type Bundle = {
   content: { blocks: any[] };
   media?: { key: string; url: string; type: string }[];
@@ -41,11 +41,26 @@ function liteRendition(asset?: { renditions: Rendition[] }): Rendition | undefin
     .sort((a, b) => (a.bitrateKbps ?? 1e9) - (b.bitrateKbps ?? 1e9))[0];
 }
 
+/** Rendition to DOWNLOAD for offline use. Default: the lite (240p) rendition —
+ *  frugal on storage and 3G. If the learner explicitly forced a quality in the
+ *  player (sticky "klms_video_quality", e.g. "480p"), that choice is honoured
+ *  so offline viewing matches what they watch online. */
+function downloadRendition(asset?: { renditions: Rendition[] }): Rendition | undefined {
+  if (!asset) return undefined;
+  let pref = "auto";
+  try { pref = localStorage.getItem("klms_video_quality") || "auto"; } catch { /* */ }
+  if (pref !== "auto") {
+    const chosen = asset.renditions.find((r) => (r.kind === "VIDEO" || !r.kind) && r.url && r.label === pref);
+    if (chosen) return chosen;
+  }
+  return liteRendition(asset);
+}
+
 /** Media URLs for one video object (lowest rendition + caption track). */
 function videoUrls(bundle: Bundle, blockIndex: number, sessionId: string, video: { mediaId?: string; url?: string; subtitlesUrl?: string }): string[] {
   const urls: string[] = [];
-  const lite = liteRendition(bundle.mediaAssets?.find((a) => a.mediaId === video.mediaId));
-  const v = (lite?.downloadable !== false ? lite?.url : null) ?? (video.url && String(video.url).trim() ? video.url : null);
+  const lite = downloadRendition(bundle.mediaAssets?.find((a) => a.mediaId === video.mediaId));
+  const v = lite?.url ?? (video.url && String(video.url).trim() ? video.url : null);
   if (v) urls.push(v);
   const cap = video.subtitlesUrl || bundle.media?.find((x) => x.key === `blocks[${blockIndex}].${sessionId}.captions`)?.url;
   if (cap) urls.push(cap);
@@ -83,6 +98,13 @@ async function deleteFromCache(urls: string[]) {
 }
 
 export type Availability = { available: boolean; expiresAt: number | null; daysLeft: number };
+
+/** URLs actually cached for one element (empty when not made available). Lets
+ *  the player pick, OFFLINE, the exact rendition that lives in the cache. */
+export function cachedUrlsOf(eid: string, blockIndex: number, itemKey: string): string[] {
+  const e = readReg(eid)[entryKey(blockIndex, itemKey)];
+  return e && e.exp > Date.now() ? e.urls : [];
+}
 
 /** Current offline availability of one element (expired entries read as unavailable). */
 export function availabilityOf(eid: string, blockIndex: number, itemKey: string): Availability {

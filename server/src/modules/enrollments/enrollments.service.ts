@@ -380,10 +380,18 @@ export async function submitTriggerQuiz(enrollmentId: string, answers: Record<st
       throw new EngineError(422, "invalid_profile", `Profil « ${profileKey} » inconnu pour ce parcours`);
     }
   }
-  await upsertCompletion(enrollmentId, 0, "TRIGGER_QUIZ", "trigger", null, { answers, profileKey: profileKey ?? null });
-  if (profileKey) await upsertCompletion(enrollmentId, 0, "PROFILE", "profile", null, { profileKey });
-  await touch(enrollmentId, 0, "trigger");
-  await emitXapi(ctx, "completed", ["blocks/0", "items/trigger"], "Quiz déclencheur");
+  // Profile choice and trigger quiz are now two distinct learner moments (the
+  // quiz plays AFTER the trigger video, inside the Bloc 0 second session): each
+  // completion is recorded only when its data is actually present.
+  if (Object.keys(answers).length > 0) {
+    await upsertCompletion(enrollmentId, 0, "TRIGGER_QUIZ", "trigger", null, { answers, profileKey: profileKey ?? null });
+    await touch(enrollmentId, 0, "trigger");
+    await emitXapi(ctx, "completed", ["blocks/0", "items/trigger"], "Quiz déclencheur");
+  }
+  if (profileKey) {
+    await upsertCompletion(enrollmentId, 0, "PROFILE", "profile", null, { profileKey });
+    if (Object.keys(answers).length === 0) await touch(enrollmentId, 0, "profile");
+  }
   return reconcile(enrollmentId);
 }
 
