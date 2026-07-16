@@ -60,7 +60,7 @@ const ms11: MicroSession = {
     prompt:
       "Cartographier mes deux types de temps : pour chaque type d'activité, estimez le % de votre temps réel et indiquez si vous voulez le changer.",
     feedbackText:
-      "Analyse de votre répartition + recommandations personnalisées selon votre profil de gestion du temps.",
+      "Lisez votre cartographie : additionnez demandes non planifiées + réunions — c'est votre temps subi. Au-delà de 40 %, votre journée appartient aux autres : c'est le premier chiffre à faire baisser. Un travail de fond sous 50 % signale que vos priorités réelles passent après les urgences des autres. Vos % cibles sont désormais votre contrat personnel — la suite du bloc vous donne la matrice pour les atteindre, et votre voleur de temps n° 1 sera votre premier chantier.",
     fields: [
       { label: "Demandes non planifiées (messages, visites, appels) — % de mon temps réel", placeholder: "ex. 25 %", prefillFromMomentAncrage: false },
       { label: "Demandes non planifiées — le changer ? (oui / non)", placeholder: "oui / non", prefillFromMomentAncrage: false },
@@ -101,7 +101,7 @@ const ms12: MicroSession = {
     prompt:
       "Ma matrice africaine de la semaine : en repartant de {{moment_ancrage}}, listez 2 à 3 tâches réelles dans chaque quadrant.",
     feedbackText:
-      "Analyse de votre Quadrant 2 — le principal indicateur de votre potentiel de productivité non exploitée.",
+      "Regardez d'abord votre Quadrant 2 : c'est là que se joue votre progression. S'il est vide ou pauvre, vous fonctionnez en mode réactif — bloquez dès cette semaine deux créneaux pour l'une de ces tâches. Si votre Quadrant 3 déborde, appliquez la règle : déléguer, différer avec une date, ou refuser avec une alternative. Le Quadrant 4 se supprime sans négociation. Objectif hebdomadaire : déplacer une tâche du Q3 vers du temps de Q2.",
     fields: [
       { label: "Quadrant 1 — Urgent ET important (traiter maintenant)", placeholder: "Exemples de ma semaine", prefillFromMomentAncrage: false },
       { label: "Quadrant 2 — Important, pas urgent (bloquer du temps)", placeholder: "Ma grande priorité ignorée", prefillFromMomentAncrage: true },
@@ -135,7 +135,7 @@ const ms13: MicroSession = {
     prompt:
       "Mes 3 principales sources d'urgence artificielle : identifiez-les et une action concrète pour chacune.",
     feedbackText:
-      "Recommandations pour le mécanisme le plus impactant dans votre contexte africain, selon votre profil.",
+      "Vérifiez chacune de vos 3 actions avec cette grille : elle est efficace si (1) elle s'attaque au mécanisme, pas à la personne ; (2) elle est faisable sans autorisation de votre hiérarchie ; (3) son effet est observable sous 2 semaines. « Demander aux collègues d'arrêter » échouera ; « proposer un créneau quotidien de traitement des demandes » réussit. Commencez par la source qui revient le plus souvent dans votre semaine — pas par la plus facile.",
     fields: [
       { label: "Source 1 + action concrète", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Source 2 + action concrète", placeholder: "…", prefillFromMomentAncrage: false },
@@ -166,7 +166,8 @@ const ms14: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt: "Mes phrases de signalement et mon rituel de reprise (3 étapes en moins de 2 minutes).",
-    feedbackText: "Conseil personnalisé pour rendre votre phrase culturellement adaptée à votre organisation.",
+    feedbackText:
+      "Testez vos phrases : une bonne phrase de signalement (1) accuse réception avec respect, (2) nomme votre créneau en cours, (3) propose un moment précis — « je te reviens à 11h », jamais « plus tard ». Si elle peut être perçue comme un rejet dans votre organisation, ajoutez la marque relationnelle d'usage (salutation, ton, canal). Et votre rituel de reprise doit tenir en 2 minutes : noter où vous en étiez, relire la dernière phrase produite, reprendre — au-delà, vous ne l'utiliserez pas.",
     fields: [
       { label: "Ma phrase de signalement bienveillant", placeholder: "« Je suis sur un dossier important, j'ai besoin de [durée]. Je reviens à [heure]. »", prefillFromMomentAncrage: false },
       { label: "Mon rituel de reprise (3 étapes)", placeholder: "relire · re-focaliser · première micro-action", prefillFromMomentAncrage: false },
@@ -197,7 +198,8 @@ const ms15: MicroSession = {
     type: "guidedForm",
     prompt:
       "Mon système de temps protégé adapté aux codes de mon organisation (réutilisé dans l'Application terrain du Bloc 2).",
-    feedbackText: "Vos éléments sont sauvegardés et pré-remplis dans l'Application terrain du Bloc 2.",
+    feedbackText:
+      "Votre système tient si les 3 conditions y sont : un créneau réaliste (60 à 90 min, pas 3 h), négocié AVANT d'être appliqué (votre hiérarchie sait et accepte), et visible (l'équipe sait comment vous joindre en urgence réelle). S'il repose sur la discrétion ou l'isolement, il cassera à la première urgence. Vos éléments sont sauvegardés et pré-remplis dans l'Application terrain du Bloc 2 — vous les testerez en conditions réelles.",
     fields: [
       { label: "Mon créneau (de … h à … h) et fréquence/semaine", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Ma formulation pour ma hiérarchie", placeholder: "…", prefillFromMomentAncrage: false },
@@ -231,7 +233,8 @@ const ms21: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt: "Formuler mes « oui différents » pour les 3 situations d'urgence imposée les plus fréquentes.",
-    feedbackText: "Vérification que chaque formulation accuse réception, expose le conflit et propose une alternative datée.",
+    feedbackText:
+      "Relisez chaque formulation avec la grille du « oui différent » : elle doit (1) accuser réception positivement (« oui, je m'en occupe »), (2) rendre visible le conflit de priorités (« j'ai X à livrer pour 16h »), (3) proposer une alternative datée (« je te le fais pour demain 10h — ça convient ? »). Si l'une de vos phrases contient un « non » sec ou reste sans date, reformulez-la : c'est la date qui transforme un refus en engagement.",
     fields: [
       { label: "Demande de rapport urgent de dernière minute → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Réunion non planifiée pendant mon temps de fond → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
@@ -262,7 +265,8 @@ const ms22: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt: "Ma planification hebdomadaire africaine : 3 résultats attendus, leur créneau, et mon buffer.",
-    feedbackText: "Vérification que vos 3 résultats sont des livrables finis et que votre buffer atteint 30–35 %.",
+    feedbackText:
+      "Contrôlez vos 3 résultats : chacun doit être un livrable FINI (« rapport envoyé », pas « avancer sur le rapport »). Puis votre buffer : sur une semaine de 40 h, 30 à 35 % représentent 12 à 14 h non planifiées. Si votre planning occupe plus de 65–70 % du temps, il cassera dès lundi — retirez un résultat plutôt que de rogner le buffer. Enfin, placez les créneaux de vos résultats le matin, aux heures de haute énergie.",
     fields: [
       { label: "Résultat 1 (livrable fini) + créneau", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Résultat 2 (livrable fini) + créneau", placeholder: "…", prefillFromMomentAncrage: false },
@@ -294,7 +298,8 @@ const ms23: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt: "Ma prochaine délégation : préparez-la avec la méthode de Kwame.",
-    feedbackText: "Vérification que le résultat, la confiance signalée, le jalon unique et la valorisation sont présents.",
+    feedbackText:
+      "Votre délégation est prête si les 4 éléments y sont : (1) le RÉSULTAT attendu décrit — pas la méthode ; (2) la confiance exprimée explicitement (« je te confie ça parce que… ») ; (3) UN jalon intermédiaire unique — pas un contrôle chaque heure ; (4) la valorisation prévue à la livraison. S'il manque le jalon, vous découvrirez les problèmes trop tard. Et si vous avez décrit la méthode pas à pas, vous n'avez pas délégué — vous avez dicté.",
     fields: [
       { label: "La tâche à déléguer + la personne", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Le résultat attendu (livrable + délai + format)", placeholder: "…", prefillFromMomentAncrage: false },
@@ -329,7 +334,8 @@ const ms31: MicroSession = {
     type: "written",
     prompt:
       "Quel rituel de productivité allez-vous installer EN PREMIER dans les 7 prochains jours ? Décrivez le rituel, le moment, la durée et comment vous l'ancrez dans votre réalité africaine. (Ancré dans {{moment_ancrage}}.)",
-    feedbackText: "Conseil personnalisé pour séquencer l'installation d'un seul rituel à la fois.",
+    feedbackText:
+      "Évaluez votre rituel avec les 4 critères d'installation durable : (1) UN seul rituel — si vous en avez décrit plusieurs, gardez le premier, les autres viendront aux semaines 3 et 5 ; (2) accroché à un déclencheur existant (« après mon café », « en arrivant au bureau ») ; (3) assez petit pour survivre à une mauvaise semaine (15–20 min maximum) ; (4) protégé des imprévus de votre contexte (coupures, transport, sollicitations). Un rituel raté 3 jours de suite n'est pas un échec de volonté : c'est un rituel trop gros — réduisez-le.",
     minChars: 200,
   },
 };
@@ -358,7 +364,7 @@ const ms32: MicroSession = {
     prompt:
       "Cas transversal Sylvie (Abidjan) : quel diagnostic posez-vous avant tout outil, et quelle première action recommandez-vous à son équipe hybride ?",
     feedbackText:
-      "Avant tout outil, identifier si le problème est personnel (méthode), organisationnel (culture) ou systémique (charge). L'outil vient après le diagnostic.",
+      "Comparez votre réponse : le piège du cas Sylvie est de choisir un outil avant d'avoir posé le diagnostic. La démarche attendue : (1) déterminer si le problème est personnel (méthode), organisationnel (culture d'équipe) ou systémique (charge structurelle) — chez Sylvie, les trois se mélangent ; (2) proposer une première action qui rend le problème VISIBLE à l'équipe (par exemple cartographier une semaine de sollicitations hybrides) avant tout protocole. Si votre réponse propose directement un outil, refaites le chemin : quel est le problème racine ?",
     minChars: 150,
   },
 };

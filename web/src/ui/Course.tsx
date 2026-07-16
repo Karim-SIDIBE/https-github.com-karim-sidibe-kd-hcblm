@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, engine, store } from "../lib/app";
-import { rememberEnrollment } from "../lib/autosync";
+import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, setCachedProgress, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
 import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
@@ -19,7 +19,7 @@ const ICON: Record<ItemKind, string> = {
   onboarding: "🚀", diagnostic: "📝", session: "🎬", case: "📋", scenarios: "🧩",
   interblock: "📝", field: "📍", self: "🪞", plan: "🗓️", final: "🏁", journal: "📓", project: "🎓",
 };
-const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final", "field", "journal", "project"];
+const NAVIGABLE: ItemKind[] = ["onboarding", "session", "diagnostic", "interblock", "final", "field", "journal", "project", "case", "scenarios", "self", "plan"];
 
 const akey = (blockIndex: number, itemKey: string) => `${blockIndex}:${itemKey}`;
 
@@ -58,6 +58,9 @@ export function Course({ eid }: { eid: string }) {
     try { const data = await api.progress(eid); if (data?.progress) { setProgress(data.progress); setCachedProgress(eid, data.progress); } } catch { /* offline */ }
   }, [eid]);
 
+  // Live updates from the background sync (reconnect, tab focus, other device).
+  useEffect(() => onProgress(eid, setProgress), [eid]);
+
   useEffect(() => {
     let alive = true; rememberEnrollment(eid);
     try { const d = localStorage.getItem(`klms_diag_${eid}`); if (d) setDiag(JSON.parse(d)); } catch { /* */ }
@@ -94,6 +97,7 @@ export function Course({ eid }: { eid: string }) {
     if (it.kind === "session") return navigate(routes.session(eid, blockIndex, it.key));
     if (it.kind === "diagnostic" || it.kind === "interblock" || it.kind === "final") return navigate(routes.quiz(eid, it.kind));
     if (it.kind === "field" || it.kind === "journal") return navigate(routes.deliverable(eid, blockIndex, it.key));
+    if (it.kind === "case" || it.kind === "scenarios" || it.kind === "self" || it.kind === "plan") return navigate(routes.activity(eid, blockIndex, it.key));
     if (it.kind === "project") return navigate(routes.project(eid));
   }
   async function completeInterim(blockIndex: number, it: BlockItem) {

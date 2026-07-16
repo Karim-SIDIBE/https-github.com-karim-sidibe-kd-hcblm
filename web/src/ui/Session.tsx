@@ -136,7 +136,13 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       )}
 
       {phase === "exercise" && session.exercise && (
-        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => navigate(routes.course(eid))} />
+        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => navigate(routes.course(eid))}
+          aiFeedback={session.exercise.type === "multi" ? undefined : async () => {
+            // Personalised formative feedback on the saved answer (AI when a key
+            // is configured server-side, deterministic heuristic otherwise).
+            const r = await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey: item });
+            return r?.feedback ?? null;
+          }} />
       )}
 
       {phase === "tquiz" && triggerQuiz && (

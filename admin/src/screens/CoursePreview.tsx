@@ -72,13 +72,33 @@ function BlockView({ b }: { b: Block }) {
       {b.objective && <div style={{ fontSize: 12.5, color: "var(--fg-2)", marginTop: 4, marginBottom: 8 }}>{b.objective}</div>}
 
       {b.type === "ONBOARDING" && (<>
-        {p.momentAncrage && <div style={{ ...card, background: "var(--orange-50)" }}><div style={eye}>🎯 Moment d'Ancrage</div><div style={{ fontSize: 12.5 }}>{p.momentAncrage.promptText}</div></div>}
-        <Vid v={p.triggerVideo} />
-        {p.profileChoices && <div style={{ fontSize: 12.5 }}><b>Profils :</b> {p.profileChoices.map((x: any) => x.name).join(", ")}</div>}
-        {p.triggerQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz déclencheur — joué APRÈS la vidéo déclencheur (2ᵉ micro-session)</div><Qs items={p.triggerQuiz.questions} scored={false} /></div>}
-        <div style={{ marginTop: 8 }}>
-          <div style={eye}>Pair de progression (fin de la 1ʳᵉ micro-session)</div>
-          <div className="muted" style={{ fontSize: 13 }}>Obligatoire : l'apprenant nomme un pair (nom + e-mail) à la fin de l'introduction. Le pair est notifié à chaque badge. Visible/modifiable ensuite via Apprenants → 🤝 Pair.</div>
+        {/* Rendered in the LEARNER's order: micro-session 1 (MA → profil → pair),
+            then micro-session 2 (vidéo déclencheur → quiz déclencheur). */}
+        <div style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>🚀 Micro-session 1 — Introduction &amp; point de départ</div>
+          {p.momentAncrage && <div style={{ ...card, background: "var(--orange-50)", marginTop: 8 }}><div style={eye}>🎯 1. Moment d'Ancrage</div><div style={{ fontSize: 12.5 }}>{p.momentAncrage.promptText}</div></div>}
+          {p.profileChoices && (
+            <div style={{ ...card, marginTop: 8 }}>
+              <div style={eye}>🧭 2. Auto-identification du profil</div>
+              {p.profileChoices.map((x: any) => (
+                <div key={x.key ?? x.name} style={{ fontSize: 12.5, padding: "5px 9px", border: "1px solid var(--line)", borderRadius: 7, marginTop: 4 }}><b>{x.name}</b>{x.description ? ` — ${x.description}` : ""}</div>
+              ))}
+            </div>
+          )}
+          <div style={{ ...card, background: "var(--success-tint)", marginTop: 8 }}>
+            <div style={eye}>🤝 3. Pair de progression — obligatoire</div>
+            <div style={{ fontSize: 12.5, margin: "4px 0 8px" }}>À la fin de cette micro-session, l'apprenant désigne la personne qui suivra sa progression. Le pair est notifié à chaque badge obtenu.</div>
+            <div style={{ fontSize: 12, color: "var(--fg-2)" }}>Nom du pair</div>
+            <div style={{ border: "1px solid var(--line)", borderRadius: 7, padding: "6px 9px", fontSize: 12.5, background: "#fff", color: "var(--fg-3)", marginBottom: 6 }}>ex. Awa Diallo</div>
+            <div style={{ fontSize: 12, color: "var(--fg-2)" }}>E-mail du pair</div>
+            <div style={{ border: "1px solid var(--line)", borderRadius: 7, padding: "6px 9px", fontSize: 12.5, background: "#fff", color: "var(--fg-3)" }}>ex. awa.diallo@exemple.com</div>
+            <div style={{ fontSize: 11.5, color: "var(--fg-3)", marginTop: 6 }}>↳ Côté admin : visible et modifiable via Apprenants → 🤝 Pair.</div>
+          </div>
+        </div>
+        <div style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, marginTop: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 700 }}>🎬 Micro-session 2 — Vidéo déclencheur puis quiz</div>
+          <Vid v={p.triggerVideo} />
+          {p.triggerQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz déclencheur — joué juste APRÈS la vidéo</div><Qs items={p.triggerQuiz.questions} scored={false} /></div>}
         </div>
       </>)}
 

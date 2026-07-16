@@ -51,15 +51,21 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           <div className="eyebrow">{t("qz.profileTitle")}</div>
           {band && <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{band.name}</span>}
           {band?.description && <p className="body">{band.description}</p>}
-          <strong className="h4">{t("qz.priorities")}</strong>
-          <div className="stack">
-            {prof.priorities.map((p, i) => (
-              <div key={p} className="hf-card hf-card--peach row" style={{ gap: 12, padding: 14 }}>
-                <span className="hf-medal cert" style={{ width: 36, height: 36, fontSize: 14 }}>{i + 1}</span>
-                <strong className="h4">{p}</strong>
+          {prof.priorities.length > 0 ? (
+            <>
+              <strong className="h4">{t("qz.priorities")}</strong>
+              <div className="stack">
+                {prof.priorities.map((p, i) => (
+                  <div key={p} className="hf-card hf-card--peach row" style={{ gap: 12, padding: 14 }}>
+                    <span className="hf-medal cert" style={{ width: 36, height: 36, fontSize: 14 }}>{i + 1}</span>
+                    <strong className="h4">{p}</strong>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </>
+          ) : (
+            <p className="body">{t("qz.noPriorities")}</p>
+          )}
           <p className="meta">{t("qz.score", { correct: prof.correct, total: prof.total })}</p>
         </div>
       ) });

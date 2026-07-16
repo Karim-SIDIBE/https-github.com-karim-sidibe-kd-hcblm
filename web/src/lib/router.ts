@@ -16,6 +16,7 @@ export type Route =
   | { name: "session"; eid: string; block: number; item: string }
   | { name: "quiz"; eid: string; kind: QuizKind }
   | { name: "deliverable"; eid: string; block: number; key: string }
+  | { name: "activity"; eid: string; block: number; key: string }
   | { name: "project"; eid: string }
   | { name: "badges"; eid: string }
   | { name: "revision"; eid: string }
@@ -35,6 +36,7 @@ export function parseRoute(hash: string): Route {
     if (seg[2] === "session" && seg[3] && seg[4]) return { name: "session", eid, block: Number(seg[3]), item: decodeURIComponent(seg[4]) };
     if (seg[2] === "quiz" && (seg[3] === "diagnostic" || seg[3] === "interblock" || seg[3] === "final")) return { name: "quiz", eid, kind: seg[3] };
     if (seg[2] === "deliverable" && seg[3] && seg[4]) return { name: "deliverable", eid, block: Number(seg[3]), key: decodeURIComponent(seg[4]) };
+    if (seg[2] === "activity" && seg[3] && seg[4]) return { name: "activity", eid, block: Number(seg[3]), key: decodeURIComponent(seg[4]) };
     if (seg[2] === "project") return { name: "project", eid };
     if (seg[2] === "badges") return { name: "badges", eid };
     if (seg[2] === "revision") return { name: "revision", eid };
@@ -62,6 +64,7 @@ export const routes = {
   session: (eid: string, block: number, item: string) => `#/c/${encodeURIComponent(eid)}/session/${block}/${encodeURIComponent(item)}`,
   quiz: (eid: string, kind: QuizKind) => `#/c/${encodeURIComponent(eid)}/quiz/${kind}`,
   deliverable: (eid: string, block: number, key: string) => `#/c/${encodeURIComponent(eid)}/deliverable/${block}/${encodeURIComponent(key)}`,
+  activity: (eid: string, block: number, key: string) => `#/c/${encodeURIComponent(eid)}/activity/${block}/${encodeURIComponent(key)}`,
   project: (eid: string) => `#/c/${encodeURIComponent(eid)}/project`,
   badges: (eid: string) => `#/c/${encodeURIComponent(eid)}/badges`,
   revision: (eid: string) => `#/c/${encodeURIComponent(eid)}/revision`,

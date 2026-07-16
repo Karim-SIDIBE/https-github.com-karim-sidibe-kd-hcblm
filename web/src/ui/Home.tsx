@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type { CourseContent } from "@kd/shared";
 import { api, engine, store, getIdentity } from "../lib/app";
-import { rememberEnrollment } from "../lib/autosync";
+import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
@@ -44,6 +44,9 @@ export function Home({ eid }: { eid: string }) {
     })();
     return () => { alive = false; };
   }, [eid, refresh]);
+
+  // Live updates from the background sync (reconnect, tab focus, other device).
+  useEffect(() => onProgress(eid, setProgress), [eid]);
 
   if (!bundle) return <div className="stack"><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /><div className="skeleton card" /></div>;
 
