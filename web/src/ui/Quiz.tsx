@@ -6,6 +6,8 @@ export type QuizQuestion = {
   id: string;
   prompt: string;
   type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
+  /** Profiling question: reveals a profile — no right/wrong marks, never ✗. */
+  profiling?: boolean;
   options?: { key: string; label: string }[];
   correctKey?: string;
   correctKeys?: string[];
@@ -72,8 +74,10 @@ export function Quiz({ questions, onSubmit }: {
         <div className="stack">
           {(q.options ?? []).map((o) => {
             const sel = type === "multiple" ? chosen.split(",").includes(o.key) : chosen === o.key;
-            const isRight = phase === "feedback" && (type === "multiple" ? (q.correctKeys ?? []).includes(o.key) : q.correctKey === o.key);
-            const isWrong = phase === "feedback" && sel && !isRight;
+            // Profiling questions have no right/wrong: keep the selection
+            // highlighted, never paint ✅/❌ on the options.
+            const isRight = phase === "feedback" && !q.profiling && (type === "multiple" ? (q.correctKeys ?? []).includes(o.key) : q.correctKey === o.key);
+            const isWrong = phase === "feedback" && !q.profiling && sel && !isRight;
             const dim = phase === "feedback" && !isRight && !sel;
             return (
               <div key={o.key} className={`pt-opt ${sel ? "sel" : ""} ${isWrong ? "ko" : ""}`} role="button"
@@ -120,7 +124,7 @@ export function Quiz({ questions, onSubmit }: {
 
       {phase === "feedback" && (
         <div className="stack pt-reveal">
-          <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{(q as any).profiling ? t("quiz.profileSaved") : correct ? t("quiz.good") : t("quiz.review")}</span>
+          <span className={`hf-pill ${correct ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{q.profiling ? t("quiz.profileSaved") : correct ? t("quiz.good") : t("quiz.review")}</span>
           {type === "numeric" && !correct && q.answerNumber != null && <div className="meta">{t("quiz.expected", { n: q.answerNumber })}</div>}
           {type === "short" && !correct && (q.accepted?.length ?? 0) > 0 && <div className="meta">{t("quiz.accepted", { list: q.accepted!.join(", ") })}</div>}
           {q.feedbackText && <div className="hf-card hf-card--mint"><p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{q.feedbackText}</p></div>}

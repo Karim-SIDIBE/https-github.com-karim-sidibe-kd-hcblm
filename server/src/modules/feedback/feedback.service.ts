@@ -30,6 +30,14 @@ function submissionText(data: unknown): string {
     for (const k of ["text", "brief", "answer", "content", "response"]) {
       if (typeof d[k] === "string" && (d[k] as string).trim()) return (d[k] as string).trim();
     }
+    // Guided-form exercises store { fields: { label → value } } — serialise as
+    // "label : value" lines so the formative feedback can read the answer.
+    if (d.fields && typeof d.fields === "object") {
+      const lines = Object.entries(d.fields as Record<string, unknown>)
+        .filter(([, v]) => typeof v === "string" && (v as string).trim())
+        .map(([k, v]) => `${k} : ${(v as string).trim()}`);
+      if (lines.length) return lines.join("\n");
+    }
   }
   if (typeof data === "string") return data.trim();
   return "";

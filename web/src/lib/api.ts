@@ -104,6 +104,7 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return fetch(abs, { headers: t ? { authorization: `Bearer ${t}` } : {} });
     },
     async get<T = any>(path: string): Promise<T> { return (await (await raw("GET", path)).json()).data as T; },
+    async post<T = any>(path: string, body?: unknown): Promise<T> { return (await (await raw("POST", path, { body })).json()).data as T; },
     async listEnrollments(): Promise<EnrollmentSummary[]> {
       const res = await raw("GET", "/enrollments");
       if (!res.ok) return [];

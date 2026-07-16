@@ -248,8 +248,10 @@ export function diagnosticProfile(
   const subAreaScores: SubAreaScore[] = [...byArea.entries()].map(([subArea, s]) => ({
     subArea, correct: s.correct, total: s.total, pct: Math.round((s.correct / s.total) * 100),
   }));
+  // Only areas with an actual gap are learning priorities — a fully-mastered
+  // (100%) area presented as "priority" reads as a scoring bug to the learner.
   const priorities = subAreaScores
-    .slice()
+    .filter((s) => s.pct < 100)
     .sort((a, b) => a.pct - b.pct || a.subArea.localeCompare(b.subArea))
     .slice(0, 2)
     .map((s) => ({ subArea: s.subArea, pct: s.pct }));

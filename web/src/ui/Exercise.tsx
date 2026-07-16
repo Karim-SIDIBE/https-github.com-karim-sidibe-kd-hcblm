@@ -11,7 +11,14 @@ export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?:
  * green feedback). It is the completion gate: the learner cannot advance until
  * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
-export function Exercise({ exercise, onComplete, onNext }: { exercise: ExerciseSpec; onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void>; onNext: () => void }) {
+export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
+  exercise: ExerciseSpec;
+  onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void>;
+  onNext: () => void;
+  /** Optional: fetch a personalised (AI) feedback on the saved answer — shown
+   *  in addition to the static feedback, silently skipped offline/on error. */
+  aiFeedback?: () => Promise<string | null>;
+}) {
   const t = useT();
   const start = useRef(Date.now());
   const [phase, setPhase] = useState<"answer" | "feedback">("answer");
@@ -19,6 +26,7 @@ export function Exercise({ exercise, onComplete, onNext }: { exercise: ExerciseS
   const [text, setText] = useState("");
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
   const minChars = exercise.minChars ?? 200;
   const canAnswer =
@@ -39,6 +47,12 @@ export function Exercise({ exercise, onComplete, onNext }: { exercise: ExerciseS
     const meta: ExerciseMeta = { timeMs: Date.now() - start.current, feedbackViewed: true, response: response(), correct };
     const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() } : { fields: values };
     try { await onComplete(data, meta); setPhase("feedback"); } finally { setBusy(false); }
+    // The answer is saved — now enrich the static feedback with a personalised
+    // one (AI or heuristic server-side). Best-effort: offline keeps static only.
+    if (aiFeedback && navigator.onLine) {
+      setAi({ loading: true, text: null });
+      try { setAi({ loading: false, text: await aiFeedback() }); } catch { setAi({ loading: false, text: null }); }
+    }
   }
   const isCorrect = exercise.type === "multi" && choice === exercise.correctKey;
 
@@ -87,6 +101,13 @@ export function Exercise({ exercise, onComplete, onNext }: { exercise: ExerciseS
             <strong className="ok">{t("ex.feedback")}</strong>
             <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{exercise.feedbackText}</p>
           </div>
+          {ai.loading && <p className="meta">✨ {t("ex.aiLoading")}</p>}
+          {ai.text && (
+            <div className="hf-card hf-card--icy">
+              <div className="eyebrow">✨ {t("ex.aiTitle")}</div>
+              <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{ai.text}</p>
+            </div>
+          )}
           <button className="hf-btn hf-btn--primary hf-btn--block" onClick={onNext}>{t("ex.next")}</button>
         </div>
       )}

@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useState } from "react";
-import { engine, isLoggedIn, logout } from "./lib/app";
+import { api, engine, isLoggedIn, logout } from "./lib/app";
 import { startAutoSync, type SyncState } from "./lib/autosync";
 import { navigate, routes, useRoute, type Route } from "./lib/router";
 import { brand, brandWordmark } from "./lib/brand";
@@ -17,6 +17,7 @@ const Journal = lazy(() => import("./ui/Journal").then((m) => ({ default: m.Jour
 const SessionScreen = lazy(() => import("./ui/Session").then((m) => ({ default: m.SessionScreen })));
 const QuizScreen = lazy(() => import("./ui/QuizScreen").then((m) => ({ default: m.QuizScreen })));
 const Deliverable = lazy(() => import("./ui/Deliverable").then((m) => ({ default: m.Deliverable })));
+const Activity = lazy(() => import("./ui/Activity").then((m) => ({ default: m.Activity })));
 const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Project })));
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
@@ -31,7 +32,7 @@ function eidOf(route: Route): string | null {
 function activeTab(route: Route): "home" | "cours" | "journal" | "badges" | null {
   switch (route.name) {
     case "course": case "onboarding": return "home";
-    case "cours": case "session": case "quiz": case "deliverable": case "project": return "cours";
+    case "cours": case "session": case "quiz": case "deliverable": case "activity": case "project": return "cours";
     case "journal": return "journal";
     case "badges": return "badges";
     default: return null;
@@ -46,6 +47,7 @@ function Screen({ route }: { route: Route }) {
     case "session": return <SessionScreen eid={route.eid} block={route.block} item={route.item} />;
     case "quiz": return <QuizScreen eid={route.eid} kind={route.kind} />;
     case "deliverable": return <Deliverable eid={route.eid} block={route.block} itemKey={route.key} />;
+    case "activity": return <Activity eid={route.eid} block={route.block} itemKey={route.key} />;
     case "project": return <Project eid={route.eid} />;
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
@@ -94,7 +96,15 @@ export function App() {
   const route = useRoute();
 
   useEffect(() => { document.title = brand.name; initNative(); }, []);
-  useEffect(() => { if (!authed) return; syncPushToken(); return startAutoSync(engine, (s) => setSync(s)); }, [authed]);
+  useEffect(() => {
+    if (!authed) return;
+    syncPushToken();
+    // The pull keeps this device in step with completions made elsewhere
+    // (another device, same account) — no manual refresh needed.
+    return startAutoSync(engine, (s) => setSync(s), 60_000, async (eid) => {
+      try { const d = await api.progress(eid); return d?.progress ?? null; } catch { return null; }
+    });
+  }, [authed]);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
