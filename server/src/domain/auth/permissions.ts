@@ -29,13 +29,15 @@ export type Permission =
   | "media:manage" // upload / manage media assets
   | "credential:revoke" // revoke issued verifiable credentials
   | "lti:manage" // register / manage LTI platforms
-  | "org:manage"; // create / oversee organizations (platform level)
+  | "org:manage" // create / oversee organizations (platform level)
+  | "uitexts:manage"; // edit the learner-app interface texts (SUPER_ADMIN only)
 
 const ALL: Permission[] = [
   "course:create", "course:read", "course:update", "course:submit_review",
   "course:review", "course:publish", "course:archive",
   "enrollment:create", "enrollment:read_any", "evaluation:grade", "evaluation:assign",
   "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
+  "uitexts:manage",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {

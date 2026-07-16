@@ -16,6 +16,10 @@
     "./scoring": {
       "types": "./src/scoring.ts",
       "import": "./src/scoring.ts"
+    },
+    "./ui-texts": {
+      "types": "./src/ui-texts.ts",
+      "import": "./src/ui-texts.ts"
     }
   },
   "scripts": {

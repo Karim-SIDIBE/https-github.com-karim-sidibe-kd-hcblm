@@ -497,6 +497,21 @@ enum MediaStatus {
 }
 
 /// Folder in the authoring media library (typically one folder per course).
+/// Super-admin override of one learner-app interface text. Defaults live in
+/// @kd/shared/ui-texts; only edited keys are stored (delete = revert).
+model UiText {
+  id          String   @id @default(cuid())
+  app         String   @default("web")
+  locale      String // "fr" | "en"
+  key         String
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+
+  @@unique([app, locale, key])
+}
+
 model MediaFolder {
   id        String   @id @default(cuid())
   name      String   @unique
