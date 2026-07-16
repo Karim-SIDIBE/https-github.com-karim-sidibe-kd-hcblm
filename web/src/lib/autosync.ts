@@ -11,10 +11,28 @@
  * worker `sync` handler — that lands with the offline-video work (Phase 6).
  */
 import type { Engine } from "./sync";
-import { setCachedProgress, type ProgressSnapshot } from "./cache";
+import { setCachedProgress, type BadgeSnapshot, type ProgressSnapshot } from "./cache";
 
 const KEY = "klms_enrollments";
 const PROGRESS_EVENT = "klms:progress";
+const BADGES_EVENT = "klms:badges";
+
+/** Broadcast the badge list returned by a sync — the App-level celebration
+ *  overlay diffs it against the "seen" set and fêtes any new unlock. */
+export function emitBadges(eid: string, badges: BadgeSnapshot[]) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent(BADGES_EVENT, { detail: { eid, badges } }));
+  }
+}
+
+export function onBadges(cb: (eid: string, badges: BadgeSnapshot[]) => void): () => void {
+  const handler = (e: Event) => {
+    const d = (e as CustomEvent).detail as { eid: string; badges: BadgeSnapshot[] };
+    if (d?.eid && Array.isArray(d.badges)) cb(d.eid, d.badges);
+  };
+  window.addEventListener(BADGES_EVENT, handler);
+  return () => window.removeEventListener(BADGES_EVENT, handler);
+}
 
 /** Broadcast a fresh progress snapshot so open screens re-render live —
  *  no manual page refresh needed after a background sync or a remote pull. */

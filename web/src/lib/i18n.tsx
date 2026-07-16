@@ -139,6 +139,7 @@ const fr: Dict = {
   "act.caseIntro": "Lisez les étapes du cas, puis rédigez votre analyse : elle est enregistrée et réutilisée au Bloc 4.",
   "act.caseAnswer": "Votre analyse (transfert à votre situation)",
   "ex.aiTitle": "Retour personnalisé sur votre réponse", "ex.aiLoading": "Analyse de votre réponse en cours…",
+  "badge.unlocked": "Badge débloqué !", "badge.peerNotified": "🤝 Votre pair de progression est prévenu",
   // journal
   "jr.eyebrow": "Journal de bord", "jr.title": "Ancrer mes acquis",
   "jr.intro": "Une micro-entrée à des intervalles clés, ancrée dans votre situation réelle (votre Moment d'Ancrage).",
@@ -294,6 +295,7 @@ const en: Dict = {
   "act.caseIntro": "Read the case steps, then write your analysis: it is saved and reused in Block 4.",
   "act.caseAnswer": "Your analysis (transfer to your situation)",
   "ex.aiTitle": "Personalised feedback on your answer", "ex.aiLoading": "Analysing your answer…",
+  "badge.unlocked": "Badge unlocked!", "badge.peerNotified": "🤝 Your progress peer has been notified",
   "jr.eyebrow": "Logbook", "jr.title": "Anchor my learning",
   "jr.intro": "A micro-entry at key intervals, grounded in your real situation (your Anchor Moment).",
   "jr.day": "Day D+{n}",

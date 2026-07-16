@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CourseContent } from "@kd/shared";
 import { api, engine, store, getIdentity } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
-import { getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
+import { getCachedProgress, getCachedResume, seedSeenBadges, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
@@ -25,6 +25,9 @@ export function Home({ eid }: { eid: string }) {
     try {
       const d = await api.progress(eid);
       if (d?.progress) { setProgress(d.progress); setCachedProgress(eid, d.progress); }
+      // First contact: badges earned BEFORE this device knew the enrolment are
+      // recorded as seen — only future unlocks get the celebration overlay.
+      if (Array.isArray(d?.badges)) seedSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
       if (d?.learnerName) setName(String(d.learnerName).split(" ")[0]!);
       setPeer(d?.peer ?? null);
       const r = await api.resume(eid);

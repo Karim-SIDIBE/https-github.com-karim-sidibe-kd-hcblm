@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { api, engine, isLoggedIn, logout } from "./lib/app";
-import { startAutoSync, type SyncState } from "./lib/autosync";
+import { onBadges, startAutoSync, type SyncState } from "./lib/autosync";
+import { markBadgesSeen, unseenBadges, type BadgeSnapshot } from "./lib/cache";
 import { navigate, routes, useRoute, type Route } from "./lib/router";
 import { brand, brandWordmark } from "./lib/brand";
 import { Login } from "./ui/Login";
@@ -76,6 +77,35 @@ function Brand() {
   );
 }
 
+/** Full-screen celebration the moment a badge is unlocked (commit or resync). */
+function BadgeCelebration() {
+  const t = useT();
+  const [party, setParty] = useState<{ eid: string; badges: BadgeSnapshot[] } | null>(null);
+  useEffect(() => onBadges((eid, badges) => {
+    const fresh = unseenBadges(eid, badges);
+    if (fresh.length > 0) setParty({ eid, badges: fresh });
+  }), []);
+  if (!party) return null;
+  const NAME: Record<string, string> = { ENTRY: "bd.entry", COMPREHENSION: "bd.comprehension", PRACTICE: "bd.practice", ANCHORING: "bd.anchoring" };
+  const close = () => { markBadgesSeen(party.eid, party.badges.map((b) => b.type)); setParty(null); };
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", display: "grid", placeItems: "center", zIndex: 1000, padding: 16 }} onClick={close} role="dialog" aria-modal="true">
+      <div className="hf-card center stack pt-reveal" style={{ maxWidth: 430, width: "100%" }} onClick={(e) => e.stopPropagation()}>
+        <p style={{ fontSize: 52, margin: 0 }}>🏅</p>
+        <h2 style={{ margin: 0 }}>{t("badge.unlocked")}</h2>
+        {party.badges.map((b) => (
+          <div key={b.type} className="hf-card hf-card--peach stack" style={{ gap: 6 }}>
+            <strong className="h4">{NAME[b.type] ? t(NAME[b.type]!) : b.type}</strong>
+            {b.message && <p className="body" style={{ margin: 0 }}>{b.message}</p>}
+            {b.peerNotified && <span className="hf-pill hf-pill--mint hf-pill--sm" style={{ alignSelf: "center" }}>{t("badge.peerNotified")}</span>}
+          </div>
+        ))}
+        <button className="hf-btn hf-btn--primary hf-btn--block" onClick={close}>{t("common.continue")}</button>
+      </div>
+    </div>
+  );
+}
+
 function Banner({ sync }: { sync: SyncState }) {
   const t = useT();
   const [online, setOnline] = useState(navigator.onLine);
@@ -118,7 +148,7 @@ export function App() {
       <div className="shell">
         <div className="main">
           <div className="appbar appbar--standalone"><Brand /><div className="tools"><LanguageSwitcher /><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>{t("nav.account")}</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>{t("nav.logout")}</button></div></div>
-          <main className="screen"><Banner sync={sync} />{!isNative() && <InstallPrompt />}<Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
+          <main className="screen"><Banner sync={sync} /><BadgeCelebration />{!isNative() && <InstallPrompt />}<Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
     );
@@ -154,6 +184,7 @@ export function App() {
 
         <main className="screen">
           <Banner sync={sync} />
+          <BadgeCelebration />
           {!isNative() && <InstallPrompt />}
           <Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense>
         </main>
