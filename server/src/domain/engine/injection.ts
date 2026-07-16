@@ -9,10 +9,12 @@
  */
 import { MOMENT_ANCRAGE_TOKEN } from "../content-model.js";
 
-/** Replace the PAM token throughout an arbitrary JSON value. */
+/** Replace the PAM token throughout an arbitrary JSON value. The learner's
+ *  words are QUOTED (« … », like the badge messages) so they read as a
+ *  citation inside the surrounding prompt, not as part of the sentence. */
 export function injectMomentAncrage<T>(value: T, momentAncrage: string | null | undefined): T {
   const pam = (momentAncrage ?? "").trim();
-  const replacement = pam.length > 0 ? pam : "votre situation décrite au Bloc 0";
+  const replacement = pam.length > 0 ? `« ${pam} »` : "votre situation décrite au Bloc 0";
 
   const walk = (v: unknown): unknown => {
     if (typeof v === "string") {
