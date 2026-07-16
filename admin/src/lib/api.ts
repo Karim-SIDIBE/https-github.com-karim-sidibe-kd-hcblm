@@ -141,6 +141,10 @@ export const api = {
   courseReport: (courseId: string) => req<CourseReport>("GET", `/analytics/courses/${courseId}`),
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
+  // UI texts — super-admin overrides of the learner-app interface copy.
+  uiTexts: (app = "web") => req<{ fr: Record<string, string>; en: Record<string, string> }>("GET", `/ui-texts?app=${app}`),
+  setUiText: (locale: "fr" | "en", key: string, value: string, app = "web") => req<unknown>("PUT", "/ui-texts", { app, locale, key, value }),
+  resetUiText: (locale: "fr" | "en", key: string, app = "web") => req<{ reverted: boolean }>("DELETE", "/ui-texts", { app, locale, key }),
   // Question bank (reusable questions inserted into course quizzes).
   bankQuestions: (subArea?: string, status?: string) => {
     const q = new URLSearchParams();

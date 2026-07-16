@@ -35,6 +35,7 @@ import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
+import { uiTextRoutes } from "./modules/uitexts/uitexts.routes.js";
 import { render as renderMetrics, recordHttp, requestStarted, requestEnded } from "./lib/metrics.js";
 import { getRedis } from "./lib/redis.js";
 
@@ -177,6 +178,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await webhookRoutes(api);
       await docsRoutes(api);
       await jobRoutes(api);
+      await uiTextRoutes(api);
     },
     { prefix: "/api/v1" },
   );

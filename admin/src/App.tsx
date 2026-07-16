@@ -20,6 +20,7 @@ import { Cours } from "./screens/Cours";
 import { Medias } from "./screens/Medias";
 import { QuestionBank } from "./screens/QuestionBank";
 import { Settings } from "./screens/Settings";
+import { UiTexts } from "./screens/UiTexts";
 import { Security } from "./screens/Security";
 import { Soon } from "./screens/Soon";
 
@@ -46,6 +47,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "sessions", label: "Sessions live", Icon: ISession, roles: [A, C, I] },
   ]},
   { group: "Système", items: [
+    { id: "uitexts", label: "Textes de l'interface", Icon: ISettings, roles: [A] },
     { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
     { id: "security", label: "Sécurité (2FA)", Icon: ISettings, roles: [A, C, I, E, D, R, EC, EM] },
     { id: "settings", label: "Réglages", Icon: ISettings, roles: [A, C] },
@@ -135,7 +137,7 @@ export function App() {
           <div className="spacer" />
           <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
         </header>
-        {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" ? (
+        {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" && view !== "uitexts" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
           : view === "users" ? <Utilisateurs />
@@ -151,6 +153,7 @@ export function App() {
           : view === "courses" ? <Cours ctx={ctx} />
           : view === "medias" ? <Medias />
           : view === "bank" ? <QuestionBank />
+          : view === "uitexts" ? <UiTexts />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Soon title={TITLES[view] ?? "Module"} />}
