@@ -116,6 +116,10 @@ const EnvSchema = z.object({
   METRICS_ENABLED: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
   /// Optional bearer token required to scrape /metrics (recommended if exposed).
   METRICS_TOKEN: z.string().optional(),
+  // --- internal job scheduler ---
+  /// Run the delivery queues (60 s) + scheduled jobs (hourly) inside the API
+  /// process — no external cron needed. "false" to disable (external cron mode).
+  JOBS_SCHEDULER: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
   // --- horizontal scaling ---
   /// Number of Node cluster workers (uses the vCPUs). 1 = single process (default).
   API_WORKERS: z.coerce.number().int().positive().default(1),

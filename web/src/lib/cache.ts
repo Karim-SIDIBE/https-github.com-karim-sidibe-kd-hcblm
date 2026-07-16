@@ -33,3 +33,24 @@ export const getCachedResume = (eid: string) => read<ResumeSnapshot>(rKey(eid));
 export const setCachedResume = (eid: string, r: ResumeSnapshot) => write(rKey(eid), r);
 export const getCachedPosition = (eid: string, block: number, item: string) => read<PositionSnapshot>(posKey(eid, block, item));
 export const setCachedPosition = (eid: string, block: number, item: string, v: PositionSnapshot) => write(posKey(eid, block, item), v);
+
+// --- badge "seen" tracking (powers the unlock celebration) -------------------
+
+export type BadgeSnapshot = { type: string; message?: string | null; peerNotified?: boolean };
+
+const bKey = (eid: string) => `klms_badges_seen_${eid}`;
+
+/** First contact with an enrolment: record its CURRENT badges as already seen,
+ *  so pre-existing badges are never (re-)celebrated. No-op once initialised. */
+export function seedSeenBadges(eid: string, types: string[]) {
+  if (read<string[]>(bKey(eid)) === null) write(bKey(eid), types);
+}
+/** Badges present in `badges` that this device never celebrated. */
+export function unseenBadges(eid: string, badges: BadgeSnapshot[]): BadgeSnapshot[] {
+  const seen = read<string[]>(bKey(eid)) ?? [];
+  return badges.filter((b) => !seen.includes(b.type));
+}
+export function markBadgesSeen(eid: string, types: string[]) {
+  const seen = read<string[]>(bKey(eid)) ?? [];
+  write(bKey(eid), [...new Set([...seen, ...types])]);
+}

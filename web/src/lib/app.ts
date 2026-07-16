@@ -2,6 +2,8 @@
  * app.ts — wiring: API client, offline store, sync engine, token persistence.
  */
 import { createApi } from "./api";
+import { emitBadges } from "./autosync";
+import type { BadgeSnapshot } from "./cache";
 import { idbStore, memStore } from "./store";
 import { createEngine } from "./sync";
 
@@ -15,7 +17,19 @@ export const tokenBox = {
 
 export const api = createApi(API_URL, tokenBox);
 export const store = typeof indexedDB !== "undefined" ? idbStore() : memStore();
-export const engine = createEngine(store, api);
+
+// Every flush (direct commits AND background resyncs) broadcasts the badge
+// list from the server so the App-level celebration can react to new unlocks.
+const baseEngine = createEngine(store, api);
+export const engine: typeof baseEngine = {
+  ...baseEngine,
+  async flush(enrollmentId: string) {
+    const r = await baseEngine.flush(enrollmentId);
+    const badges = (r as { badges?: BadgeSnapshot[] }).badges;
+    if (badges && badges.length > 0) emitBadges(enrollmentId, badges);
+    return r;
+  },
+};
 
 export const isLoggedIn = () => Boolean(tokenBox.get().access);
 
