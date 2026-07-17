@@ -34,16 +34,33 @@ export const setCachedResume = (eid: string, r: ResumeSnapshot) => write(rKey(ei
 export const getCachedPosition = (eid: string, block: number, item: string) => read<PositionSnapshot>(posKey(eid, block, item));
 export const setCachedPosition = (eid: string, block: number, item: string, v: PositionSnapshot) => write(posKey(eid, block, item), v);
 
+/** Drop every cached in-video position for an enrolment (used when the server
+ *  shows a fresh/reset enrolment — stale offsets would resume mid-video). */
+export function clearCachedPositions(eid: string) {
+  try {
+    const prefix = `klms_pos_${eid}_`;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+    }
+  } catch { /* no storage */ }
+}
+
 // --- badge "seen" tracking (powers the unlock celebration) -------------------
 
 export type BadgeSnapshot = { type: string; message?: string | null; peerNotified?: boolean };
 
 const bKey = (eid: string) => `klms_badges_seen_${eid}`;
 
-/** First contact with an enrolment: record its CURRENT badges as already seen,
- *  so pre-existing badges are never (re-)celebrated. No-op once initialised. */
-export function seedSeenBadges(eid: string, types: string[]) {
-  if (read<string[]>(bKey(eid)) === null) write(bKey(eid), types);
+/** Reconcile the "seen" set with the SERVER's badge list.
+ *  - First contact: record the current badges as already seen, so pre-existing
+ *    badges are never (re-)celebrated on this device.
+ *  - Enrolment reset (server has NO badges anymore): clear the set, so the
+ *    re-earned badges get their celebration again. */
+export function syncSeenBadges(eid: string, types: string[]) {
+  const seen = read<string[]>(bKey(eid));
+  if (seen === null) { write(bKey(eid), types); return; }
+  if (types.length === 0 && seen.length > 0) write(bKey(eid), []);
 }
 /** Badges present in `badges` that this device never celebrated. */
 export function unseenBadges(eid: string, badges: BadgeSnapshot[]): BadgeSnapshot[] {

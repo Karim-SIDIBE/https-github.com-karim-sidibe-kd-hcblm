@@ -55,7 +55,18 @@ export function Course({ eid }: { eid: string }) {
   }
 
   const refreshProgress = useCallback(async () => {
-    try { const data = await api.progress(eid); if (data?.progress) { setProgress(data.progress); setCachedProgress(eid, data.progress); } } catch { /* offline */ }
+    try {
+      const data = await api.progress(eid);
+      if (data?.progress) {
+        setProgress(data.progress); setCachedProgress(eid, data.progress);
+        // The server is authoritative for the diagnostic card: if it says the
+        // quiz was never taken (e.g. enrolment reset), drop this device's
+        // cached priorities instead of showing a ghost card.
+        const comp = (data.progress.blocks as { type: string; state: string; completedKeys?: string[] }[]).find((b) => b.type === "COMPREHENSION");
+        const diagDone = comp ? comp.state === "completed" || (comp.completedKeys ?? []).includes("diagnostic") : false;
+        if (!diagDone) { setDiag(null); try { localStorage.removeItem(`klms_diag_${eid}`); } catch { /* */ } }
+      }
+    } catch { /* offline */ }
   }, [eid]);
 
   // Live updates from the background sync (reconnect, tab focus, other device).
