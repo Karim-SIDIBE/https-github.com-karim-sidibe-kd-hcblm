@@ -85,7 +85,22 @@ export function Home({ eid }: { eid: string }) {
         : t("home.remaining", { dur: formatDuration(remSec) }))
     : null;
 
-  const openResume = () => { if (!resume) return; resume.blockIndex === 0 ? navigate(routes.onboarding(eid)) : navigate(routes.session(eid, resume.blockIndex, resume.itemKey)); };
+  // "Reprendre" must route by ITEM KIND — a resume target can be a quiz, a
+  // deliverable or a long activity, not only a video micro-session (sending
+  // "diagnostic" to the session screen used to dead-end on a blank skeleton).
+  const openResume = () => {
+    if (!resume) return;
+    const { blockIndex, itemKey } = resume;
+    if (blockIndex === 0) {
+      if (itemKey === "declencheur" || itemKey === "trigger") return navigate(routes.session(eid, 0, itemKey));
+      return navigate(routes.onboarding(eid));
+    }
+    if (itemKey === "diagnostic" || itemKey === "interblock" || itemKey === "final") return navigate(routes.quiz(eid, itemKey));
+    if (itemKey === "field" || /^J\+\d+$/.test(itemKey)) return navigate(routes.deliverable(eid, blockIndex, itemKey));
+    if (itemKey === "case" || itemKey === "scenarios" || itemKey === "self" || itemKey === "plan") return navigate(routes.activity(eid, blockIndex, itemKey));
+    if (itemKey === "project") return navigate(routes.project(eid));
+    return navigate(routes.session(eid, blockIndex, itemKey));
+  };
 
   return (
     <div className="stack">
