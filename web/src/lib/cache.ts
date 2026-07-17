@@ -54,13 +54,15 @@ const bKey = (eid: string) => `klms_badges_seen_${eid}`;
 
 /** Reconcile the "seen" set with the SERVER's badge list.
  *  - First contact: record the current badges as already seen, so pre-existing
- *    badges are never (re-)celebrated on this device.
- *  - Enrolment reset (server has NO badges anymore): clear the set, so the
- *    re-earned badges get their celebration again. */
-export function syncSeenBadges(eid: string, types: string[]) {
+ *    badges are never (re-)celebrated on this device ("seeded").
+ *  - The server has NO badges while this device had celebrated some: the
+ *    enrolment was RESET — clear the set and tell the caller, so every stale
+ *    per-device cache (positions, offline copies, diagnostic) gets purged too. */
+export function syncSeenBadges(eid: string, types: string[]): "seeded" | "reset" | "unchanged" {
   const seen = read<string[]>(bKey(eid));
-  if (seen === null) { write(bKey(eid), types); return; }
-  if (types.length === 0 && seen.length > 0) write(bKey(eid), []);
+  if (seen === null) { write(bKey(eid), types); return "seeded"; }
+  if (types.length === 0 && seen.length > 0) { write(bKey(eid), []); return "reset"; }
+  return "unchanged";
 }
 /** Badges present in `badges` that this device never celebrated. */
 export function unseenBadges(eid: string, badges: BadgeSnapshot[]): BadgeSnapshot[] {

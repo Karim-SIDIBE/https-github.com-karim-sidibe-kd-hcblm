@@ -53,7 +53,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           {band?.description && <p className="body">{band.description}</p>}
           {prof.priorities.length > 0 ? (
             <>
-              <strong className="h4">{t("qz.priorities")}</strong>
+              <strong className="h4">{t(prof.priorities.length > 1 ? "qz.priorities" : "qz.priority1")}</strong>
               <div className="stack">
                 {prof.priorities.map((p, i) => (
                   <div key={p} className="hf-card hf-card--peach row" style={{ gap: 12, padding: 14 }}>

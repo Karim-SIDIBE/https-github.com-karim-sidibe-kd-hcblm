@@ -578,9 +578,12 @@ export const n1Full: CourseContent = {
             ], correctKey: "B", feedbackText: "Toutes les réponses révèlent un profil (A productif maîtrisé · B débordé réactif · C procrastinateur/submergé · D organisateur en développement). Aucune n'est « mauvaise ».", subArea: "auto-positionnement" },
           ],
           profiles: [
-            { scoreRange: [8, 10], name: "Productif maîtrisé", description: "Bons réflexes déjà là. Priorité : techniques avancées de protection du temps de fond et de délégation." },
-            { scoreRange: [5, 7], name: "Organisateur en transition", description: "Des méthodes mais débordées par les imprévus. Priorité : filtrage des urgences et récupération de temps." },
-            { scoreRange: [3, 4], name: "Réactif conscient", description: "Vous savez que vous pourriez faire mieux. Priorité : premiers rituels et distinction urgence/importance." },
+            // NB: the descriptions deliberately avoid the word « priorité » — the
+            // per-area learning priorities are listed right below on the result
+            // screen, and two competing "priorités" read as an inconsistency.
+            { scoreRange: [8, 10], name: "Productif maîtrisé", description: "Bons réflexes déjà là. Pour progresser : techniques avancées de protection du temps de fond et de délégation." },
+            { scoreRange: [5, 7], name: "Organisateur en transition", description: "Des méthodes mais débordées par les imprévus. Pour progresser : filtrage des urgences et récupération de temps." },
+            { scoreRange: [3, 4], name: "Réactif conscient", description: "Vous savez que vous pourriez faire mieux. Pour progresser : premiers rituels et distinction urgence/importance." },
             { scoreRange: [0, 2], name: "Réactif en éveil", description: "Prise de conscience récente. Ce parcours est entièrement fait pour vous." },
           ],
         },
