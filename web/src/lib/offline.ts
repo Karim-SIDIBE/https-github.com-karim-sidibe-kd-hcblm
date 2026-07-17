@@ -148,6 +148,16 @@ export async function removeAvailability(eid: string, blockIndex: number, itemKe
   writeReg(eid, reg);
 }
 
+/** Purge EVERY offline element of an enrolment — used when the server reveals
+ *  the enrolment was reset (its offline copies belong to the previous run). */
+export async function purgeAllAvailability(eid: string): Promise<number> {
+  const reg = readReg(eid);
+  const keys = Object.keys(reg);
+  for (const key of keys) await deleteFromCache(reg[key]!.urls);
+  if (keys.length > 0) writeReg(eid, {});
+  return keys.length;
+}
+
 /** Purge every element whose 7-day window has elapsed. Returns how many were purged. */
 export async function purgeExpired(eid: string): Promise<number> {
   const reg = readReg(eid);

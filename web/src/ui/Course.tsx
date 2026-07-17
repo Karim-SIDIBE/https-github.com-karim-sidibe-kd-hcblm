@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
-import { getCachedProgress, setCachedProgress, type ProgressSnapshot } from "../lib/cache";
+import { clearCachedPositions, getCachedProgress, setCachedProgress, syncSeenBadges, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
 import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
-import { availabilityOf, makeAvailable, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
+import { availabilityOf, makeAvailable, purgeAllAvailability, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 import type { CourseContent } from "@kd/shared";
 import { useT, type TFn } from "../lib/i18n";
@@ -59,6 +59,13 @@ export function Course({ eid }: { eid: string }) {
       const data = await api.progress(eid);
       if (data?.progress) {
         setProgress(data.progress); setCachedProgress(eid, data.progress);
+        // Enrolment reset detected (server badges gone while this device had
+        // celebrated some): purge every per-device leftover of the previous run.
+        if (Array.isArray(data.badges) && syncSeenBadges(eid, (data.badges as { type: string }[]).map((b) => b.type)) === "reset") {
+          clearCachedPositions(eid);
+          await purgeAllAvailability(eid);
+          setAvail({}); // the registry is now empty — reflect it immediately
+        }
         // The server is authoritative for the diagnostic card: if it says the
         // quiz was never taken (e.g. enrolment reset), drop this device's
         // cached priorities instead of showing a ghost card.

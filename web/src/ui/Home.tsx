@@ -4,6 +4,7 @@ import { api, engine, store, getIdentity } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { clearCachedPositions, getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, syncSeenBadges, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
+import { purgeAllAvailability } from "../lib/offline";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
@@ -25,14 +26,16 @@ export function Home({ eid }: { eid: string }) {
     try {
       const d = await api.progress(eid);
       if (d?.progress) { setProgress(d.progress); setCachedProgress(eid, d.progress); }
-      // Badge "seen" set: seeded on first contact, CLEARED when the server says
-      // the enrolment has no badges anymore (reset) — else the re-earned badge
-      // would be treated as already celebrated on this device.
-      if (Array.isArray(d?.badges)) syncSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
-      // Fresh/reset enrolment (nothing completed, no badge): drop the cached
-      // in-video positions — stale offsets would resume mid-video.
-      if ((d?.badges?.length ?? 0) === 0 && d?.progress?.blocks?.every((b: { completedKeys?: string[] }) => (b.completedKeys ?? []).length === 0)) {
-        clearCachedPositions(eid);
+      // Badge "seen" set: seeded on first contact; a RESET (server badges gone)
+      // clears it and purges every per-device leftover of the previous run —
+      // in-video positions, « disponible hors ligne » copies, diagnostic card.
+      if (Array.isArray(d?.badges)) {
+        const badgeSync = syncSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
+        if (badgeSync === "reset") {
+          clearCachedPositions(eid);
+          await purgeAllAvailability(eid);
+          try { localStorage.removeItem(`klms_diag_${eid}`); } catch { /* */ }
+        }
       }
       if (d?.learnerName) setName(String(d.learnerName).split(" ")[0]!);
       setPeer(d?.peer ?? null);

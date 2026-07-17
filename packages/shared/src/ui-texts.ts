@@ -127,7 +127,7 @@ const fr: UiDict = {
   // quiz
   "qz.diagnostic": "Quiz diagnostique", "qz.interblock": "Quiz interbloc", "qz.final": "Quiz final",
   "qz.unavailable": "Quiz indisponible.", "qz.profileTitle": "Votre profil de compétence",
-  "qz.priorities": "Vos 2 priorités d'apprentissage", "qz.score": "Score : {correct}/{total}",
+  "qz.priorities": "Vos priorités d'apprentissage", "qz.priority1": "Votre priorité d'apprentissage", "qz.score": "Score : {correct}/{total}",
   "qz.finalPassed": "Quiz final réussi !", "qz.finalNotYet": "Pas encore atteint",
   "qz.thresholdPill": "{pct}% · seuil {threshold}%", "qz.finalPassedDesc": "Le bloc de certification est débloqué.",
   "qz.finalFailDesc": "Reprenez les sessions du bloc puis retentez.",
@@ -283,7 +283,7 @@ const en: UiDict = {
   "mission": "🎯 Your mission", "answerPlaceholder": "Your answer, grounded in your real situation…",
   "qz.diagnostic": "Diagnostic quiz", "qz.interblock": "Inter-block quiz", "qz.final": "Final quiz",
   "qz.unavailable": "Quiz unavailable.", "qz.profileTitle": "Your competency profile",
-  "qz.priorities": "Your 2 learning priorities", "qz.score": "Score: {correct}/{total}",
+  "qz.priorities": "Your learning priorities", "qz.priority1": "Your learning priority", "qz.score": "Score: {correct}/{total}",
   "qz.finalPassed": "Final quiz passed!", "qz.finalNotYet": "Not reached yet",
   "qz.thresholdPill": "{pct}% · threshold {threshold}%", "qz.finalPassedDesc": "The certification block is unlocked.",
   "qz.finalFailDesc": "Revisit the block's sessions then try again.",
