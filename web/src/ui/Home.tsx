@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CourseContent } from "@kd/shared";
 import { api, engine, store, getIdentity } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
-import { getCachedProgress, getCachedResume, seedSeenBadges, setCachedProgress, setCachedResume, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
+import { clearCachedPositions, getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, syncSeenBadges, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems } from "../lib/content";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
@@ -25,16 +25,25 @@ export function Home({ eid }: { eid: string }) {
     try {
       const d = await api.progress(eid);
       if (d?.progress) { setProgress(d.progress); setCachedProgress(eid, d.progress); }
-      // First contact: badges earned BEFORE this device knew the enrolment are
-      // recorded as seen — only future unlocks get the celebration overlay.
-      if (Array.isArray(d?.badges)) seedSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
+      // Badge "seen" set: seeded on first contact, CLEARED when the server says
+      // the enrolment has no badges anymore (reset) — else the re-earned badge
+      // would be treated as already celebrated on this device.
+      if (Array.isArray(d?.badges)) syncSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
+      // Fresh/reset enrolment (nothing completed, no badge): drop the cached
+      // in-video positions — stale offsets would resume mid-video.
+      if ((d?.badges?.length ?? 0) === 0 && d?.progress?.blocks?.every((b: { completedKeys?: string[] }) => (b.completedKeys ?? []).length === 0)) {
+        clearCachedPositions(eid);
+      }
       if (d?.learnerName) setName(String(d.learnerName).split(" ")[0]!);
       setPeer(d?.peer ?? null);
       const r = await api.resume(eid);
       setResume(r?.resume ?? null); setCachedResume(eid, r?.resume ?? null);
-      // Diagnostic weak areas (server-backed → cross-device remediation focus).
+      // Diagnostic weak areas — the SERVER is authoritative: when it says the
+      // diagnostic was not taken (e.g. enrolment reset), drop this device's
+      // cached copy instead of showing a ghost "axes prioritaires" card.
       const dg = await api.get<{ taken?: boolean; weaknesses?: { subArea: string; pct: number }[] }>(`/enrollments/${eid}/diagnostic`);
       if (dg?.taken && dg.weaknesses) setWeakAreas(dg.weaknesses);
+      else { setWeakAreas([]); try { localStorage.removeItem(`klms_diag_${eid}`); } catch { /* */ } }
     } catch { /* offline — cached */ }
   }, [eid]);
 
