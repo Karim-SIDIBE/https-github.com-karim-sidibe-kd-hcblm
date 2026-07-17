@@ -93,7 +93,11 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
   }
 
   if (error) return <div><button className="ghost" onClick={() => navigate(routes.course(eid))}>← {t("common.back")}</button><p className="banner offline">{error}</p></div>;
-  if (!bundle || !session || !source) return <div><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" style={{ height: 200 }} /></div>;
+  if (!bundle) return <div><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" style={{ height: 200 }} /></div>;
+  // Bundle loaded but the item is not a micro-session (bad/stale link): say so
+  // instead of showing a skeleton forever.
+  if (!session) return <div className="stack"><button className="ghost" onClick={() => navigate(routes.cours(eid))}>← {t("common.back")}</button><p className="banner offline">{t("dl.notFound")}</p></div>;
+  if (!source) return <div><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" style={{ height: 200 }} /></div>;
 
   return (
     <div className="stack">
