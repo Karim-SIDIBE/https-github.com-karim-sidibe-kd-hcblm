@@ -9,10 +9,11 @@ export function Login({ onDone }: { onDone: () => void }) {
   const [challenge, setChallenge] = useState<string | null>(null); // set when 2FA is required
   const [code, setCode] = useState("");
 
-  // Shared post-auth handling: staff gate → store → done.
-  function finish(accessToken: string, user: Principal): boolean {
+  // Shared post-auth handling: staff gate → store (incl. refresh token, so an
+  // active session silently renews instead of logging out mid-work) → done.
+  function finish(accessToken: string, user: Principal, refreshToken?: string): boolean {
     if (!isStaff(user.role)) { setErr("Accès réservé au personnel (administration)."); return false; }
-    auth.set(accessToken, user); onDone(); return true;
+    auth.set(accessToken, user, refreshToken); onDone(); return true;
   }
 
   async function submit(e: React.FormEvent) {
@@ -21,7 +22,7 @@ export function Login({ onDone }: { onDone: () => void }) {
     try {
       const r = await login(email.trim(), password);
       if ("twoFactorRequired" in r) { setChallenge(r.challenge); setBusy(false); return; }
-      if (!finish(r.accessToken, r.user)) setBusy(false);
+      if (!finish(r.accessToken, r.user, r.refreshToken)) setBusy(false);
     } catch (e: any) { setErr(e?.message || "Identifiants invalides"); setBusy(false); }
   }
 
@@ -30,7 +31,7 @@ export function Login({ onDone }: { onDone: () => void }) {
     setBusy(true); setErr(null);
     try {
       const r = await verify2fa(challenge!, code.trim());
-      if (!finish(r.accessToken, r.user)) setBusy(false);
+      if (!finish(r.accessToken, r.user, r.refreshToken)) setBusy(false);
     } catch (e: any) { setErr(e?.message || "Code invalide"); setBusy(false); }
   }
 

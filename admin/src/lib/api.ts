@@ -4,7 +4,19 @@
  */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || "http://localhost:4000/api/v1";
 const TOKEN_KEY = "kd_admin_token";
+const REFRESH_KEY = "kd_admin_refresh";
 const USER_KEY = "kd_admin_user";
+
+/** An ACTIVE admin never gets logged out mid-work: on access-token expiry the
+ *  session is silently renewed (rotating refresh token) and the request
+ *  retried. Only an admin idle beyond this window is actually logged out. */
+const IDLE_LOGOUT_MS = 30 * 60_000;
+let lastActivity = Date.now();
+if (typeof window !== "undefined") {
+  for (const ev of ["pointerdown", "keydown"]) {
+    window.addEventListener(ev, () => { lastActivity = Date.now(); }, { passive: true });
+  }
+}
 
 export type Principal = { id: string; name: string; email: string; role: string };
 export const STAFF_ROLES = ["SUPER_ADMIN", "COURSE_ADMIN", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR", "ENTERPRISE_CLIENT", "EMPLOYER"];
@@ -12,22 +24,52 @@ export const isStaff = (role?: string) => !!role && STAFF_ROLES.includes(role) &
 
 export const auth = {
   token: () => localStorage.getItem(TOKEN_KEY),
+  refreshToken: () => localStorage.getItem(REFRESH_KEY),
   user: (): Principal | null => { try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; } },
-  set: (token: string, user: Principal) => { localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); },
-  clear: () => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); },
+  set: (token: string, user: Principal, refreshToken?: string) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    if (refreshToken) localStorage.setItem(REFRESH_KEY, refreshToken);
+  },
+  clear: () => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(USER_KEY); },
 };
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+// Single-flight silent renewal: many parallel 401s share one refresh call.
+let refreshing: Promise<boolean> | null = null;
+async function tryRefresh(): Promise<boolean> {
+  const rt = auth.refreshToken();
+  if (!rt) return false;
+  try {
+    const res = await fetch(`${BASE}/auth/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refreshToken: rt }) });
+    if (!res.ok) return false;
+    const j = await res.json().catch(() => ({}));
+    if (!j.accessToken) return false;
+    localStorage.setItem(TOKEN_KEY, j.accessToken);
+    if (j.refreshToken) localStorage.setItem(REFRESH_KEY, j.refreshToken); // rotation
+    return true;
+  } catch { return false; }
+}
+
+async function req<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
   const headers: Record<string, string> = {};
   const t = auth.token();
   if (t) headers["authorization"] = `Bearer ${t}`;
   if (body !== undefined) headers["content-type"] = "application/json";
   const res = await fetch(BASE + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
-  if (res.status === 401) { auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée"); }
+  if (res.status === 401) {
+    // Active session → silent renewal + one retry; idle or failed renewal →
+    // real logout (the security timeout the console is expected to have).
+    const idle = Date.now() - lastActivity > IDLE_LOGOUT_MS;
+    if (!retried && !idle && auth.refreshToken()) {
+      const ok = await (refreshing ??= tryRefresh().finally(() => { refreshing = null; }));
+      if (ok) return req<T>(method, path, body, true);
+    }
+    auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée");
+  }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, json.error || "error", json.message || "Erreur serveur");
   return (json.data ?? json) as T;
@@ -35,7 +77,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 // --- auth ---
 export type LoginResult =
-  | { accessToken: string; user: Principal }
+  | { accessToken: string; refreshToken?: string; user: Principal }
   | { twoFactorRequired: true; challenge: string };
 
 export async function login(email: string, password: string): Promise<LoginResult> {
@@ -43,15 +85,24 @@ export async function login(email: string, password: string): Promise<LoginResul
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Identifiants invalides");
   if (j.twoFactorRequired) return { twoFactorRequired: true, challenge: j.challenge };
-  return { accessToken: j.accessToken, user: j.user };
+  return { accessToken: j.accessToken, refreshToken: j.refreshToken, user: j.user };
 }
 
 /** Complete a 2FA login with a TOTP or backup code. */
-export async function verify2fa(challenge: string, code: string): Promise<{ accessToken: string; user: Principal }> {
+export async function verify2fa(challenge: string, code: string): Promise<{ accessToken: string; refreshToken?: string; user: Principal }> {
   const res = await fetch(`${BASE}/auth/2fa/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ challenge, code }) });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Code invalide");
-  return { accessToken: j.accessToken, user: j.user };
+  return { accessToken: j.accessToken, refreshToken: j.refreshToken, user: j.user };
+}
+
+/** Voluntary logout: revoke the server-side session (best-effort), clear local. */
+export async function logoutEverywhere(): Promise<void> {
+  const rt = auth.refreshToken();
+  if (rt) {
+    try { await fetch(`${BASE}/auth/logout`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refreshToken: rt }) }); } catch { /* best-effort */ }
+  }
+  auth.clear();
 }
 
 // 2FA self-management (authenticated)
