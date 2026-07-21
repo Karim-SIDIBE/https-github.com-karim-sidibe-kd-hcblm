@@ -417,10 +417,16 @@ const CertificationPayload = z.object({
 export const UnitType = z.enum(["micro-session", "long-activity", "micro-task"]);
 export type UnitType = z.infer<typeof UnitType>;
 
-export const BlockUnit = z.object({
+const SubUnit = z.object({
   label: nonEmpty("intitulé de l'unité"),
   type: UnitType,
   durationMin: z.number().int().positive().optional(),
+});
+export const BlockUnit = SubUnit.extend({
+  /** Sub-units nested under this unit — e.g. the 6 journal micro-entries that
+   *  compose the "Journal des 2 semaines" long activity (6 × 5 min = 30 min).
+   *  One level deep; counted in the totals, displayed indented. */
+  children: z.array(SubUnit).optional(),
 });
 export type BlockUnit = z.infer<typeof BlockUnit>;
 
@@ -445,16 +451,21 @@ export type Block = z.infer<typeof Block>;
 
 /** Per-block / whole-course unit counts, kept strictly separated by type. */
 export type UnitCounts = { microSessions: number; longActivities: number; microTasks: number };
-export function blockUnitCounts(units?: { type: string }[] | null): UnitCounts {
+type CountableUnit = { type: string; children?: { type: string }[] };
+export function blockUnitCounts(units?: CountableUnit[] | null): UnitCounts {
   const c: UnitCounts = { microSessions: 0, longActivities: 0, microTasks: 0 };
+  const add = (t: string) => {
+    if (t === "micro-session") c.microSessions++;
+    else if (t === "long-activity") c.longActivities++;
+    else if (t === "micro-task") c.microTasks++;
+  };
   for (const u of units ?? []) {
-    if (u.type === "micro-session") c.microSessions++;
-    else if (u.type === "long-activity") c.longActivities++;
-    else if (u.type === "micro-task") c.microTasks++;
+    add(u.type);
+    for (const child of u.children ?? []) add(child.type); // nested units stay auditable
   }
   return c;
 }
-export function courseUnitTotals(blocks: { units?: { type: string }[] | null }[]): UnitCounts {
+export function courseUnitTotals(blocks: { units?: CountableUnit[] | null }[]): UnitCounts {
   return blocks.reduce<UnitCounts>((acc, b) => {
     const c = blockUnitCounts(b.units);
     return { microSessions: acc.microSessions + c.microSessions, longActivities: acc.longActivities + c.longActivities, microTasks: acc.microTasks + c.microTasks };

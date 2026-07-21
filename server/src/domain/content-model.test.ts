@@ -7,6 +7,14 @@ test("blockUnitCounts keeps the three unit types strictly separate", () => {
   assert.deepEqual(c, { microSessions: 2, longActivities: 1, microTasks: 1 });
 });
 
+test("blockUnitCounts counts nested sub-units (journal micro-entries inside a long activity)", () => {
+  const c = blockUnitCounts([
+    { type: "micro-session" },
+    { type: "long-activity", children: [{ type: "micro-task" }, { type: "micro-task" }, { type: "micro-task" }] },
+  ]);
+  assert.deepEqual(c, { microSessions: 1, longActivities: 1, microTasks: 3 });
+});
+
 test("blockUnitCounts is empty for undefined/empty", () => {
   assert.deepEqual(blockUnitCounts(), { microSessions: 0, longActivities: 0, microTasks: 0 });
   assert.deepEqual(blockUnitCounts([]), { microSessions: 0, longActivities: 0, microTasks: 0 });

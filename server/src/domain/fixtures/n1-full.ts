@@ -839,13 +839,16 @@ export const n1Full: CourseContent = {
         { label: "MS 4.2 — Section 2 : solution mise en œuvre", type: "micro-session", durationMin: 15 },
         { label: "MS 4.3 — Section 3 : résultat observé", type: "micro-session", durationMin: 15 },
         { label: "MS 4.4 — Section 4 : apprentissage personnel", type: "micro-session", durationMin: 15 },
-        { label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: 30 },
-        { label: "Journal J+1", type: "micro-task", durationMin: 5 },
-        { label: "Journal J+3", type: "micro-task", durationMin: 5 },
-        { label: "Journal J+5", type: "micro-task", durationMin: 5 },
-        { label: "Journal J+7", type: "micro-task", durationMin: 5 },
-        { label: "Journal J+10", type: "micro-task", durationMin: 5 },
-        { label: "Journal J+14", type: "micro-task", durationMin: 5 },
+        // The 6 journal micro-entries are SUB-UNITS of the 2-week journal long
+        // activity (6 × 5 min = its 30 min) — not independent top-level units.
+        { label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: 30, children: [
+          { label: "Journal J+1", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+3", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+5", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+7", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+10", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+14", type: "micro-task", durationMin: 5 },
+        ] },
       ],
       badge: {
         type: "CERTIFICATE",
