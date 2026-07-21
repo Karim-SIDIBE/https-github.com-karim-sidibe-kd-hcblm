@@ -38,11 +38,11 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   const p = blk?.payload ?? {};
   let body: JSX.Element | null = null;
   if (itemKey === "scenarios" && p.guidedScenarios?.length) {
-    body = <Scenarios t={t} scenarios={p.guidedScenarios} onFinish={(d) => complete("GUIDED_SCENARIOS", d)} onClose={backToCourse} />;
+    body = <Scenarios t={t} title={p.guidedScenariosTitle || t("ci.scenarios")} scenarios={p.guidedScenarios} onFinish={(d) => complete("GUIDED_SCENARIOS", d)} onClose={backToCourse} />;
   } else if (itemKey === "self" && p.selfAssessment) {
-    body = <SelfAssessment t={t} criteria={p.selfAssessment.criteria} scale={p.selfAssessment.scale} onFinish={async (d) => { await complete("SELF_ASSESSMENT", d); backToCourse(); }} />;
+    body = <SelfAssessment t={t} title={p.selfAssessment.title || t("ci.self")} criteria={p.selfAssessment.criteria} scale={p.selfAssessment.scale} onFinish={async (d) => { await complete("SELF_ASSESSMENT", d); backToCourse(); }} />;
   } else if (itemKey === "plan" && p.actionPlan30d) {
-    body = <ActionPlan t={t} habits={p.actionPlan30d.habits} onFinish={async (d) => { await complete("ACTION_PLAN", d); backToCourse(); }} />;
+    body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} habits={p.actionPlan30d.habits} onFinish={async (d) => { await complete("ACTION_PLAN", d); backToCourse(); }} />;
   } else if (itemKey === "case" && p.caseStudy) {
     body = <CaseStudy t={t} caseStudy={p.caseStudy} onFinish={async (d) => { await complete("CASE_STUDY", d); backToCourse(); }} />;
   }
@@ -52,8 +52,8 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
 }
 
 /** Guided scenarios: one situation at a time, immediate feedback per step. */
-function Scenarios({ t, scenarios, onFinish, onClose }: {
-  t: TFn; scenarios: Scenario[];
+function Scenarios({ t, title, scenarios, onFinish, onClose }: {
+  t: TFn; title: string; scenarios: Scenario[];
   onFinish: (data: unknown) => Promise<void>; onClose: () => void;
 }) {
   const steps = useMemo(() => scenarios.flatMap((sc, si) => sc.steps.map((st, j) => ({ sc, st, first: j === 0, key: `s${si + 1}q${j + 1}` }))), [scenarios]);
@@ -88,7 +88,7 @@ function Scenarios({ t, scenarios, onFinish, onClose }: {
 
   return (
     <div className="stack">
-      <h1>{t("ci.scenarios")}</h1>
+      <h1>{title}</h1>
       <div className="hf-card stack">
         <div className="row between"><span className="eyebrow">{t("act.scenarioOf", { n: idx + 1, total: steps.length })}</span></div>
         <div className="hf-prog"><i style={{ width: `${((idx + (phase === "feedback" ? 1 : 0)) / steps.length) * 100}%` }} /></div>
@@ -128,8 +128,8 @@ function Scenarios({ t, scenarios, onFinish, onClose }: {
 }
 
 /** Self-assessment: one honest rating per criterion, no right/wrong. */
-function SelfAssessment({ t, criteria, scale, onFinish }: {
-  t: TFn; criteria: string[]; scale: string[];
+function SelfAssessment({ t, title, criteria, scale, onFinish }: {
+  t: TFn; title: string; criteria: string[]; scale: string[];
   onFinish: (data: unknown) => Promise<void>;
 }) {
   const [ratings, setRatings] = useState<Record<string, string>>({});
@@ -143,7 +143,7 @@ function SelfAssessment({ t, criteria, scale, onFinish }: {
 
   return (
     <div className="stack">
-      <h1>{t("ci.self")}</h1>
+      <h1>{title}</h1>
       <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>{t("act.selfIntro")}</p></div>
       {criteria.map((c) => (
         <div key={c} className="hf-card stack">
@@ -163,8 +163,8 @@ function SelfAssessment({ t, criteria, scale, onFinish }: {
 }
 
 /** 30-day action plan: the learner writes each habit's concrete anchoring. */
-function ActionPlan({ t, habits, onFinish }: {
-  t: TFn; habits: { title: string; fields: string[] }[];
+function ActionPlan({ t, title, habits, onFinish }: {
+  t: TFn; title: string; habits: { title: string; fields: string[] }[];
   onFinish: (data: unknown) => Promise<void>;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
@@ -182,7 +182,7 @@ function ActionPlan({ t, habits, onFinish }: {
 
   return (
     <div className="stack">
-      <h1>{t("ci.plan")}</h1>
+      <h1>{title}</h1>
       <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>{t("act.planIntro")}</p></div>
       {habits.map((h, hi) => (
         <div key={h.title} className="hf-card hf-card--stripe-orange stack">

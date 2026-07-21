@@ -93,7 +93,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
   return (
     <div className="stack">
       <Back />
-      <h1>{t(cfg.title)}</h1>
+      <h1>{(data.src.title as string) || t(cfg.title)}</h1>
       {result ? (
         <>
           {result.node}

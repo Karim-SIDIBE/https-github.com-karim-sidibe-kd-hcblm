@@ -515,6 +515,7 @@ export const n1Full: CourseContent = {
       },
       payload: {
         diagnosticQuiz: {
+          title: "",
           questions: [
             { id: "d1", scenarioText: "Message WhatsApp du manager à 16h45 : rapport synthèse « urgent » pour demain 8h, alors que vous traitez un dossier prioritaire pour vendredi.", options: [
               { key: "A", label: "J'arrête mon dossier et commence le rapport — urgent = urgent." },
@@ -620,6 +621,7 @@ export const n1Full: CourseContent = {
       },
       payload: {
         microSessions: [ms21, ms22, ms23],
+        guidedScenariosTitle: "",
         guidedScenarios: [
           {
             title: "Prioriser sous pression — institution de microfinance à Dakar (Sénégal)",
@@ -719,6 +721,7 @@ export const n1Full: CourseContent = {
           ],
         },
         fieldApplication: {
+          title: "",
           brief:
             "Application terrain (obligatoire pour accéder au Bloc 3) : dans votre environnement professionnel africain réel, en repartant de {{moment_ancrage}}, identifiez votre principal problème de productivité, mettez en œuvre une solution concrète (système de temps protégé, phrase de signalement, « oui différent »), puis documentez la réaction de votre organisation et ce que vous ajustez.",
           minChars: 200,
@@ -748,6 +751,7 @@ export const n1Full: CourseContent = {
       payload: {
         microSessions: [ms31, ms32],
         selfAssessment: {
+          title: "",
           criteria: [
             "Je distingue les urgences réelles des urgences imposées dans mon organisation africaine",
             "Je protège régulièrement du temps de fond pour mes priorités importantes",
@@ -759,6 +763,7 @@ export const n1Full: CourseContent = {
           scale: ["1 — Pas encore", "2 — En cours d'installation", "3 — Souvent présent", "4 — Naturel et constant"],
         },
         actionPlan30d: {
+          title: "",
           habits: [
             { title: "Habitude 1 (semaines 1–3) — installée en premier", fields: ["Le rituel", "Le moment", "La durée", "Comment je l'ancre dans ma réalité africaine"] },
             { title: "Habitude 2 (semaines 3–5) — après stabilisation de la 1re", fields: ["Le rituel", "Le moment", "La durée", "Mon signal de concentration"] },
@@ -766,6 +771,7 @@ export const n1Full: CourseContent = {
           ],
         },
         finalQuiz: {
+          title: "",
           questions: [
             { id: "f1", scenarioText: "Lundi 8h, organisation sénégalaise, 8 tâches dont 3 « urgentes » (collègues) et 2 importantes (mission). Par laquelle commencez-vous ?", options: [
               { key: "A", label: "La plus facile pour démarrer." },

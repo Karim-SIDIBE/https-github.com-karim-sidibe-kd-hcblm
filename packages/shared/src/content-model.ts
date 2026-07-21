@@ -243,6 +243,8 @@ export const QuestionPool = z.object({
 export type QuestionPool = z.infer<typeof QuestionPool>;
 
 const DiagnosticQuiz = z.object({
+  /** Learner-facing title; empty ⇒ the app's default label ("Quiz diagnostique"). */
+  title: z.string().default(""),
   questions: z.array(ScoredQuestion).min(1),
   profiles: z.array(ProfileBand).min(1),
   pool: QuestionPool.optional(),
@@ -285,6 +287,8 @@ const ComprehensionPayload = z.object({
 
 const PracticePayload = z.object({
   microSessions: z.array(MicroSession).min(1),
+  /** Learner-facing title of the guided-scenarios activity; empty ⇒ default label. */
+  guidedScenariosTitle: z.string().default(""),
   guidedScenarios: z
     .array(
       z.object({
@@ -315,6 +319,8 @@ const PracticePayload = z.object({
     })
     .optional(),
   fieldApplication: z.object({
+    /** Learner-facing title; empty ⇒ the app's default label ("Application terrain"). */
+    title: z.string().default(""),
     brief: injectable, // {{moment_ancrage}}
     minChars: z.number().int().positive().default(200),
     gatesNextBlock: z.boolean().default(true),
@@ -324,10 +330,14 @@ const PracticePayload = z.object({
 const AnchoringPayload = z.object({
   microSessions: z.array(MicroSession).min(1),
   selfAssessment: z.object({
+    /** Learner-facing title; empty ⇒ the app's default label ("Auto-évaluation"). */
+    title: z.string().default(""),
     criteria: z.array(nonEmpty("critère")).min(1),
     scale: z.array(nonEmpty("niveau d'échelle")).min(2),
   }),
   actionPlan30d: z.object({
+    /** Learner-facing title; empty ⇒ the app's default label ("Plan d'action 30 jours"). */
+    title: z.string().default(""),
     habits: z
       .array(
         z.object({
@@ -338,6 +348,8 @@ const AnchoringPayload = z.object({
       .min(1),
   }),
   finalQuiz: z.object({
+    /** Learner-facing title; empty ⇒ the app's default label ("Quiz final"). */
+    title: z.string().default(""),
     questions: z.array(ScoredQuestion).min(1),
     passThreshold: z.number().int().min(0).max(100),
     pool: QuestionPool.optional(),
