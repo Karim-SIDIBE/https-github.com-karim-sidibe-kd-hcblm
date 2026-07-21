@@ -9,8 +9,13 @@ type Block = { index: number; type: string; title: string; objective?: string; p
 type Content = { title: string; level?: number; objective?: string; summary?: string; durationEstimate?: string; domain?: { code: string; label: string }; competencies?: { code: string; label: string }[]; blocks: Block[]; [k: string]: unknown };
 
 const TYPE_FR: Record<string, string> = { ONBOARDING: "Bloc 0 · Onboarding", COMPREHENSION: "Bloc 1 · Compréhension", PRACTICE: "Bloc 2 · Pratique", ANCHORING: "Bloc 3 · Ancrage", CERTIFICATION: "Bloc 4 · Certification" };
-type Unit = { type: string };
-const cnt = (units?: Unit[]) => { const c = { ms: 0, la: 0, mt: 0 }; for (const u of units ?? []) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; } return c; };
+type Unit = { type: string; children?: Unit[] };
+const cnt = (units?: Unit[]) => {
+  const c = { ms: 0, la: 0, mt: 0 };
+  const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };
+  for (const u of units ?? []) { add(u.type); for (const ch of u.children ?? []) add(ch.type); }
+  return c;
+};
 function CountLine({ units, dark }: { units?: Unit[]; dark?: boolean }) {
   if (!units?.length) return null;
   const c = cnt(units);

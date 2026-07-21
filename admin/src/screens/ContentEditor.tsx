@@ -370,9 +370,14 @@ function GuidedScenarios({ scenarios, ri, set }: { scenarios: any[]; ri: number;
 }
 
 /* ---------------- auditable units (v2.1 typology) ---------------- */
-type Unit = { label: string; type: string; durationMin?: number };
+type Unit = { label: string; type: string; durationMin?: number; children?: Unit[] };
 const UNIT_TYPES = [{ v: "micro-session", l: "Micro-session" }, { v: "long-activity", l: "Activité longue" }, { v: "micro-task", l: "Micro-tâche" }];
-function counts(units?: Unit[]) { const c = { ms: 0, la: 0, mt: 0 }; for (const u of units ?? []) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; } return c; }
+function counts(units?: Unit[]) {
+  const c = { ms: 0, la: 0, mt: 0 };
+  const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };
+  for (const u of units ?? []) { add(u.type); for (const ch of u.children ?? []) add(ch.type); }
+  return c;
+}
 function genUnits(block: any): Unit[] {
   const p = block.payload ?? {}; const u: Unit[] = [];
   const push = (label: string, type: string, durationMin: number) => u.push({ label, type, durationMin });
@@ -387,7 +392,14 @@ function genUnits(block: any): Unit[] {
   if (p.finalQuiz) push("Quiz final", "micro-session", 15);
   if (block.type === "CERTIFICATION") {
     (p.sections ?? []).forEach((s: any, i: number) => push(`Section ${i + 1} — ${s.title}`, "micro-session", 15));
-    if (p.journal?.entries) { push("Journal de pratique (2 semaines)", "long-activity", 30); (p.journal.entries).forEach((e: any) => push(`Journal J+${e.day}`, "micro-task", 5)); }
+    // The journal micro-entries are SUB-UNITS of the 2-week long activity
+    // (n × 5 min compose its duration), not independent top-level units.
+    if (p.journal?.entries) {
+      u.push({
+        label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: (p.journal.entries.length || 6) * 5,
+        children: p.journal.entries.map((e: any) => ({ label: `Journal J+${e.day}`, type: "micro-task", durationMin: 5 })),
+      });
+    }
   }
   return u;
 }
@@ -409,12 +421,28 @@ function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
     <Card title="Unités auditables du bloc" action={<CountBadges units={units} />}>
       {units.length === 0 && <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucune unité déclarée. Pré-remplissez depuis le contenu, puis ajustez les types (auditabilité v2.1).</p>}
       {units.map((u, i) => (
-        <div className="row" key={i} {...dnd.row(i)} style={{ gap: 8, alignItems: "center", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none" }}>
-          <Grip {...dnd.handleProps(i)} />
-          <input style={{ ...field, flex: 1 }} value={u.label} placeholder="Intitulé de l'unité" onChange={(e) => set((c) => { arr(c)[i].label = e.target.value; })} />
-          <select style={{ ...field, width: 165 }} value={u.type} onChange={(e) => set((c) => { arr(c)[i].type = e.target.value; })}>{UNIT_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
-          <input style={{ ...field, width: 80 }} type="number" min={1} value={u.durationMin ?? 0} onChange={(e) => set((c) => { arr(c)[i].durationMin = Number(e.target.value); })} title="minutes" />
-          <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c).splice(i, 1); })}>✕</button>
+        <div key={i}>
+          <div className="row" {...dnd.row(i)} style={{ gap: 8, alignItems: "center", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none" }}>
+            <Grip {...dnd.handleProps(i)} />
+            <input style={{ ...field, flex: 1 }} value={u.label} placeholder="Intitulé de l'unité" onChange={(e) => set((c) => { arr(c)[i].label = e.target.value; })} />
+            <select style={{ ...field, width: 165 }} value={u.type} onChange={(e) => set((c) => { arr(c)[i].type = e.target.value; })}>{UNIT_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
+            <input style={{ ...field, width: 80 }} type="number" min={1} value={u.durationMin ?? 0} onChange={(e) => set((c) => { arr(c)[i].durationMin = Number(e.target.value); })} title="minutes" />
+            {i > 0 && <button type="button" className="btn btn--sm" title="Rattacher comme sous-unité de l'unité précédente" onClick={() => set((c) => { const a = arr(c); const [moved] = a.splice(i, 1); const parent = a[i - 1]; (parent.children ??= []).push(...[moved, ...(moved.children ?? [])].map(({ children: _c, ...rest }: Unit) => rest)); })}>↳</button>}
+            <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c).splice(i, 1); })}>✕</button>
+          </div>
+          {(u.children ?? []).map((ch, j) => (
+            <div className="row" key={j} style={{ gap: 8, alignItems: "center", marginLeft: 34, marginTop: 4, paddingLeft: 10, borderLeft: "2px solid var(--line)" }}>
+              <span className="muted" style={{ fontSize: 12 }}>↳</span>
+              <input style={{ ...field, flex: 1 }} value={ch.label} placeholder="Intitulé de la sous-unité" onChange={(e) => set((c) => { arr(c)[i].children![j].label = e.target.value; })} />
+              <select style={{ ...field, width: 145 }} value={ch.type} onChange={(e) => set((c) => { arr(c)[i].children![j].type = e.target.value; })}>{UNIT_TYPES.map((t) => <option key={t.v} value={t.v}>{t.l}</option>)}</select>
+              <input style={{ ...field, width: 70 }} type="number" min={1} value={ch.durationMin ?? 0} onChange={(e) => set((c) => { arr(c)[i].children![j].durationMin = Number(e.target.value); })} title="minutes" />
+              <button type="button" className="btn btn--sm" title="Détacher (redevient une unité de premier niveau)" onClick={() => set((c) => { const a = arr(c); const [moved] = a[i].children!.splice(j, 1); a.splice(i + 1, 0, moved); })}>↰</button>
+              <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c)[i].children!.splice(j, 1); })}>✕</button>
+            </div>
+          ))}
+          {u.type === "long-activity" && (
+            <button type="button" className="btn btn--sm" style={{ marginLeft: 34, marginTop: 4 }} onClick={() => set((c) => { (arr(c)[i].children ??= []).push({ label: "", type: "micro-task", durationMin: 5 }); })}>+ Sous-unité</button>
+          )}
         </div>
       ))}
       <div className="row" style={{ gap: 8, marginTop: 6 }}>

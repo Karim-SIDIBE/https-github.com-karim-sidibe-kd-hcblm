@@ -147,7 +147,8 @@ export function Course({ eid }: { eid: string }) {
             <div className="row between"><h3 style={{ margin: 0 }}>{t("home.block", { n: b.index })} · {b.title}</h3>{STATE(st, t)}</div>
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
-              for (const u of (b as any).units) { if (u.type === "micro-session") c.ms++; else if (u.type === "long-activity") c.la++; else if (u.type === "micro-task") c.mt++; }
+              const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };
+              for (const u of (b as any).units) { add(u.type); for (const ch of u.children ?? []) add(ch.type); }
               const parts = [`${c.ms} ${t(c.ms > 1 ? "course.ms_p" : "course.ms_s")}`];
               if (c.la) parts.push(`${c.la} ${t(c.la > 1 ? "course.la_p" : "course.la_s")}`);
               if (c.mt) parts.push(`${c.mt} ${t(c.mt > 1 ? "course.mt_p" : "course.mt_s")}`);
