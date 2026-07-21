@@ -28,7 +28,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
     const blk = bundle.content.blocks.find((x: any) => x.index === block);
     if (itemKey === "field") {
       const fa = blk?.payload?.fieldApplication;
-      return fa ? { kind: "field" as const, eyebrow: t("dl.fieldEyebrow"), title: t("dl.fieldTitle"), brief: fa.brief, min: fa.minChars ?? 200, unit: "caractères", itemType: "FIELD_APPLICATION" } : null;
+      return fa ? { kind: "field" as const, eyebrow: t("dl.fieldEyebrow"), title: fa.title || t("dl.fieldTitle"), brief: fa.brief, min: fa.minChars ?? 200, unit: "caractères", itemType: "FIELD_APPLICATION" } : null;
     }
     const entry = (blk?.payload?.journal?.entries ?? []).find((e: any) => `J+${e.day}` === itemKey);
     return entry ? { kind: "journal" as const, eyebrow: t("jr.eyebrow"), title: t("dl.journalTitle", { key: itemKey }), brief: entry.prompt, min: entry.minWords ?? 50, unit: "mots", itemType: "JOURNAL_ENTRY" } : null;

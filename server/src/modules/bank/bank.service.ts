@@ -7,6 +7,7 @@
 import { prisma } from "../../db/prisma.js";
 import { ScoredQuestion } from "../../domain/content-model.js";
 import { extractScoredQuestions } from "../../domain/bank/extract.js";
+import { shuffleQuestions } from "../../domain/engine/shuffle.js";
 
 export class BankError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -94,22 +95,27 @@ type QuizContainer = { questions?: unknown[]; pool?: { subArea?: string; draw: n
 
 /**
  * Materialise a quiz's questions for one learner: the fixed questions plus a
- * STABLE random draw from the bank. Stored once per (enrollment, quiz) so the
- * set is identical across bundle rebuilds and server-side scoring. No pool ⇒
- * the fixed questions, unchanged (backward-compatible).
+ * STABLE random draw from the bank when a pool is configured. The final list is
+ * served in a RANDOM ORDER that is stable per (enrollment, quiz) — seeded
+ * shuffle, so the offline bundle, every rebuild and the server-side scoring
+ * all agree, while two learners see different orders (anti-copying). Profiling
+ * questions stay pinned at the end (designed as closing questions). Scoring is
+ * id-based, so the order never affects results.
  */
 export async function materializeQuiz(enrollmentId: string, quizKey: string, container: QuizContainer): Promise<unknown[]> {
+  const seed = `${enrollmentId}:${quizKey}`;
+  const shuffle = (qs: unknown[]) => shuffleQuestions(qs as { profiling?: boolean }[], seed);
   const fixed = container.questions ?? [];
-  if (!container.pool) return fixed;
+  if (!container.pool) return shuffle(fixed);
   const existing = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } });
-  if (existing) return existing.questions as unknown[];
+  if (existing) return shuffle(existing.questions as unknown[]);
   const drawn = await randomBankQuestions(container.pool.subArea, container.pool.draw);
   // Re-id drawn questions so they never collide with the fixed ones in the answers map.
   const reided = drawn.map((q, i) => ({ ...(q as Record<string, unknown>), id: `pool-${i}` }));
   const questions = [...fixed, ...reided];
   try { await prisma.quizDraw.create({ data: { enrollmentId, quizKey, questions: questions as object } }); }
-  catch { const again = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } }); if (again) return again.questions as unknown[]; }
-  return questions;
+  catch { const again = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } }); if (again) return shuffle(again.questions as unknown[]); }
+  return shuffle(questions);
 }
 
 /** Draw up to `count` APPROVED questions (optionally by sub-area), shuffled.

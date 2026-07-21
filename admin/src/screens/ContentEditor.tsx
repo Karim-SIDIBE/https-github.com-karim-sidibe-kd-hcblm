@@ -497,7 +497,9 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {/* ---- Bloc 1 ---- */}
       {block.type === "COMPREHENSION" && (
         <>
-          {p.diagnosticQuiz && <Card title="Quiz diagnostique (noté)"><PoolConfig pool={p.diagnosticQuiz.pool} path={(c) => c.blocks[ri].payload.diagnosticQuiz} set={set} /><ScoredQuestions questions={p.diagnosticQuiz.questions} path={(c) => c.blocks[ri].payload.diagnosticQuiz.questions} set={set} /></Card>}
+          {p.diagnosticQuiz && <Card title="Quiz diagnostique (noté)">
+            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz diagnostique (défaut)" value={p.diagnosticQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.diagnosticQuiz.title = e.target.value; })} /></div>
+            <PoolConfig pool={p.diagnosticQuiz.pool} path={(c) => c.blocks[ri].payload.diagnosticQuiz} set={set} /><ScoredQuestions questions={p.diagnosticQuiz.questions} path={(c) => c.blocks[ri].payload.diagnosticQuiz.questions} set={set} /></Card>}
         </>
       )}
 
@@ -526,7 +528,9 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {/* ---- Bloc 2 ---- */}
       {block.type === "PRACTICE" && (
         <>
-          <Card title="Mises en situation guidées"><GuidedScenarios scenarios={p.guidedScenarios ?? []} ri={ri} set={set} /></Card>
+          <Card title="Mises en situation guidées">
+            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Mises en situation guidées (défaut)" value={p.guidedScenariosTitle ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.guidedScenariosTitle = e.target.value; })} /></div>
+            <GuidedScenarios scenarios={p.guidedScenarios ?? []} ri={ri} set={set} /></Card>
           {p.interBlockQuiz
             ? <Card title="Quiz interbloc (non noté)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { delete c.blocks[ri].payload.interBlockQuiz; })}>Retirer</button>}>
                 <div><label style={lbl}>Titre</label><input style={field} value={p.interBlockQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.interBlockQuiz.title = e.target.value; })} /></div>
@@ -536,6 +540,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
             : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.interBlockQuiz = { title: "Quiz interbloc", scored: false, questions: [newSQ(1)] }; })}>+ Ajouter un quiz interbloc</button>}
           {p.fieldApplication && (
             <Card title="Application terrain">
+              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Application terrain (défaut)" value={p.fieldApplication.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.title = e.target.value; })} /></div>
               <div><label style={lbl}>Consigne ({"{{moment_ancrage}}"} autorisé)</label><textarea style={{ ...field, minHeight: 46 }} value={p.fieldApplication.brief ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.brief = e.target.value; })} /></div>
               <div className="row" style={{ gap: 14, alignItems: "center" }}>
                 <div style={{ width: 140 }}><label style={lbl}>Min. caractères</label><input style={field} type="number" min={1} value={p.fieldApplication.minChars ?? 200} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.minChars = Number(e.target.value); })} /></div>
@@ -550,18 +555,21 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {block.type === "ANCHORING" && (
         <>
           {p.finalQuiz && <Card title="Quiz final (noté)" action={<span className="pill pill--soft">Seuil {p.finalQuiz.passThreshold ?? "?"}%</span>}>
+            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz final (défaut)" value={p.finalQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.title = e.target.value; })} /></div>
             <div style={{ width: 200 }}><label style={lbl}>Seuil de réussite (%)</label><input style={field} type="number" min={0} max={100} value={p.finalQuiz.passThreshold ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.passThreshold = Number(e.target.value); })} /></div>
             <PoolConfig pool={p.finalQuiz.pool} path={(c) => c.blocks[ri].payload.finalQuiz} set={set} />
             <ScoredQuestions questions={p.finalQuiz.questions} path={(c) => c.blocks[ri].payload.finalQuiz.questions} set={set} />
           </Card>}
           {p.selfAssessment && (
             <Card title="Auto-évaluation">
+              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Auto-évaluation (défaut)" value={p.selfAssessment.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.selfAssessment.title = e.target.value; })} /></div>
               <div><label style={lbl}>Critères</label><StringList items={p.selfAssessment.criteria ?? []} path={(c) => c.blocks[ri].payload.selfAssessment.criteria} set={set} ph="Critère" /></div>
               <div><label style={lbl}>Échelle</label><StringList items={p.selfAssessment.scale ?? []} path={(c) => c.blocks[ri].payload.selfAssessment.scale} set={set} ph="Niveau" /></div>
             </Card>
           )}
           {p.actionPlan30d && (
             <Card title="Plan d'action 30 jours">
+              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Plan d'action 30 jours (défaut)" value={p.actionPlan30d.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.title = e.target.value; })} /></div>
               {(p.actionPlan30d.habits ?? []).map((h: any, i: number) => (
                 <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
                   <div className="row between"><b style={{ fontSize: 12.5 }}>Habitude {i + 1}</b><button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.actionPlan30d.habits.splice(i, 1); })}>✕</button></div>

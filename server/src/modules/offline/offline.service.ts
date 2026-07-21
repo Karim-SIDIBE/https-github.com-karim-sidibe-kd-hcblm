@@ -92,11 +92,14 @@ export async function buildBundle(enrollmentId: string) {
   const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage);
   const rendered = injectMomentAncrage(content, enrollment.momentAncrage) as { blocks?: { type: string; payload?: Record<string, { pool?: unknown; questions?: unknown[] }> }[] };
 
-  // Per-learner question pools (P1 3b): materialise a stable random draw into the
-  // learner's bundle so it works offline and matches server-side scoring.
+  // Per-learner quizzes: materialise the question set (fixed + stable pool draw)
+  // AND its stable per-learner random ORDER into the bundle, so offline rendering
+  // matches server-side scoring exactly.
   for (const b of rendered.blocks ?? []) {
     const apply = async (key: string, container?: { pool?: unknown; questions?: unknown[] }) => {
-      if (container?.pool) container.questions = await materializeQuiz(enrollmentId, key, container as never);
+      if (container?.pool || (container?.questions?.length ?? 0) > 0) {
+        container!.questions = await materializeQuiz(enrollmentId, key, container as never);
+      }
     };
     if (b.type === "COMPREHENSION") await apply("diagnostic", b.payload?.diagnosticQuiz);
     else if (b.type === "PRACTICE") await apply("interblock", b.payload?.interBlockQuiz);

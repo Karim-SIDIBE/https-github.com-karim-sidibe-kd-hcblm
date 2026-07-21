@@ -83,6 +83,7 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
         badge: { type: "COMPREHENSION", label: "Badge Compréhension", conditions: ["Quiz diagnostique", "Micro-sessions complétées"] },
         payload: {
           diagnosticQuiz: {
+            title: "",
             questions: [{ id: "d1", scenarioText: "Mise en situation à rédiger.", options: [{ key: "A", label: "Option A" }, { key: "B", label: "Option B" }], correctKey: "A", feedbackText: "Feedback à rédiger." }],
             profiles: [{ scoreRange: [0, 0], name: "Débutant", description: "" }, { scoreRange: [1, 1], name: "Confirmé", description: "" }],
           },
@@ -94,8 +95,9 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
         badge: { type: "PRACTICE", label: "Badge Pratique", conditions: ["Micro-sessions", "Application terrain"] },
         payload: {
           microSessions: [ms("2.1", "Mise en pratique")],
+          guidedScenariosTitle: "",
           guidedScenarios: [],
-          fieldApplication: { brief: `Appliquez dans votre environnement réel, à partir de ${T}.`, minChars: 200, gatesNextBlock: true },
+          fieldApplication: { title: "", brief: `Appliquez dans votre environnement réel, à partir de ${T}.`, minChars: 200, gatesNextBlock: true },
         },
       },
       {
@@ -103,9 +105,9 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
         badge: { type: "ANCHORING", label: "Badge Ancrage", conditions: ["Micro-sessions", `Quiz final ≥ ${threshold} %`] },
         payload: {
           microSessions: [ms("3.1", "Rituel durable")],
-          selfAssessment: { criteria: ["Critère 1", "Critère 2"], scale: ["1", "2", "3", "4"] },
-          actionPlan30d: { habits: [{ title: "Habitude 1", fields: ["Quoi", "Quand", "Comment"] }] },
-          finalQuiz: { questions: [{ id: "f1", scenarioText: "Mise en situation finale.", options: [{ key: "A", label: "Option A" }, { key: "B", label: "Option B" }], correctKey: "A", feedbackText: "Feedback." }], passThreshold: threshold },
+          selfAssessment: { title: "", criteria: ["Critère 1", "Critère 2"], scale: ["1", "2", "3", "4"] },
+          actionPlan30d: { title: "", habits: [{ title: "Habitude 1", fields: ["Quoi", "Quand", "Comment"] }] },
+          finalQuiz: { title: "", questions: [{ id: "f1", scenarioText: "Mise en situation finale.", options: [{ key: "A", label: "Option A" }, { key: "B", label: "Option B" }], correctKey: "A", feedbackText: "Feedback." }], passThreshold: threshold },
         },
       },
       {

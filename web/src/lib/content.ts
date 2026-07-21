@@ -66,22 +66,23 @@ function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
       return items;
     }
     case "COMPREHENSION": {
-      const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: tr("qz.diagnostic", "Quiz diagnostique") }, ...sessionItems(block.payload.microSessions)];
+      // Author-defined titles win; the app's generic labels are the fallback.
+      const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: block.payload.diagnosticQuiz?.title || tr("qz.diagnostic", "Quiz diagnostique") }, ...sessionItems(block.payload.microSessions)];
       if (block.payload.caseStudy) items.push({ key: "case", kind: "case", label: block.payload.caseStudy.title ?? tr("ci.case", "Étude de cas") });
       return items;
     }
     case "PRACTICE": {
       const items = [...sessionItems(block.payload.microSessions)];
-      if (block.payload.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: tr("ci.scenarios", "Mises en situation guidées") });
+      if (block.payload.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: block.payload.guidedScenariosTitle || tr("ci.scenarios", "Mises en situation guidées") });
       if (block.payload.interBlockQuiz) items.push({ key: "interblock", kind: "interblock", label: block.payload.interBlockQuiz.title || tr("qz.interblock", "Quiz interbloc") });
-      items.push({ key: "field", kind: "field", label: tr("dl.fieldTitle", "Application terrain") });
+      items.push({ key: "field", kind: "field", label: block.payload.fieldApplication?.title || tr("dl.fieldTitle", "Application terrain") });
       return items;
     }
     case "ANCHORING":
       return [...sessionItems(block.payload.microSessions),
-        { key: "self", kind: "self", label: tr("ci.self", "Auto-évaluation") },
-        { key: "plan", kind: "plan", label: tr("ci.plan", "Plan d'action 30 jours") },
-        { key: "final", kind: "final", label: tr("qz.final", "Quiz final") }];
+        { key: "self", kind: "self", label: block.payload.selfAssessment?.title || tr("ci.self", "Auto-évaluation") },
+        { key: "plan", kind: "plan", label: block.payload.actionPlan30d?.title || tr("ci.plan", "Plan d'action 30 jours") },
+        { key: "final", kind: "final", label: block.payload.finalQuiz?.title || tr("qz.final", "Quiz final") }];
     case "CERTIFICATION": {
       const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({ key: `J+${e.day}`, kind: "journal" as const, label: tr("ci.journal", `Journal J+${e.day}`, { day: e.day }) }));
       return [{ key: "project", kind: "project", label: tr("pj.title", "Projet de certification") }, ...journal];

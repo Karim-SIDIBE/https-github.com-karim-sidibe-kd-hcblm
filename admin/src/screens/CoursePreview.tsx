@@ -102,7 +102,7 @@ function BlockView({ b }: { b: Block }) {
         </div>
       </>)}
 
-      {p.diagnosticQuiz && <div style={{ marginTop: 6 }}><div style={eye}>Quiz diagnostique</div><Qs items={p.diagnosticQuiz.questions} /></div>}
+      {p.diagnosticQuiz && <div style={{ marginTop: 6 }}><div style={eye}>{p.diagnosticQuiz.title || "Quiz diagnostique"}</div><Qs items={p.diagnosticQuiz.questions} /></div>}
 
       {(p.microSessions ?? []).map((s: any, i: number) => (
         <div key={i} style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, marginTop: 10 }}>
@@ -114,12 +114,12 @@ function BlockView({ b }: { b: Block }) {
       ))}
 
       {p.caseStudy && <div style={{ marginTop: 8 }}><div style={eye}>Étude de cas — {p.caseStudy.title}</div><ol style={{ paddingLeft: 18, fontSize: 12 }}>{(p.caseStudy.steps ?? []).map((s: string, i: number) => <li key={i}>{s}</li>)}</ol></div>}
-      {p.guidedScenarios?.length > 0 && <div style={{ marginTop: 8 }}><div style={eye}>Mises en situation</div>{p.guidedScenarios.map((sc: any, i: number) => <div key={i} style={{ fontSize: 12.5, marginTop: 4 }}><b>{sc.title}</b><Qs items={sc.steps ?? []} /></div>)}</div>}
-      {p.interBlockQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz interbloc</div><Qs items={p.interBlockQuiz.questions} /></div>}
-      {p.fieldApplication && <div style={{ ...card, background: "var(--orange-50)", marginTop: 8 }}><div style={eye}>📍 Application terrain {p.fieldApplication.gatesNextBlock ? "(obligatoire)" : ""}</div><div style={{ fontSize: 12.5 }}>{p.fieldApplication.brief}</div></div>}
-      {p.selfAssessment && <div style={{ marginTop: 8 }}><div style={eye}>Auto-évaluation</div><div style={{ fontSize: 12 }}>Critères : {(p.selfAssessment.criteria ?? []).join(", ")}</div></div>}
-      {p.actionPlan30d && <div style={{ marginTop: 8 }}><div style={eye}>Plan d'action 30 j</div>{(p.actionPlan30d.habits ?? []).map((hb: any, i: number) => <div key={i} style={{ fontSize: 12 }}>• {hb.title}</div>)}</div>}
-      {p.finalQuiz && <div style={{ marginTop: 8 }}><div style={eye}>Quiz final · seuil {p.finalQuiz.passThreshold}%</div><Qs items={p.finalQuiz.questions} /></div>}
+      {p.guidedScenarios?.length > 0 && <div style={{ marginTop: 8 }}><div style={eye}>{p.guidedScenariosTitle || "Mises en situation"}</div>{p.guidedScenarios.map((sc: any, i: number) => <div key={i} style={{ fontSize: 12.5, marginTop: 4 }}><b>{sc.title}</b><Qs items={sc.steps ?? []} /></div>)}</div>}
+      {p.interBlockQuiz && <div style={{ marginTop: 8 }}><div style={eye}>{p.interBlockQuiz.title || "Quiz interbloc"}</div><Qs items={p.interBlockQuiz.questions} /></div>}
+      {p.fieldApplication && <div style={{ ...card, background: "var(--orange-50)", marginTop: 8 }}><div style={eye}>📍 {p.fieldApplication.title || "Application terrain"} {p.fieldApplication.gatesNextBlock ? "(obligatoire)" : ""}</div><div style={{ fontSize: 12.5 }}>{p.fieldApplication.brief}</div></div>}
+      {p.selfAssessment && <div style={{ marginTop: 8 }}><div style={eye}>{p.selfAssessment.title || "Auto-évaluation"}</div><div style={{ fontSize: 12 }}>Critères : {(p.selfAssessment.criteria ?? []).join(", ")}</div></div>}
+      {p.actionPlan30d && <div style={{ marginTop: 8 }}><div style={eye}>{p.actionPlan30d.title || "Plan d'action 30 j"}</div>{(p.actionPlan30d.habits ?? []).map((hb: any, i: number) => <div key={i} style={{ fontSize: 12 }}>• {hb.title}</div>)}</div>}
+      {p.finalQuiz && <div style={{ marginTop: 8 }}><div style={eye}>{p.finalQuiz.title || "Quiz final"} · seuil {p.finalQuiz.passThreshold}%</div><Qs items={p.finalQuiz.questions} /></div>}
 
       {b.type === "CERTIFICATION" && (<>
         {p.projectBrief && <div style={{ ...card, background: "var(--orange-50)" }}><div style={eye}>🎓 Projet certifiant</div><div style={{ fontSize: 12.5 }}>{p.projectBrief}</div></div>}
