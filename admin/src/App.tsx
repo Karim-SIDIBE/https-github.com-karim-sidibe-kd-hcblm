@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   IDash, ILearners, IEnrol, IReeng, ICourse, IEval, ICert, IOrg, ISession, IAudit, ISettings, ISearch,
 } from "./icons";
-import { auth, api, type CourseSummary, type Principal } from "./lib/api";
+import { auth, api, logoutEverywhere, type CourseSummary, type Principal } from "./lib/api";
 import { initials } from "./lib/ui";
 import { Login } from "./screens/Login";
 import { Dashboard } from "./screens/Dashboard";
@@ -104,7 +104,7 @@ export function App() {
   const view = allowedIds.has(route) ? route : defaultId;
   useEffect(() => { if (user && !allowedIds.has(route)) location.hash = `/${defaultId}`; }, [user, route, allowedIds, defaultId]);
 
-  const logout = () => { auth.clear(); setUser(null); };
+  const logout = () => { void logoutEverywhere(); setUser(null); };
 
   if (!user) return <Login onDone={() => setUser(auth.user())} />;
 
