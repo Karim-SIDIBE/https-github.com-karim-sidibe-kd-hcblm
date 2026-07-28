@@ -21,10 +21,14 @@ export const ITEM_TYPE: Partial<Record<ItemKind, string>> = {
   self: "SELF_ASSESSMENT", plan: "ACTION_PLAN", journal: "JOURNAL_ENTRY", project: "PROJECT",
 };
 
-/** Parse "20 min" / "1 h" style estimates to seconds (0 when unparsable). */
+/** Parse "20 min" / "1 h" / "1,5 h" style estimates to seconds (0 when
+ *  unparsable). Input is truncated and the patterns are unambiguous with
+ *  bounded whitespace — no super-linear regex backtracking (CodeQL). */
 export function parseEstimate(est?: string): number {
   if (!est) return 0;
-  const h = /([\d,.]+)\s*h/i.exec(est); const m = /(\d+)\s*m/i.exec(est);
+  const s = est.slice(0, 64); // duration estimates are short labels ("~2 h 30")
+  const h = /(\d{1,3}(?:[.,]\d{1,2})?)\s{0,4}h/i.exec(s);
+  const m = /(\d{1,4})\s{0,4}m/i.exec(s);
   return Math.round((h ? parseFloat(h[1]!.replace(",", ".")) * 3600 : 0) + (m ? parseInt(m[1]!, 10) * 60 : 0));
 }
 /** Default effort estimates (seconds) per item kind, when the content gives none. */
