@@ -20,6 +20,10 @@
     "./ui-texts": {
       "types": "./src/ui-texts.ts",
       "import": "./src/ui-texts.ts"
+    },
+    "./block-items": {
+      "types": "./src/block-items.ts",
+      "import": "./src/block-items.ts"
     }
   },
   "scripts": {

@@ -5,7 +5,7 @@
  * otherwise the first incomplete required item of the current (furthest unlocked)
  * block. Returns null when the whole course is complete.
  */
-import type { CourseContent } from "../content-model.js";
+import { applyItemOrder, type CourseContent } from "../content-model.js";
 import { computeProgress, type CompletionRecord } from "./progress.js";
 
 export type ResumeTarget = {
@@ -49,7 +49,10 @@ export function computeResume(
   if (block.type === "ONBOARDING" && !hasMomentAncrage) {
     return { blockIndex: current.index, blockTitle: block.title, itemKey: "moment-ancrage", itemLabel: "Moment d'Ancrage", source: "computed" };
   }
-  const next = current.missing[0];
+  // Follow the author-declared display arrangement (itemOrder) so "Reprendre"
+  // targets what the learner actually sees next, not the canonical order.
+  const missing = applyItemOrder(current.missing, (block as { itemOrder?: string[] }).itemOrder);
+  const next = missing[0];
   if (!next) return null;
   return { blockIndex: current.index, blockTitle: block.title, itemKey: next.key, itemLabel: next.label, source: "computed" };
 }
