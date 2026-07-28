@@ -437,8 +437,23 @@ const BlockBase = z.object({
   /// Explicit, designer-declared units for auditable counting (v2.1). Optional
   /// for backward compatibility; when absent the block shows no breakdown.
   units: z.array(BlockUnit).optional(),
+  /// Author-declared DISPLAY ORDER of the block's learner-facing items (item
+  /// keys, e.g. ["3.1","self","3.2","plan","final"]). Absent/empty ⇒ the
+  /// canonical order. Keys not listed keep their relative order, appended after
+  /// the listed ones; unknown keys are ignored — so the arrangement survives
+  /// content edits. Purely presentational: block gating is order-independent.
+  itemOrder: z.array(z.string()).optional(),
   badge: BlockBadge,
 });
+
+/** Apply an author-declared item order to a derived item list (pure). */
+export function applyItemOrder<T extends { key: string }>(items: T[], itemOrder?: string[] | null): T[] {
+  if (!itemOrder || itemOrder.length === 0) return items;
+  const byKey = new Map(items.map((it) => [it.key, it]));
+  const picked = itemOrder.map((k) => byKey.get(k)).filter((x): x is T => x !== undefined);
+  const pickedKeys = new Set(picked.map((it) => it.key));
+  return [...picked, ...items.filter((it) => !pickedKeys.has(it.key))];
+}
 
 export const Block = z.discriminatedUnion("type", [
   BlockBase.extend({ index: z.literal(0), type: z.literal("ONBOARDING"), payload: OnboardingPayload }),

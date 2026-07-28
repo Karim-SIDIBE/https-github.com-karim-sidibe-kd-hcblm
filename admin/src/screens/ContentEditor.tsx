@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { blockItems } from "@kd/shared/block-items";
 import { api, type MediaAsset } from "../lib/api";
 
 type Opt = { key: string; label: string };
@@ -453,6 +454,41 @@ function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
   );
 }
 
+/* ---------------- learner-facing arrangement (display order) ---------------- */
+const KIND_FR: Record<string, string> = {
+  onboarding: "Introduction", diagnostic: "Quiz", session: "Micro-session", case: "Étude de cas",
+  scenarios: "Activité", interblock: "Quiz", field: "Livrable", self: "Auto-évaluation",
+  plan: "Plan d'action", final: "Quiz", journal: "Journal", project: "Projet",
+};
+/**
+ * The EXACT list the learner sees for this block (derived by the shared
+ * contract, custom titles + current arrangement applied), reorderable by drag
+ * and drop. The saved `itemOrder` survives content edits: unknown keys are
+ * ignored, new items append in canonical order.
+ */
+function ItemOrderCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
+  let items: { key: string; kind: string; label: string }[] = [];
+  try { items = blockItems(block); } catch { /* incomplete draft block — hide */ }
+  const dnd = useDnd((from, to) => set((c) => { (c.blocks[ri] as any).itemOrder = move(items.map((it) => it.key), from, to); }));
+  if (items.length < 2) return null;
+  const custom = Boolean((block.itemOrder ?? []).length);
+  return (
+    <Card title="Ordre du parcours (affichage apprenant)" action={custom
+      ? <button type="button" className="btn btn--sm" onClick={() => set((c) => { delete (c.blocks[ri] as any).itemOrder; })}>⟳ Ordre par défaut</button>
+      : <span className="pill pill--soft">ordre par défaut</span>}>
+      <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Glissez-déposez pour agencer les éléments tels que l'apprenant les verra dans ce bloc. La progression n'impose pas cet ordre (les éléments restent tous accessibles) ; le bouton « Reprendre » le suit.</p>
+      {items.map((it, i) => (
+        <div className="row" key={it.key} {...dnd.row(i)} style={{ gap: 8, alignItems: "center", padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none", background: "#fff" }}>
+          <Grip {...dnd.handleProps(i)} />
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg-2)", width: 20, textAlign: "right" }}>{i + 1}.</span>
+          <span style={{ flex: 1, fontSize: 13 }}>{it.label}</span>
+          <span className="pill pill--soft" style={{ fontSize: 11 }}>{KIND_FR[it.kind] ?? it.kind}</span>
+        </div>
+      ))}
+    </Card>
+  );
+}
+
 /* ---------------- per-block editor ---------------- */
 function ImportedNote({ text, onClear }: { text: string; onClear?: () => void }) {
   const [open, setOpen] = useState(true);
@@ -482,6 +518,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       {note && <ImportedNote text={note} onClear={onClearNote} />}
       <UnitsCard block={block} ri={ri} set={set} />
+      <ItemOrderCard block={block} ri={ri} set={set} />
 
       {/* ---- Bloc 0 ---- */}
       {block.type === "ONBOARDING" && (
