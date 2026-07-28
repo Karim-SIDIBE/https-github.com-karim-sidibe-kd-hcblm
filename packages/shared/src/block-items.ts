@@ -6,7 +6,18 @@
  * The list follows the canonical per-block order, then applies the
  * author-declared `block.itemOrder` (display arrangement) when present.
  */
-import { applyItemOrder, type Block, type CourseContent, type MicroSession } from "./content-model.js";
+import type { Block, CourseContent, MicroSession } from "./content-model.js";
+
+/** Apply an author-declared item order to a derived item list (pure).
+ *  Lives HERE (zod-free module) so the learner PWA bundle stays lean —
+ *  importing it must never pull the Zod content model into the client. */
+export function applyItemOrder<T extends { key: string }>(items: T[], itemOrder?: string[] | null): T[] {
+  if (!itemOrder || itemOrder.length === 0) return items;
+  const byKey = new Map(items.map((it) => [it.key, it]));
+  const picked = itemOrder.map((k) => byKey.get(k)).filter((x): x is T => x !== undefined);
+  const pickedKeys = new Set(picked.map((it) => it.key));
+  return [...picked, ...items.filter((it) => !pickedKeys.has(it.key))];
+}
 
 
 export type ItemKind =
