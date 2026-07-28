@@ -446,15 +446,6 @@ const BlockBase = z.object({
   badge: BlockBadge,
 });
 
-/** Apply an author-declared item order to a derived item list (pure). */
-export function applyItemOrder<T extends { key: string }>(items: T[], itemOrder?: string[] | null): T[] {
-  if (!itemOrder || itemOrder.length === 0) return items;
-  const byKey = new Map(items.map((it) => [it.key, it]));
-  const picked = itemOrder.map((k) => byKey.get(k)).filter((x): x is T => x !== undefined);
-  const pickedKeys = new Set(picked.map((it) => it.key));
-  return [...picked, ...items.filter((it) => !pickedKeys.has(it.key))];
-}
-
 export const Block = z.discriminatedUnion("type", [
   BlockBase.extend({ index: z.literal(0), type: z.literal("ONBOARDING"), payload: OnboardingPayload }),
   BlockBase.extend({ index: z.literal(1), type: z.literal("COMPREHENSION"), payload: ComprehensionPayload }),
