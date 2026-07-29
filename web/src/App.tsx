@@ -45,10 +45,14 @@ function Screen({ route }: { route: Route }) {
     case "course": return <Home eid={route.eid} />;
     case "cours": return <Course eid={route.eid} />;
     case "journal": return <Journal eid={route.eid} />;
-    case "session": return <SessionScreen eid={route.eid} block={route.block} item={route.item} />;
-    case "quiz": return <QuizScreen eid={route.eid} kind={route.kind} />;
-    case "deliverable": return <Deliverable eid={route.eid} block={route.block} itemKey={route.key} />;
-    case "activity": return <Activity eid={route.eid} block={route.block} itemKey={route.key} />;
+    // Item screens are KEYED by their route params: chaining from 1.2 to 1.3
+    // must mount a FRESH screen (video phase, blank answers) — React would
+    // otherwise reuse the component instance and keep the previous item's
+    // state (the « Session suivante » sautait vidéo et exercice bug).
+    case "session": return <SessionScreen key={`s:${route.eid}:${route.block}:${route.item}`} eid={route.eid} block={route.block} item={route.item} />;
+    case "quiz": return <QuizScreen key={`q:${route.eid}:${route.kind}`} eid={route.eid} kind={route.kind} />;
+    case "deliverable": return <Deliverable key={`d:${route.eid}:${route.block}:${route.key}`} eid={route.eid} block={route.block} itemKey={route.key} />;
+    case "activity": return <Activity key={`a:${route.eid}:${route.block}:${route.key}`} eid={route.eid} block={route.block} itemKey={route.key} />;
     case "project": return <Project eid={route.eid} />;
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;

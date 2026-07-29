@@ -50,3 +50,37 @@ export function shuffleQuestions<T extends { profiling?: boolean }>(questions: r
   const profiling = questions.filter((q) => q.profiling);
   return [...seededShuffle(scored, seed), ...profiling];
 }
+
+const OPTION_LETTERS = ["A", "B", "C", "D", "E", "F"] as const;
+
+type OptionQuestion = {
+  id: string;
+  profiling?: boolean;
+  type?: string;
+  options?: { key: string; label: string }[];
+  correctKey?: string;
+  correctKeys?: string[];
+};
+
+/**
+ * Shuffle one question's OPTIONS for one learner and RE-LETTER them A–D in the
+ * new order (correctKey/correctKeys remapped), so the displayed letters read
+ * naturally while the right answer sits at a different position per learner.
+ * Deterministic per (seed, question id) — the bundle, the scoring and the
+ * review screen all agree. Profiling questions keep their authored order
+ * (their feedback maps profiles to letters), as do non-MCQ kinds.
+ */
+export function shuffleQuestionOptions<T extends OptionQuestion>(q: T, seed: string): T {
+  const ty = q.type ?? "single";
+  if (q.profiling || (ty !== "single" && ty !== "multiple")) return q;
+  if (!q.options || q.options.length < 2 || q.options.length > OPTION_LETTERS.length) return q;
+  const perm = seededShuffle(q.options, `${seed}:${q.id}:options`);
+  const newKey = new Map(perm.map((o, i) => [o.key, OPTION_LETTERS[i]!]));
+  const out: T = {
+    ...q,
+    options: perm.map((o, i) => ({ ...o, key: OPTION_LETTERS[i]! })),
+  };
+  if (q.correctKey != null) out.correctKey = newKey.get(q.correctKey) ?? q.correctKey;
+  if (q.correctKeys != null) out.correctKeys = q.correctKeys.map((k) => newKey.get(k) ?? k).sort();
+  return out;
+}

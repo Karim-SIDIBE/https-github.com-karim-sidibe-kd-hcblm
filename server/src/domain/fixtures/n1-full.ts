@@ -536,7 +536,7 @@ export const n1Full: CourseContent = {
               { key: "B", label: "Je demande l'ordre du jour et négocie ma présence partielle." },
               { key: "C", label: "J'y vais mais travaille discrètement sur mon dossier." },
               { key: "D", label: "J'accepte et renégocie en amont mon dossier avec la partie prenante." },
-            ], correctKey: "D", feedbackText: "D permet d'assister (respect de la hiérarchie) tout en gérant activement l'impact ; renégocier en amont est plus professionnel.", subArea: "réunions" },
+            ], correctKey: "D", feedbackText: "Accepter en renégociant votre dossier en amont permet d'assister (respect de la hiérarchie) tout en gérant activement l'impact — plus professionnel qu'un arbitrage subi.", subArea: "réunions" },
             { id: "d5", scenarioText: "Vendredi 17h30, tâche importante à 60 % (45 min pour finir), départ prévu à 18h.", options: [
               { key: "A", label: "Je reste finir — une tâche non terminée est non faite." },
               { key: "B", label: "Je documente précisément l'état (60 %, prochaines étapes) et pars à 18h." },
@@ -554,7 +554,7 @@ export const n1Full: CourseContent = {
               { key: "B", label: "Je réponds à tout dans les 30 min, quelle que soit l'heure." },
               { key: "C", label: "Je réponds tout de suite au manager et diffère les autres." },
               { key: "D", label: "3 plages de consultation communiquées + notifications pour un groupe « urgences réelles »." },
-            ], correctKey: "D", feedbackText: "Disparaître totalement (A) est perçu comme de l'arrogance. Les plages de consultation communiquées équilibrent protection du focus et canal d'urgence identifié.", subArea: "WhatsApp" },
+            ], correctKey: "D", feedbackText: "Couper toutes les notifications et disparaître totalement est perçu comme de l'arrogance. Les plages de consultation communiquées équilibrent protection du focus et canal d'urgence identifié.", subArea: "WhatsApp" },
             { id: "d8", scenarioText: "Déléguer une tâche à un junior ghanéen alors que vous avez tendance à tout faire vous-même.", options: [
               { key: "A", label: "Je délègue avec instructions très détaillées et vérifie chaque heure." },
               { key: "B", label: "Je garde la tâche — déléguer prend plus de temps." },

@@ -26,10 +26,14 @@ export function computeResume(
   const progress = computeProgress(content, completions, hasMomentAncrage);
   if (progress.courseCompleted) return null;
 
-  // Prefer an explicit saved position, as long as its block isn't already done.
+  // Prefer an explicit saved position, as long as its block isn't already done
+  // AND the item itself is still incomplete — a finished quiz must never be
+  // re-proposed by « Reprendre » (the target falls through to the computed
+  // next-incomplete element instead).
   if (saved?.blockIndex != null && saved.itemKey) {
     const bp = progress.blocks[saved.blockIndex];
-    if (bp && bp.state !== "completed") {
+    const itemDone = bp?.completedKeys.includes(saved.itemKey) ?? false;
+    if (bp && bp.state !== "completed" && !itemDone) {
       return {
         blockIndex: saved.blockIndex,
         blockTitle: content.blocks[saved.blockIndex]?.title ?? "",

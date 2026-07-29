@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import type { CourseContent } from "@kd/shared";
 import { api, engine, store, getIdentity } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
-import { clearCachedPositions, getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, syncSeenBadges, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
+import { clearCachedPositions, clearDrafts, getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, syncSeenBadges, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
 import { blockItems, isItemDone } from "../lib/content";
 import { purgeAllAvailability } from "../lib/offline";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
@@ -33,6 +33,7 @@ export function Home({ eid }: { eid: string }) {
         const badgeSync = syncSeenBadges(eid, d.badges.map((b: { type: string }) => b.type));
         if (badgeSync === "reset") {
           clearCachedPositions(eid);
+          clearDrafts(eid);
           await purgeAllAvailability(eid);
           try { localStorage.removeItem(`klms_diag_${eid}`); } catch { /* */ }
         }

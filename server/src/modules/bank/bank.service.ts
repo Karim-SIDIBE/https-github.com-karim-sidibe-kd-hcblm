@@ -7,7 +7,7 @@
 import { prisma } from "../../db/prisma.js";
 import { ScoredQuestion } from "../../domain/content-model.js";
 import { extractScoredQuestions } from "../../domain/bank/extract.js";
-import { shuffleQuestions } from "../../domain/engine/shuffle.js";
+import { shuffleQuestions, shuffleQuestionOptions } from "../../domain/engine/shuffle.js";
 
 export class BankError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -104,7 +104,10 @@ type QuizContainer = { questions?: unknown[]; pool?: { subArea?: string; draw: n
  */
 export async function materializeQuiz(enrollmentId: string, quizKey: string, container: QuizContainer): Promise<unknown[]> {
   const seed = `${enrollmentId}:${quizKey}`;
-  const shuffle = (qs: unknown[]) => shuffleQuestions(qs as { profiling?: boolean }[], seed);
+  // Question ORDER and each question's OPTION order are both per-learner random
+  // (stable seeds) — the right answer sits at a different letter per learner.
+  const shuffle = (qs: unknown[]) =>
+    shuffleQuestions(qs as { profiling?: boolean }[], seed).map((q) => shuffleQuestionOptions(q as never, seed));
   const fixed = container.questions ?? [];
   if (!container.pool) return shuffle(fixed);
   const existing = await prisma.quizDraw.findUnique({ where: { enrollmentId_quizKey: { enrollmentId, quizKey } } });
