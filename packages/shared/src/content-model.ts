@@ -146,9 +146,58 @@ export const MicroSession = z.object({
   durationEstimate: nonEmpty("durée estimée"),
   summaryPoints: z.array(nonEmpty("point clé")).length(3, "exactement 3 points clés"),
   video: Video,
-  exercise: Exercise,
+  /** Optional: a video-only micro-session (e.g. one that chains straight into a
+   *  long activity, like « Productivité hybride » → Cas transversal Sylvie). */
+  exercise: Exercise.optional(),
 });
 export type MicroSession = z.infer<typeof MicroSession>;
+
+// ---------------------------------------------------------------------------
+// Case study (structured) — Bloc 1 « Nadia » and the Bloc 3 transversal case.
+// Steps carry real questions (MCQ with feedback + open reflections whose
+// answers are saved for the Bloc 4 certification project), per the course
+// énoncés — not just a free-text transfer analysis.
+// ---------------------------------------------------------------------------
+
+const CaseQuestion = z.object({
+  id: nonEmpty("id de question"),
+  kind: z.enum(["mcq", "open"]),
+  prompt: injectable, // supports {{moment_ancrage}}
+  // mcq:
+  options: z.array(Option).min(2).optional(),
+  correctKey: OptionKey.optional(),
+  /** All answers are valid (profile-dependent choice) — no ✗/✓ marks. */
+  allValid: z.boolean().default(false),
+  feedback: z.string().default(""),
+  // open:
+  minChars: z.number().int().positive().optional(),
+  /** Open answer re-used in the Bloc 4 certification project. */
+  savedForProject: z.boolean().default(false),
+});
+export type CaseQuestion = z.infer<typeof CaseQuestion>;
+
+const CaseStep = z.object({
+  title: nonEmpty("titre d'étape"),
+  durationEstimate: z.string().default(""),
+  intro: z.string().default(""),
+  questions: z.array(CaseQuestion).default([]),
+});
+export type CaseStep = z.infer<typeof CaseStep>;
+
+export const CaseStudy = z.object({
+  /** Learner-facing activity label (e.g. « Activité longue — Étude de cas »). */
+  title: nonEmpty("titre"),
+  /** The case line itself (e.g. « Nadia : compétente, épuisée… »). */
+  subtitle: z.string().default(""),
+  context: z.string().default(""),
+  durationEstimate: z.string().default(""),
+  /** Legacy free-text steps (pre-v2.1 content) — superseded by structuredSteps. */
+  steps: z.array(z.string()).default([]),
+  structuredSteps: z.array(CaseStep).default([]),
+  /** « Résumé des apprentissages clés » shown once the case is completed. */
+  summary: z.array(nonEmpty("apprentissage clé")).default([]),
+});
+export type CaseStudy = z.infer<typeof CaseStudy>;
 
 // ---------------------------------------------------------------------------
 // Quiz builders
@@ -245,6 +294,8 @@ export type QuestionPool = z.infer<typeof QuestionPool>;
 const DiagnosticQuiz = z.object({
   /** Learner-facing title; empty ⇒ the app's default label ("Quiz diagnostique"). */
   title: z.string().default(""),
+  /** Learner-facing effort estimate ("15 min"); empty ⇒ computed from questions. */
+  durationEstimate: z.string().default(""),
   questions: z.array(ScoredQuestion).min(1),
   profiles: z.array(ProfileBand).min(1),
   pool: QuestionPool.optional(),
@@ -280,15 +331,15 @@ const OnboardingPayload = z.object({
 const ComprehensionPayload = z.object({
   diagnosticQuiz: DiagnosticQuiz, // runs BEFORE the videos
   microSessions: z.array(MicroSession).min(1),
-  caseStudy: z
-    .object({ title: nonEmpty("titre"), steps: z.array(z.string()).min(1) })
-    .optional(),
+  caseStudy: CaseStudy.optional(),
 });
 
 const PracticePayload = z.object({
   microSessions: z.array(MicroSession).min(1),
   /** Learner-facing title of the guided-scenarios activity; empty ⇒ default label. */
   guidedScenariosTitle: z.string().default(""),
+  /** Learner-facing effort estimate of the guided-scenarios activity ("21 min"). */
+  guidedScenariosDuration: z.string().default(""),
   guidedScenarios: z
     .array(
       z.object({
@@ -313,6 +364,7 @@ const PracticePayload = z.object({
   interBlockQuiz: z
     .object({
       title: z.string().default(""),
+      durationEstimate: z.string().default(""),
       scored: z.literal(false).default(false),
       questions: z.array(ScoredQuestion).min(1),
       pool: QuestionPool.optional(),
@@ -321,7 +373,19 @@ const PracticePayload = z.object({
   fieldApplication: z.object({
     /** Learner-facing title; empty ⇒ the app's default label ("Application terrain"). */
     title: z.string().default(""),
+    durationEstimate: z.string().default(""),
     brief: injectable, // {{moment_ancrage}}
+    /** Optional guided structure (étapes with labelled fields, per the énoncé).
+     *  When present the learner fills the fields instead of one free textarea. */
+    steps: z
+      .array(
+        z.object({
+          title: nonEmpty("titre d'étape"),
+          intro: z.string().default(""), // supports {{moment_ancrage}}
+          fields: z.array(z.object({ label: nonEmpty("intitulé du champ"), placeholder: z.string().default("") })).min(1),
+        }),
+      )
+      .optional(),
     minChars: z.number().int().positive().default(200),
     gatesNextBlock: z.boolean().default(true),
   }),
@@ -329,15 +393,23 @@ const PracticePayload = z.object({
 
 const AnchoringPayload = z.object({
   microSessions: z.array(MicroSession).min(1),
+  /** « Cas transversal de synthèse » (e.g. Sylvie à Abidjan) — a required long
+   *  activity of the block when present. Same structured shape as the Bloc 1
+   *  case study. */
+  transversalCase: CaseStudy.optional(),
   selfAssessment: z.object({
     /** Learner-facing title; empty ⇒ the app's default label ("Auto-évaluation"). */
     title: z.string().default(""),
+    durationEstimate: z.string().default(""),
     criteria: z.array(nonEmpty("critère")).min(1),
     scale: z.array(nonEmpty("niveau d'échelle")).min(2),
   }),
   actionPlan30d: z.object({
     /** Learner-facing title; empty ⇒ the app's default label ("Plan d'action 30 jours"). */
     title: z.string().default(""),
+    durationEstimate: z.string().default(""),
+    /** Intro line above the habits (e.g. « pré-rempli — complétez et ajustez »). */
+    intro: z.string().default(""),
     habits: z
       .array(
         z.object({
@@ -350,6 +422,7 @@ const AnchoringPayload = z.object({
   finalQuiz: z.object({
     /** Learner-facing title; empty ⇒ the app's default label ("Quiz final"). */
     title: z.string().default(""),
+    durationEstimate: z.string().default(""),
     questions: z.array(ScoredQuestion).min(1),
     passThreshold: z.number().int().min(0).max(100),
     pool: QuestionPool.optional(),
@@ -371,19 +444,20 @@ const CertificationPayload = z.object({
     entries: z
       .array(
         z.object({
-          day: z.union([
-            z.literal(1),
-            z.literal(3),
-            z.literal(5),
-            z.literal(7),
-            z.literal(10),
-            z.literal(14),
-          ]),
+          /// Day offset of the push (designer-declared, e.g. J+2 → J+15). Was a
+          /// fixed 1/3/5/7/10/14 literal set — relaxed so the cadence is content.
+          day: z.number().int().min(1).max(60),
           prompt: injectable, // {{moment_ancrage}}
           minWords: z.number().int().min(1).default(50),
         }),
       )
-      .length(6, "exactement 6 micro-entrées de journal (J+1 → J+14)"),
+      .length(6, "exactement 6 micro-entrées de journal (2 semaines)")
+      .superRefine((entries, ctx) => {
+        for (let i = 1; i < entries.length; i++) {
+          if (entries[i]!.day <= entries[i - 1]!.day)
+            ctx.addIssue({ code: z.ZodIssueCode.custom, path: [i, "day"], message: "les jours du journal doivent être strictement croissants" });
+        }
+      }),
   }),
   rubric: z.object({
     criteria: z

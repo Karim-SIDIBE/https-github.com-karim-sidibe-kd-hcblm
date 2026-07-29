@@ -19,6 +19,7 @@ type Step = "pam" | "profile" | "peer" | "done";
 export function Onboarding({ eid }: { eid: string }) {
   const t = useT();
   const [payload, setPayload] = useState<Onboarding | null>(null);
+  const [blockTitle, setBlockTitle] = useState("");
   const [objective, setObjective] = useState("");
   const [step, setStep] = useState<Step | null>(null);
   const [pam, setPam] = useState("");
@@ -32,7 +33,7 @@ export function Onboarding({ eid }: { eid: string }) {
     (async () => {
       const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
       const block0 = b?.content?.blocks?.find((x: any) => x.type === "ONBOARDING");
-      if (alive && block0) setPayload(block0.payload);
+      if (alive && block0) { setPayload(block0.payload); setBlockTitle(block0.title ?? ""); }
       if (alive) setObjective(b?.content?.objective ?? "");
       let pamDone = false, profileDone = false, triggerDone = false, peerDone = false;
       try {
@@ -72,10 +73,14 @@ export function Onboarding({ eid }: { eid: string }) {
   return (
     <div className="stack">
       <Back />
-      {step !== "done" && (<>
-        <div className="eyebrow">{t("ob.step", { n: stepNo })}</div>
-        <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>
-      </>)}
+      {/* Écrans 2–5 : fil d'Ariane harmonisé — Bloc 0, micro-session 0.1 (10 min),
+          et « ÉTAPE x SUR 3 » en face. */}
+      {blockTitle && <div className="meta" style={{ fontWeight: 600 }}>{t("home.block", { n: 0 })} · {blockTitle}</div>}
+      <div className="row between" style={{ gap: 8 }}>
+        <div className="meta">{t("ci.ms01")} — 10 min</div>
+        {step !== "done" && <div className="eyebrow" style={{ whiteSpace: "nowrap", textTransform: "uppercase" }}>{t("ob.step", { n: stepNo })}</div>}
+      </div>
+      {step !== "done" && <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>}
 
       {step === "pam" && (
         <div className="hf-card stack">
@@ -127,7 +132,9 @@ export function Onboarding({ eid }: { eid: string }) {
           <span className="hf-medal earned lg" style={{ margin: "0 auto" }}>{t("ob.medal")}</span>
           <h1>{t("ob.doneTitle")}</h1>
           <p className="body">{t("ob.doneDesc")}</p>
-          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>{t("ob.startCourse")}</button>
+          {/* Écran 5 : « Continuer le parcours » lance la micro-session suivante
+              (la vidéo déclencheur) — plus la page « Cours ». */}
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.session(eid, 0, "declencheur"))}>{t("ob.startCourse")}</button>
         </div>
       )}
     </div>

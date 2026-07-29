@@ -100,6 +100,7 @@ export const n1Minimal: CourseContent = {
       payload: {
         diagnosticQuiz: {
           title: "",
+          durationEstimate: "",
           questions: [
             { id: "d1", scenarioText: "Votre matinée est interrompue par WhatsApp. Que faites-vous ?", options: [
               { key: "A", label: "Je réponds tout de suite" },
@@ -121,9 +122,11 @@ export const n1Minimal: CourseContent = {
       payload: {
         microSessions: [microSession("2.1", "Planifier dans l'incertitude")],
         guidedScenariosTitle: "",
+        guidedScenariosDuration: "",
         guidedScenarios: [],
         fieldApplication: {
           title: "",
+          durationEstimate: "",
           brief: `Appliquez votre solution dans votre environnement réel, en repartant de ${T}.`,
           minChars: 200,
           gatesNextBlock: true,
@@ -139,10 +142,11 @@ export const n1Minimal: CourseContent = {
       badge: { type: "ANCHORING", label: "Badge Ancrage", conditions: ["4 micro-sessions complétées", "Quiz final ≥ 70 %"] },
       payload: {
         microSessions: [microSession("3.1", "Le rituel du temps protégé")],
-        selfAssessment: { title: "", criteria: ["Organisation", "Priorités"], scale: ["1 - Débutant", "2", "3", "4 - Maîtrise"] },
-        actionPlan30d: { title: "", habits: [{ title: "Temps protégé matinal", fields: ["Moment", "Durée", "Signal"] }] },
+        selfAssessment: { title: "", durationEstimate: "", criteria: ["Organisation", "Priorités"], scale: ["1 - Débutant", "2", "3", "4 - Maîtrise"] },
+        actionPlan30d: { title: "", durationEstimate: "", intro: "", habits: [{ title: "Temps protégé matinal", fields: ["Moment", "Durée", "Signal"] }] },
         finalQuiz: {
           title: "",
+          durationEstimate: "",
           questions: [
             { id: "f1", scenarioText: "Quel réflexe installez-vous en premier ?", options: [
               { key: "A", label: "Bloc de temps protégé" },

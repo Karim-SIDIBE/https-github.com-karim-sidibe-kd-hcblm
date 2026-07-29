@@ -96,7 +96,7 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
   const allMicroSessions = content.blocks.flatMap((b) =>
     "payload" in b && "microSessions" in b.payload ? (b.payload.microSessions ?? []) : [],
   );
-  const pamInExercise = allMicroSessions.some((ms) => hasToken(ms.exercise.prompt));
+  const pamInExercise = allMicroSessions.some((ms) => hasToken(ms.exercise?.prompt));
   if (!pamInExercise)
     err(
       "pam.exercise",
