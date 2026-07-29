@@ -186,6 +186,7 @@ const fr: UiDict = {
   "ci.self": "Auto-évaluation", "ci.plan": "Plan d'action 30 jours", "ci.journal": "Journal J+{day}",
   "ci.msPrefix": "Micro-session", "ci.ms01": "Micro-session 0.1 — Onboarding", "ci.ms02": "Micro-session 0.2 — Déclencheur",
   "ci.ms02sub": "Vidéo déclencheur + Quiz (non noté)", "ci.transversal": "Cas transversal de synthèse",
+  "ci.journalGroup": "Journal des 2 semaines",
   // quiz component (one question at a time)
   "quiz.q": "Question {n} / {total}", "quiz.validate": "Valider", "quiz.good": "✓ Bonne réponse", "quiz.review": "À revoir",
   "quiz.seeResult": "Voir mon résultat →", "quiz.nextQuestion": "Question suivante →",
@@ -343,6 +344,7 @@ const en: UiDict = {
   "ci.self": "Self-assessment", "ci.plan": "30-day action plan", "ci.journal": "Logbook D+{day}",
   "ci.msPrefix": "Micro-session", "ci.ms01": "Micro-session 0.1 — Onboarding", "ci.ms02": "Micro-session 0.2 — Trigger",
   "ci.ms02sub": "Trigger video + Quiz (not graded)", "ci.transversal": "Transversal synthesis case",
+  "ci.journalGroup": "Two-week logbook",
   "quiz.q": "Question {n} / {total}", "quiz.validate": "Submit", "quiz.good": "✓ Correct", "quiz.review": "Needs review",
   "quiz.seeResult": "See my result →", "quiz.nextQuestion": "Next question →",
   "quiz.multiHint": "Multiple answers possible", "quiz.true": "True", "quiz.false": "False",

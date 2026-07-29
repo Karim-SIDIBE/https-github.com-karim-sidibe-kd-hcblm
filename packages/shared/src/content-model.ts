@@ -324,6 +324,9 @@ const OnboardingPayload = z.object({
   /** Self-identification profiles (A–D in the Niveau 1 course). */
   profileChoices: z.array(ProfileChoice).min(2, "au moins 2 profils à identifier"),
   triggerVideo: Video,
+  /** Learner-facing effort estimate of MS 0.2 (vidéo déclencheur + quiz) —
+   *  wins over the raw video runtime in the course list ("10 min"). */
+  triggerDuration: z.string().default(""),
   triggerQuiz: TriggerQuiz,
   progressPeer: z.object({ mandatory: z.literal(true) }).default({ mandatory: true }),
 });
@@ -436,6 +439,8 @@ const CertificationPayload = z.object({
       z.object({
         title: nonEmpty("titre de section"),
         helpText: z.string().default(""),
+        /** Learner-facing effort estimate shown in the course list ("15 min"). */
+        durationEstimate: z.string().default(""),
         prefillFromMomentAncrage: z.boolean().default(false),
       }),
     )
@@ -517,6 +522,21 @@ const BlockBase = z.object({
   /// the listed ones; unknown keys are ignored — so the arrangement survives
   /// content edits. Purely presentational: block gating is order-independent.
   itemOrder: z.array(z.string()).optional(),
+  /// Author-declared DISPLAY GROUPS: consecutive items whose keys are listed
+  /// render indented under a shared header (e.g. « Activité Expérientielle
+  /// Longue — Productivité hybride » = vidéo 3.2 + cas Sylvie + auto-éval).
+  /// Purely presentational; unknown keys are ignored.
+  itemGroups: z
+    .array(
+      z.object({
+        title: nonEmpty("titre du groupe"),
+        /** Free duration label shown on the header (e.g. "5 + 20 + 10 min");
+         *  empty ⇒ the renderer sums the member durations. */
+        durationLabel: z.string().default(""),
+        keys: z.array(z.string()).min(1),
+      }),
+    )
+    .optional(),
   badge: BlockBadge,
 });
 

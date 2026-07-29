@@ -3,7 +3,7 @@ import { api, engine, store } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { clearCachedPositions, getCachedProgress, setCachedProgress, syncSeenBadges, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
-import { blockItems, blockDurationSec, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
+import { blockItems, blockDurationSec, isItemDone, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
 import { availabilityOf, makeAvailable, purgeAllAvailability, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 import type { CourseContent } from "@kd/shared";
@@ -163,12 +163,23 @@ export function Course({ eid }: { eid: string }) {
             })()}
             <div className="stack" style={{ marginTop: 12 }}>
               {items.map((it) => {
-                const isDone = done.has(it.key) || (it.kind === "onboarding" && st === "completed");
+                const isDone = isItemDone(it, done) || (it.kind === "onboarding" && st === "completed");
                 const k = akey(b.index, it.key);
                 const av = avail[k];
+                // Grouped items (« Activité Expérientielle Longue — … ») render
+                // indented under one header line drawn before the first member.
+                const groupHeader = it.groupFirst ? (
+                  <div className="row between" style={{ padding: "8px 4px 2px", gap: 8 }}>
+                    <strong className="h4" style={{ fontWeight: 700 }}>{it.groupTitle}</strong>
+                    <span className="meta" style={{ whiteSpace: "nowrap" }}>
+                      {it.groupDurationLabel || formatDuration(items.filter((x) => x.groupTitle === it.groupTitle).reduce((a, x) => a + (x.durationSec ?? 0), 0))}
+                    </span>
+                  </div>
+                ) : null;
                 return (
-                  <div key={it.key}>
-                    <div className="hf-rowtap row between" style={{ padding: "11px 13px", border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: locked ? "default" : "pointer" }}
+                  <div key={it.key} style={it.groupTitle ? { marginLeft: 0 } : undefined}>
+                    {groupHeader}
+                    <div className="hf-rowtap row between" style={{ padding: "11px 13px", border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: locked ? "default" : "pointer", ...(it.groupTitle ? { marginLeft: 16, borderLeft: "3px solid var(--line)" } : {}) }}
                       onClick={() => { if (!locked) onItem(b.index, it); }}>
                       <span className="row" style={{ gap: 11 }}>
                         <span style={{ fontSize: 18 }}>{isDone ? "✅" : ICON[it.kind]}</span>
@@ -183,7 +194,7 @@ export function Course({ eid }: { eid: string }) {
                         : <span className="meta">{isDone ? "" : "→"}</span>}
                     </div>
                     {!locked && !isDone && (
-                      <div className="row" style={{ gap: 8, marginTop: 6, paddingLeft: 2 }}>
+                      <div className="row" style={{ gap: 8, marginTop: 6, paddingLeft: it.groupTitle ? 18 : 2 }}>
                         {av?.available
                           ? <>
                               <span className="hf-pill hf-pill--mint hf-pill--sm">{t("course.availOffline", { days: av.daysLeft })}</span>
