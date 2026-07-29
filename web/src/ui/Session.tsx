@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, engine, store, getIdentity } from "../lib/app";
-import { setCachedPosition, setCachedProgress, getCachedPosition } from "../lib/cache";
+import { setCachedPosition, setCachedProgress, getCachedPosition, getCachedProgress } from "../lib/cache";
 import { currentConn, resolveSource, type Rendition } from "../lib/media";
 import { cachedUrlsOf } from "../lib/offline";
 import { previousSession } from "../lib/content";
+import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
+import { Breadcrumb } from "./Breadcrumb";
 import { VideoPlayer } from "./VideoPlayer";
 import { Exercise, type ExerciseMeta, type ExerciseSpec } from "./Exercise";
 import { useT } from "../lib/i18n";
@@ -86,10 +88,16 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
     void engine.record(eid, "position", { blockIndex: block, itemKey: item, positionSec, durationSec: dur ?? undefined });
   }
 
-  async function completeSession(data: unknown, meta?: ExerciseMeta, goBack = true) {
+  async function completeSession(data: unknown, meta?: ExerciseMeta, advance = true) {
     const r = await engine.commit(eid, "complete_item", { blockIndex: block, itemType: "MICRO_SESSION", itemKey: item, data, meta });
     if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
-    if (goBack) navigate(routes.course(eid));
+    // Chain straight to the NEXT element of the parcours (écrans 5, 26, 30…) —
+    // never back to the list, never re-opening the session just finished.
+    if (advance) goToNext((r as any).progress);
+  }
+  function goToNext(progressAfter?: unknown) {
+    const prog = (progressAfter as any) ?? getCachedProgress(eid);
+    goNext(eid, nextTarget(bundle?.content as any, prog, block, item, t));
   }
 
   if (error) return <div><button className="ghost" onClick={() => navigate(routes.course(eid))}>← {t("common.back")}</button><p className="banner offline">{error}</p></div>;
@@ -101,11 +109,8 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
 
   return (
     <div className="stack">
-      <button className="ghost" onClick={() => navigate(routes.course(eid))}>← {session.title}</button>
-
-      {session.durationEstimate && (
-        <div className="meta" style={{ marginTop: -4 }}>{t("sess.thisSession", { dur: session.durationEstimate })}</div>
-      )}
+      {/* Écrans 7–8 : la flèche retour dit « Cours », puis Bloc + micro-session. */}
+      <Breadcrumb eid={eid} block={blk} itemKey={item} />
 
       {phase === "video" && (
         <>
@@ -140,7 +145,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       )}
 
       {phase === "exercise" && session.exercise && (
-        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => navigate(routes.course(eid))}
+        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
           aiFeedback={session.exercise.type === "multi" ? undefined : async () => {
             // Personalised formative feedback on the saved answer (AI when a key
             // is configured server-side, deterministic heuristic otherwise).

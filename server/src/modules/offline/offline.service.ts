@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { seededShuffle } from "../../domain/engine/shuffle.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
 import {
@@ -101,6 +102,12 @@ export async function buildBundle(enrollmentId: string) {
         container!.questions = await materializeQuiz(enrollmentId, key, container as never);
       }
     };
+    if (b.type === "ONBOARDING") {
+      // The trigger quiz is not scored, but its question ORDER is randomised per
+      // learner too — same stable seeding as the scored quizzes.
+      const tq = b.payload?.triggerQuiz as { questions?: unknown[] } | undefined;
+      if (tq?.questions?.length) tq.questions = seededShuffle(tq.questions, `${enrollmentId}:trigger`);
+    }
     if (b.type === "COMPREHENSION") await apply("diagnostic", b.payload?.diagnosticQuiz);
     else if (b.type === "PRACTICE") await apply("interblock", b.payload?.interBlockQuiz);
     else if (b.type === "ANCHORING") await apply("final", b.payload?.finalQuiz);

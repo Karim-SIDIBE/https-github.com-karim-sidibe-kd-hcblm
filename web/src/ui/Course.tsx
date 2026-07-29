@@ -3,7 +3,7 @@ import { api, engine, store } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { clearCachedPositions, getCachedProgress, setCachedProgress, syncSeenBadges, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
-import { blockItems, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
+import { blockItems, blockDurationSec, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
 import { availabilityOf, makeAvailable, purgeAllAvailability, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
 import { navigate, routes } from "../lib/router";
 import type { CourseContent } from "@kd/shared";
@@ -142,9 +142,16 @@ export function Course({ eid }: { eid: string }) {
 
       {blocks.map((b) => {
         const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b, t);
+        const blockDur = blockDurationSec(b as never, t);
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
-            <div className="row between"><h3 style={{ margin: 0 }}>{t("home.block", { n: b.index })} · {b.title}</h3>{STATE(st, t)}</div>
+            <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}>
+              <h3 style={{ margin: 0 }}>{t("home.block", { n: b.index })} · {b.title}</h3>
+              <span className="row" style={{ gap: 8, flexShrink: 0 }}>
+                {blockDur > 0 && <span className="meta" style={{ whiteSpace: "nowrap" }}>⏱️ {formatDuration(blockDur)}</span>}
+                {STATE(st, t)}
+              </span>
+            </div>
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
               const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };
@@ -165,7 +172,11 @@ export function Course({ eid }: { eid: string }) {
                       onClick={() => { if (!locked) onItem(b.index, it); }}>
                       <span className="row" style={{ gap: 11 }}>
                         <span style={{ fontSize: 18 }}>{isDone ? "✅" : ICON[it.kind]}</span>
-                        <span><strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>{it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}</span>
+                        <span>
+                          <strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>
+                          {it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}
+                          {it.sublabel ? <div className="meta" style={{ marginTop: 2 }}>{it.sublabel}</div> : null}
+                        </span>
                       </span>
                       {!locked && !isDone && !NAVIGABLE.includes(it.kind)
                         ? <button className="hf-btn hf-btn--sm hf-btn--outline" onClick={(e) => { e.stopPropagation(); completeInterim(b.index, it); }}>{t("course.markDone")}</button>

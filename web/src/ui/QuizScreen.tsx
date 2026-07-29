@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { engine, store } from "../lib/app";
-import { setCachedProgress } from "../lib/cache";
+import { getCachedProgress, setCachedProgress } from "../lib/cache";
+import { goNext, nextTarget } from "../lib/nav";
 import { diagnosticProfile, scoreQuiz, type ScoredQuestion } from "../lib/quiz";
 import { navigate, routes, type QuizKind } from "../lib/router";
+import { Breadcrumb } from "./Breadcrumb";
 import { Quiz, type QuizQuestion, type QuestionMeta } from "./Quiz";
 import { useT } from "../lib/i18n";
 
@@ -38,9 +40,11 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
     return { block, src, raw, questions, threshold: block?.payload?.finalQuiz?.passThreshold as number | undefined, profiles: src.profiles as any[] | undefined };
   }, [bundle, cfg]);
 
+  const [progressAfter, setProgressAfter] = useState<any>(null);
+
   async function onSubmit(answers: Record<string, string>, meta: QuestionMeta) {
     const r = await engine.commit(eid, cfg.action, { answers, meta });
-    if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
+    if ((r as any).progress) { setCachedProgress(eid, (r as any).progress); setProgressAfter((r as any).progress); }
 
     if (kind === "diagnostic") {
       const prof = diagnosticProfile(data!.raw, answers);
@@ -90,14 +94,21 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
   if (!bundle) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
   if (!data) return <div className="stack"><Back /><p className="banner offline">{t("qz.unavailable")}</p></div>;
 
+  // « Continuer » after the result launches the NEXT element of the parcours
+  // (écran 22 : la micro-session 1.1, pas la liste « Cours »).
+  const continueNext = () => {
+    const prog = progressAfter ?? getCachedProgress(eid);
+    goNext(eid, nextTarget(bundle?.content, prog, data.block?.index ?? 0, kind, t));
+  };
+
   return (
     <div className="stack">
-      <Back />
+      <Breadcrumb eid={eid} block={data.block} itemKey={kind} />
       <h1>{(data.src.title as string) || t(cfg.title)}</h1>
       {result ? (
         <>
           {result.node}
-          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => navigate(routes.cours(eid))}>{t("common.continue")}</button>
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={continueNext}>{t("common.continue")}</button>
         </>
       ) : (
         <Quiz questions={data.questions} onSubmit={onSubmit} />

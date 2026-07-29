@@ -112,14 +112,20 @@ export function Home({ eid }: { eid: string }) {
         <h1 style={{ marginTop: 6 }}>{t("home.hello", { name: name || "👋" })}</h1>
       </div>
 
-      {resume && !progress?.courseCompleted && (
+      {resume && !progress?.courseCompleted && (() => {
+        // First visit (nothing completed yet, PAM included) → « Démarrer » ;
+        // « Reprendre » only once the parcours has actually started (écran 1).
+        const started = (progress?.blocks ?? []).some((b) => (b.completedKeys?.length ?? 0) > 0 || b.state === "completed")
+          || ((resume as any).itemKey && (resume as any).itemKey !== "moment-ancrage");
+        return (
         <div className="hf-card hf-card--peach hf-card--stripe-orange">
-          <div className="eyebrow">{t("home.resume")}</div>
+          <div className="eyebrow">{started ? t("home.resume") : t("home.startBtn").replace(/\s*→\s*$/, "")}</div>
           <div className="h3" style={{ margin: "6px 0 2px" }}>{t("home.block", { n: resume.blockIndex })}{(resume as any).itemLabel ? ` · ${(resume as any).itemLabel}` : ""}{(resume as any).blockTitle ? ` — ${(resume as any).blockTitle}` : ""}</div>
-          <div className="meta">{t("home.exactResume")}{resume.positionSec ? ` · ${t("home.video", { time: mmss(resume.positionSec) })}` : ""}</div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 14 }} onClick={openResume}>{t("home.resumeBtn")}</button>
+          {started && <div className="meta">{t("home.exactResume")}{resume.positionSec ? ` · ${t("home.video", { time: mmss(resume.positionSec) })}` : ""}</div>}
+          <button className="hf-btn hf-btn--primary hf-btn--block" style={{ marginTop: 14 }} onClick={openResume}>{started ? t("home.resumeBtn") : t("home.startBtn")}</button>
         </div>
-      )}
+        );
+      })()}
       {progress?.courseCompleted && <div className="hf-card hf-card--mint"><span className="hf-pill hf-pill--mint">{t("home.courseDone")}</span></div>}
 
       {/* Targeted remediation: keep the diagnostic's weak areas in focus (Pilier 3).

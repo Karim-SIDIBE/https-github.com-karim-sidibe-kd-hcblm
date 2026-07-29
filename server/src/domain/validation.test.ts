@@ -34,7 +34,7 @@ test("stripping the Moment d'Ancrage token fails policy", () => {
   const c: any = structuredClone(s.ok && s.content);
   c.blocks[4].payload.projectBrief = "sans jeton";
   c.blocks[4].payload.journal.entries.forEach((e: any) => (e.prompt = "x"));
-  c.blocks.forEach((b: any) => b.payload.microSessions?.forEach((m: any) => (m.exercise.prompt = "x")));
+  c.blocks.forEach((b: any) => b.payload.microSessions?.forEach((m: any) => { if (m.exercise) m.exercise.prompt = "x"; }));
   const p = validatePolicy(c);
   assert.ok(p.issues.some((i) => i.rule.startsWith("pam.")));
 });

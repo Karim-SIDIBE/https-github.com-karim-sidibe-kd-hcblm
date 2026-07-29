@@ -59,8 +59,8 @@ function renderBlock(b: Block): string {
   let inner = `<h1>${esc(b.title)}</h1>${b.objective ? `<p class="muted">${esc(b.objective)}</p>` : ""}`;
   const video = (v: { title: string; keyMessage?: string; africanExample?: string }) =>
     `<div class="card"><strong>🎬 ${esc(v.title)}</strong>${v.keyMessage ? `<p>${esc(v.keyMessage)}</p>` : ""}${v.africanExample ? `<p class="muted">Exemple : ${esc(v.africanExample)}</p>` : ""}</div>`;
-  const micro = (ms: { id: string; title: string; summaryPoints: string[]; video: any; exercise: { prompt: string } }[]) =>
-    ms.map((m) => `<h2>${esc(m.id)} — ${esc(m.title)}</h2>${video(m.video)}<ul>${m.summaryPoints.map((p) => `<li>${esc(p)}</li>`).join("")}</ul><div class="card"><em>Exercice :</em> ${pam(m.exercise.prompt)}</div>`).join("");
+  const micro = (ms: { id: string; title: string; summaryPoints: string[]; video: any; exercise?: { prompt: string } }[]) =>
+    ms.map((m) => `<h2>${esc(m.id)} — ${esc(m.title)}</h2>${video(m.video)}<ul>${m.summaryPoints.map((p) => `<li>${esc(p)}</li>`).join("")}</ul>${m.exercise ? `<div class="card"><em>Exercice :</em> ${pam(m.exercise.prompt)}</div>` : ""}`).join("");
 
   switch (b.type) {
     case "ONBOARDING":

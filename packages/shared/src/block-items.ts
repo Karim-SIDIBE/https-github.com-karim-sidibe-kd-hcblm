@@ -24,7 +24,15 @@ export type ItemKind =
   | "onboarding" | "diagnostic" | "session" | "case" | "scenarios"
   | "interblock" | "field" | "self" | "plan" | "final" | "journal" | "project";
 
-export type BlockItem = { key: string; kind: ItemKind; label: string; durationSec?: number };
+export type BlockItem = {
+  key: string;
+  kind: ItemKind;
+  label: string;
+  /** Secondary line under the label in the course list (e.g. the case line
+   *  « Nadia : compétente, épuisée… » or « Vidéo déclencheur + Quiz (non noté) »). */
+  sublabel?: string;
+  durationSec?: number;
+};
 
 /** Map a non-quiz/non-session item kind to its ItemCompletion itemType. */
 export const ITEM_TYPE: Partial<Record<ItemKind, string>> = {
@@ -49,11 +57,19 @@ const KIND_ESTIMATE: Record<string, number> = {
 };
 const quizEstimate = (n: number) => n * 90; // ~1 min 30 par question
 
-const sessionItems = (ms: MicroSession[]): BlockItem[] =>
-  ms.map((m) => ({ key: m.id, kind: "session" as const, label: `${m.id} — ${m.title}`, durationSec: m.video?.durationSec || parseEstimate((m as { durationEstimate?: string }).durationEstimate) || KIND_ESTIMATE.session }));
-
 /** Optional translator (passed by the renderer); falls back to French. */
 type Translate = (key: string, vars?: Record<string, string | number>) => string;
+
+// Micro-sessions are labelled « Micro-session X.Y — titre » on every screen
+// (harmonisation) and sized by their DECLARED estimate first — the estimate
+// covers video + exercise, not just the video runtime.
+const sessionItems = (ms: MicroSession[], t?: Translate): BlockItem[] =>
+  ms.map((m) => ({
+    key: m.id,
+    kind: "session" as const,
+    label: `${t ? t("ci.msPrefix") : "Micro-session"} ${m.id} — ${m.title}`,
+    durationSec: parseEstimate((m as { durationEstimate?: string }).durationEstimate) || m.video?.durationSec || KIND_ESTIMATE.session,
+  }));
 
 export function blockItems(block: Block, t?: Translate): BlockItem[] {
   // Author-declared display order first (falls back to the canonical order).
@@ -77,37 +93,81 @@ export function blockItems(block: Block, t?: Translate): BlockItem[] {
 
 function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
   const tr = (key: string, fr: string, vars?: Record<string, string | number>) => (t ? t(key, vars) : fr);
+  // A structured/legacy case study rendered as one course item. `dur` lets the
+  // designer's estimate ("30 min") win over the KIND fallback.
+  const caseItem = (cs: { title?: string; subtitle?: string; durationEstimate?: string } | undefined, fallback: string): BlockItem => ({
+    key: "case", kind: "case", label: cs?.title || fallback, sublabel: cs?.subtitle || undefined,
+    durationSec: parseEstimate(cs?.durationEstimate) || undefined,
+  });
   switch (block.type) {
     case "ONBOARDING": {
-      const items: BlockItem[] = [{ key: "onboarding", kind: "onboarding", label: tr("ci.onboarding", "Introduction & point de départ") }];
-      // The trigger ("déclencheur") video — a distinct key so it never collides
-      // with the trigger QUIZ ("trigger"). Optional: not a completion requirement.
-      if (block.payload.triggerVideo) items.push({ key: "declencheur", kind: "session", label: tr("sess.triggerVideo", "Vidéo déclencheur"), durationSec: block.payload.triggerVideo.durationSec });
+      const items: BlockItem[] = [{
+        key: "onboarding", kind: "onboarding",
+        label: tr("ci.ms01", "Micro-session 0.1 — Onboarding"),
+        sublabel: tr("ci.onboarding", "Introduction & point de départ"),
+        durationSec: KIND_ESTIMATE.onboarding,
+      }];
+      // The trigger ("déclencheur") video + quiz — a distinct key so it never
+      // collides with the trigger QUIZ completion key ("trigger").
+      if (block.payload.triggerVideo) items.push({
+        key: "declencheur", kind: "session",
+        label: tr("ci.ms02", "Micro-session 0.2 — Déclencheur"),
+        sublabel: tr("ci.ms02sub", "Vidéo déclencheur + Quiz (non noté)"),
+        durationSec: block.payload.triggerVideo.durationSec,
+      });
       return items;
     }
     case "COMPREHENSION": {
       // Author-defined titles win; the app's generic labels are the fallback.
-      const items: BlockItem[] = [{ key: "diagnostic", kind: "diagnostic", label: block.payload.diagnosticQuiz?.title || tr("qz.diagnostic", "Quiz diagnostique") }, ...sessionItems(block.payload.microSessions)];
-      if (block.payload.caseStudy) items.push({ key: "case", kind: "case", label: block.payload.caseStudy.title ?? tr("ci.case", "Étude de cas") });
+      const dq = block.payload.diagnosticQuiz;
+      const items: BlockItem[] = [
+        { key: "diagnostic", kind: "diagnostic", label: dq?.title || tr("qz.diagnostic", "Quiz diagnostique"), durationSec: parseEstimate((dq as { durationEstimate?: string } | undefined)?.durationEstimate) || undefined },
+        ...sessionItems(block.payload.microSessions, t),
+      ];
+      if (block.payload.caseStudy) items.push(caseItem(block.payload.caseStudy, tr("ci.case", "Étude de cas")));
       return items;
     }
     case "PRACTICE": {
-      const items = [...sessionItems(block.payload.microSessions)];
-      if (block.payload.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: block.payload.guidedScenariosTitle || tr("ci.scenarios", "Mises en situation guidées") });
-      if (block.payload.interBlockQuiz) items.push({ key: "interblock", kind: "interblock", label: block.payload.interBlockQuiz.title || tr("qz.interblock", "Quiz interbloc") });
-      items.push({ key: "field", kind: "field", label: block.payload.fieldApplication?.title || tr("dl.fieldTitle", "Application terrain") });
+      const p = block.payload;
+      const items = [...sessionItems(p.microSessions, t)];
+      if (p.guidedScenarios.length) items.push({ key: "scenarios", kind: "scenarios", label: p.guidedScenariosTitle || tr("ci.scenarios", "Mises en situation guidées"), durationSec: parseEstimate((p as { guidedScenariosDuration?: string }).guidedScenariosDuration) || undefined });
+      if (p.interBlockQuiz) items.push({ key: "interblock", kind: "interblock", label: p.interBlockQuiz.title || tr("qz.interblock", "Quiz interbloc"), durationSec: parseEstimate((p.interBlockQuiz as { durationEstimate?: string }).durationEstimate) || undefined });
+      items.push({ key: "field", kind: "field", label: p.fieldApplication?.title || tr("dl.fieldTitle", "Application terrain"), durationSec: parseEstimate((p.fieldApplication as { durationEstimate?: string } | undefined)?.durationEstimate) || undefined });
       return items;
     }
-    case "ANCHORING":
-      return [...sessionItems(block.payload.microSessions),
-        { key: "self", kind: "self", label: block.payload.selfAssessment?.title || tr("ci.self", "Auto-évaluation") },
-        { key: "plan", kind: "plan", label: block.payload.actionPlan30d?.title || tr("ci.plan", "Plan d'action 30 jours") },
-        { key: "final", kind: "final", label: block.payload.finalQuiz?.title || tr("qz.final", "Quiz final") }];
+    case "ANCHORING": {
+      const p = block.payload;
+      const items = [...sessionItems(p.microSessions, t)];
+      if ((p as { transversalCase?: { title?: string } }).transversalCase) items.push(caseItem((p as { transversalCase?: { title: string } }).transversalCase, tr("ci.transversal", "Cas transversal de synthèse")));
+      items.push(
+        { key: "self", kind: "self", label: p.selfAssessment?.title || tr("ci.self", "Auto-évaluation"), durationSec: parseEstimate((p.selfAssessment as { durationEstimate?: string } | undefined)?.durationEstimate) || undefined },
+        { key: "plan", kind: "plan", label: p.actionPlan30d?.title || tr("ci.plan", "Plan d'action 30 jours"), durationSec: parseEstimate((p.actionPlan30d as { durationEstimate?: string } | undefined)?.durationEstimate) || undefined },
+        { key: "final", kind: "final", label: p.finalQuiz?.title || tr("qz.final", "Quiz final"), durationSec: parseEstimate((p.finalQuiz as { durationEstimate?: string } | undefined)?.durationEstimate) || undefined },
+      );
+      return items;
+    }
     case "CERTIFICATION": {
       const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({ key: `J+${e.day}`, kind: "journal" as const, label: tr("ci.journal", `Journal J+${e.day}`, { day: e.day }) }));
       return [{ key: "project", kind: "project", label: tr("pj.title", "Projet de certification") }, ...journal];
     }
   }
+}
+
+/** Total effort of a block (seconds) = the sum of its item estimates. */
+export function blockDurationSec(block: Block, t?: Translate): number {
+  return blockItems(block, t).reduce((a, it) => a + (it.durationSec ?? 0), 0);
+}
+
+/**
+ * The item to open right after `currentKey` in a block's DISPLAYED order —
+ * the « Continuer » / « Session suivante » chaining target. Skips items already
+ * completed; returns null when the block has nothing left after this item.
+ */
+export function nextBlockItem(block: Block, currentKey: string, completedKeys: readonly string[], t?: Translate): BlockItem | null {
+  const items = blockItems(block, t);
+  const done = new Set(completedKeys);
+  const at = items.findIndex((it) => it.key === currentKey);
+  return items.find((it, i) => i > at && !done.has(it.key) && it.key !== currentKey) ?? null;
 }
 
 export type SessionRef = { blockIndex: number; id: string; title: string; summaryPoints: string[] };

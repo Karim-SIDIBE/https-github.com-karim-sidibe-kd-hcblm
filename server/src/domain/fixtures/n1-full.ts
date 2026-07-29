@@ -39,7 +39,7 @@ const v = (p: {
 const ms11: MicroSession = {
   id: "1.1",
   title: "Le temps africain & le temps organisationnel",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Le temps polychronique africain (flexible, relationnel, simultané) coexiste avec le temps monochronique organisationnel.",
     "Comprendre cette tension explique 80 % des problèmes de productivité.",
@@ -79,7 +79,7 @@ const ms11: MicroSession = {
 const ms12: MicroSession = {
   id: "1.2",
   title: "La matrice des priorités revisitée pour le contexte africain",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "La matrice Urgent/Important fonctionne en Afrique à une condition : distinguer urgences réelles et urgences imposées.",
     "La question-filtre : « quelles conséquences réelles si ce n'est pas traité dans les 2 heures ? »",
@@ -114,7 +114,7 @@ const ms12: MicroSession = {
 const ms13: MicroSession = {
   id: "1.3",
   title: "La culture de l'urgence africaine : comprendre pour en sortir",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "La culture de l'urgence n'est pas une fatalité : c'est un mode appris et renforcé collectivement.",
     "5 mécanismes créent l'urgence artificielle (délégation de dernière minute, « urgent » par défaut, réunion non préparée, communication permanente, valorisation de l'urgence).",
@@ -147,7 +147,7 @@ const ms13: MicroSession = {
 const ms14: MicroSession = {
   id: "1.4",
   title: "Gérer les interruptions dans les organisations africaines",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Les interruptions ne s'éliminent pas, elles se gèrent : le vrai coût est le temps de reprise (≈ 23 min).",
     "Système en 3 temps : signaler sans rejeter, capturer sans traiter, reprendre avec un rituel de 30 s.",
@@ -178,7 +178,7 @@ const ms14: MicroSession = {
 const ms15: MicroSession = {
   id: "1.5",
   title: "Construire son temps protégé en contexte africain",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Le temps de travail profond est une nécessité, pas un luxe — sa protection demande une ingénierie culturelle.",
     "Système en 4 composantes : négociation ascendante, communication horizontale, indicateur visuel, réciprocité.",
@@ -214,7 +214,7 @@ const ms15: MicroSession = {
 const ms21: MicroSession = {
   id: "2.1",
   title: "Dire non avec élégance dans la hiérarchie africaine",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Dire non ne signifie pas refuser mais proposer un « oui différent ».",
     "Technique en 3 temps : accuser réception, exposer le conflit de priorités, proposer deux options datées.",
@@ -246,7 +246,7 @@ const ms21: MicroSession = {
 const ms22: MicroSession = {
   id: "2.2",
   title: "La planification hebdomadaire dans les réalités africaines",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Planifier 3 résultats non négociables (des livrables finis), pas une liste de tâches.",
     "Décider quand les réaliser, en blocs déplaçables — le résultat ne change pas, seul le moment change.",
@@ -279,7 +279,7 @@ const ms22: MicroSession = {
 const ms23: MicroSession = {
   id: "2.3",
   title: "Déléguer avec confiance dans les équipes africaines",
-  durationEstimate: "20 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Déléguer le résultat attendu (livrable + format + délai), pas la méthode.",
     "Signaler la confiance explicitement, ancrée dans un acte passé observable.",
@@ -314,7 +314,7 @@ const ms23: MicroSession = {
 const ms31: MicroSession = {
   id: "3.1",
   title: "Construire ses rituels de productivité africaine",
-  durationEstimate: "20 min",
+  durationEstimate: "15 min",
   summaryPoints: [
     "Les rituels sont des structures que vous créez pour votre propre liberté — la seule chose stable quand tout change.",
     "Un seul rituel à la fois, 3 semaines minimum avant le suivant (raison neurologique).",
@@ -343,7 +343,7 @@ const ms31: MicroSession = {
 const ms32: MicroSession = {
   id: "3.2",
   title: "Productivité hybride dans les organisations africaines",
-  durationEstimate: "30 min",
+  durationEstimate: "10 min",
   summaryPoints: [
     "Adapter ses outils et sa communication selon le mode (présentiel/distanciel) en gardant la dimension relationnelle.",
     "Protocole en 4 composantes : asynchrone d'abord, check-in relationnel, protection de la bande passante humaine, clôture de semaine collective.",
@@ -359,14 +359,8 @@ const ms32: MicroSession = {
     errorToAvoid:
       "Reproduire en distanciel les longues réunions informelles du présentiel, sans tenir compte de la charge cognitive et des coûts de connectivité.",
   }),
-  exercise: {
-    type: "written",
-    prompt:
-      "Cas transversal Sylvie (Abidjan) : quel diagnostic posez-vous avant tout outil, et quelle première action recommandez-vous à son équipe hybride ?",
-    feedbackText:
-      "Comparez votre réponse : le piège du cas Sylvie est de choisir un outil avant d'avoir posé le diagnostic. La démarche attendue : (1) déterminer si le problème est personnel (méthode), organisationnel (culture d'équipe) ou systémique (charge structurelle) — chez Sylvie, les trois se mélangent ; (2) proposer une première action qui rend le problème VISIBLE à l'équipe (par exemple cartographier une semaine de sollicitations hybrides) avant tout protocole. Si votre réponse propose directement un outil, refaites le chemin : quel est le problème racine ?",
-    minChars: 150,
-  },
+  // Vidéo seule : elle enchaîne directement sur le Cas transversal de synthèse
+  // (Sylvie à Abidjan), qui porte les questions — voir `transversalCase`.
 };
 
 export const n1Full: CourseContent = {
@@ -386,7 +380,7 @@ export const n1Full: CourseContent = {
     "À la fin de ce parcours, vous saurez reprendre le contrôle de votre temps dans votre organisation africaine : distinguer l'urgent de l'important, protéger vos priorités réelles, déléguer et dire non avec élégance, et tenir des rituels adaptés à votre réalité. Concrètement, la journée que vous venez de décrire ne se reproduira plus de la même façon.",
   audience:
     "Jeunes professionnels (0–5 ans) dans des organisations africaines, débordés par les interruptions et la culture de l'urgence.",
-  durationEstimate: "~7 h 30 à 8 h · 23 micro-sessions",
+  durationEstimate: "~6 h 30 · 15 micro-sessions + 5 activités longues",
   passThreshold: 70,
   certificate: {
     title: "Certificat de Niveau 1 — Gestion du Temps & Productivité en Environnements Professionnels Africains",
@@ -400,10 +394,10 @@ export const n1Full: CourseContent = {
       type: "ONBOARDING",
       title: "Onboarding & Déclencheur",
       objective: "Créer un engagement personnel immédiat dans les 5 premières minutes via le Moment d'Ancrage et le profil de gestion du temps.",
-      durationEstimate: "~25 min · 2 micro-sessions",
+      durationEstimate: "20 min · 2 micro-sessions",
       units: [
         { label: "MS 0.1 — Onboarding (Moment d'Ancrage, profil, objectif, pair)", type: "micro-session", durationMin: 10 },
-        { label: "MS 0.2 — Déclencheur (Vidéo 1 + quiz)", type: "micro-session", durationMin: 15 },
+        { label: "MS 0.2 — Déclencheur (Vidéo 1 + quiz)", type: "micro-session", durationMin: 10 },
       ],
       badge: {
         type: "ENTRY",
@@ -498,15 +492,15 @@ export const n1Full: CourseContent = {
       type: "COMPREHENSION",
       title: "Comprendre les dynamiques du temps en contexte africain",
       objective: "Identifier les mécanismes qui détruisent la productivité, comprendre sa relation au temps, poser les bases d'une gestion du temps adaptée.",
-      durationEstimate: "~2 h · 7 micro-sessions",
+      durationEstimate: "~1 h 35 · 6 micro-sessions + 1 activité longue",
       units: [
         { label: "MS 1.0 — Quiz diagnostique", type: "micro-session", durationMin: 15 },
-        { label: "MS 1.1 — Vidéo 2 + micro-exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 1.2 — Vidéo 3 + micro-exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 1.3 — Vidéo 4 + micro-exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 1.4 — Vidéo 5 + micro-exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 1.5 — Vidéo 6 + micro-exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 1.6 — Étude de cas Nadia", type: "micro-session", durationMin: 25 },
+        { label: "MS 1.1 — Vidéo 2 + micro-exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 1.2 — Vidéo 3 + micro-exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 1.3 — Vidéo 4 + micro-exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 1.4 — Vidéo 5 + micro-exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 1.5 — Vidéo 6 + micro-exercice", type: "micro-session", durationMin: 10 },
+        { label: "Étude de cas Nadia (3 étapes)", type: "long-activity", durationMin: 30 },
       ],
       badge: {
         type: "COMPREHENSION",
@@ -515,7 +509,8 @@ export const n1Full: CourseContent = {
       },
       payload: {
         diagnosticQuiz: {
-          title: "",
+          title: "Micro-session 1.0 — Quiz diagnostique",
+          durationEstimate: "15 min",
           questions: [
             { id: "d1", scenarioText: "Message WhatsApp du manager à 16h45 : rapport synthèse « urgent » pour demain 8h, alors que vous traitez un dossier prioritaire pour vendredi.", options: [
               { key: "A", label: "J'arrête mon dossier et commence le rapport — urgent = urgent." },
@@ -524,11 +519,11 @@ export const n1Full: CourseContent = {
               { key: "D", label: "Je demande à un collègue de prendre le rapport." },
             ], correctKey: "B", feedbackText: "Beaucoup d'urgences déclarées ne le sont pas. Confirmer, évaluer et proposer un choix rend le contrôle au manager — c'est du professionnalisme.", subArea: "urgences imposées" },
             { id: "d2", scenarioText: "2 h de travail concentré prévues ce mardi matin. À 9h15 un collègue entre pour un sujet non urgent.", options: [
-              { key: "A", label: "Je l'écoute entièrement — refuser est délicat culturellement." },
+              { key: "A", label: "Je lui accorde 5 min, note son sujet et fixe un moment précis." },
               { key: "B", label: "Je lui dis que je n'ai pas le temps, qu'il revienne plus tard." },
-              { key: "C", label: "Je lui accorde 5 min, note son sujet et fixe un moment précis." },
+              { key: "C", label: "Je l'écoute entièrement — refuser est délicat culturellement." },
               { key: "D", label: "Je continue à travailler tout en l'écoutant." },
-            ], correctKey: "C", feedbackText: "C respecte les codes relationnels tout en protégeant le focus ; fixer un moment précis montre que vous prenez sa demande au sérieux.", subArea: "interruptions" },
+            ], correctKey: "A", feedbackText: "Accorder 5 minutes, noter le sujet et fixer un moment précis respecte les codes relationnels tout en protégeant le focus — vous prenez sa demande au sérieux.", subArea: "interruptions" },
             { id: "d3", scenarioText: "Liste de 12 tâches, il est 8h30. Que faites-vous en premier ?", options: [
               { key: "A", label: "Les tâches faciles et courtes pour décocher vite." },
               { key: "B", label: "Les emails et WhatsApp de la veille." },
@@ -548,17 +543,17 @@ export const n1Full: CourseContent = {
               { key: "D", label: "J'essaie de finir en 20 min en allant moins dans le détail." },
             ], correctKey: "B", feedbackText: "La fatigue de fin de semaine produit rarement de la qualité ; documenter précisément permet de reprendre efficacement lundi.", subArea: "présentéisme" },
             { id: "d6", scenarioText: "Plages de concentration communiquées depuis 2 semaines. Un collègue : « Tu n'es jamais disponible ces derniers temps. »", options: [
-              { key: "A", label: "J'arrête la méthode — la disponibilité est fondamentale." },
+              { key: "A", label: "J'explique mes plages, reste accessible aux urgences réelles et montre comment me joindre." },
               { key: "B", label: "J'ignore — ma productivité prime." },
-              { key: "C", label: "J'explique mes plages, reste accessible aux urgences réelles et montre comment me joindre." },
+              { key: "C", label: "J'arrête la méthode — la disponibilité est fondamentale." },
               { key: "D", label: "J'alterne une heure de focus et une heure de disponibilité totale." },
-            ], correctKey: "C", feedbackText: "La disponibilité relationnelle peut coexister avec une gestion structurée si elle est clairement communiquée — intelligence culturelle appliquée.", subArea: "communication" },
+            ], correctKey: "A", feedbackText: "La disponibilité relationnelle peut coexister avec une gestion structurée si elle est clairement communiquée — intelligence culturelle appliquée.", subArea: "communication" },
             { id: "d7", scenarioText: "≈ 80 messages WhatsApp pro/jour, de 6h à 23h. Quelle stratégie ?", options: [
               { key: "A", label: "Je coupe toutes les notifications et consulte 2 fois/jour." },
               { key: "B", label: "Je réponds à tout dans les 30 min, quelle que soit l'heure." },
-              { key: "C", label: "3 plages de consultation communiquées + notifications pour un groupe « urgences réelles »." },
-              { key: "D", label: "Je réponds tout de suite au manager et diffère les autres." },
-            ], correctKey: "C", feedbackText: "Disparaître totalement (A) est perçu comme de l'arrogance. C équilibre protection du focus et canal d'urgence identifié.", subArea: "WhatsApp" },
+              { key: "C", label: "Je réponds tout de suite au manager et diffère les autres." },
+              { key: "D", label: "3 plages de consultation communiquées + notifications pour un groupe « urgences réelles »." },
+            ], correctKey: "D", feedbackText: "Disparaître totalement (A) est perçu comme de l'arrogance. Les plages de consultation communiquées équilibrent protection du focus et canal d'urgence identifié.", subArea: "WhatsApp" },
             { id: "d8", scenarioText: "Déléguer une tâche à un junior ghanéen alors que vous avez tendance à tout faire vous-même.", options: [
               { key: "A", label: "Je délègue avec instructions très détaillées et vérifie chaque heure." },
               { key: "B", label: "Je garde la tâche — déléguer prend plus de temps." },
@@ -567,10 +562,10 @@ export const n1Full: CourseContent = {
             ], correctKey: "C", feedbackText: "Déléguer le résultat (pas la méthode), donner les ressources et des jalons sans micro-management libère votre temps et développe le junior.", subArea: "délégation" },
             { id: "d9", scenarioText: "Projet camerounais en retard de 3 semaines. Le manager demande de travailler les weekends pendant un mois ; vous êtes déjà à charge maximale.", options: [
               { key: "A", label: "J'accepte sans discuter." },
-              { key: "B", label: "Je refuse directement — pas dans mon contrat." },
-              { key: "C", label: "Je demande un temps de réflexion, analyse la cause du retard et propose un plan avec plusieurs options." },
+              { key: "B", label: "Je demande un temps de réflexion, analyse la cause du retard et propose un plan avec plusieurs options." },
+              { key: "C", label: "Je refuse directement — pas dans mon contrat." },
               { key: "D", label: "Je négocie 2 weekends au lieu d'un mois." },
-            ], correctKey: "C", feedbackText: "C déplace la conversation du « comment » au « quoi » ; proposer un plan alternatif démontre la maîtrise tout en protégeant l'énergie.", subArea: "négociation" },
+            ], correctKey: "B", feedbackText: "Demander un temps de réflexion déplace la conversation du « comment » au « quoi » ; proposer un plan alternatif démontre la maîtrise tout en protégeant l'énergie.", subArea: "négociation" },
             { id: "d10", profiling: true, scenarioText: "En repensant à votre semaine, quelle phrase vous ressemble le plus ?", options: [
               { key: "A", label: "Épuisé mais satisfait — j'ai accompli ce qui comptait." },
               { key: "B", label: "Épuisé et frustré — les urgences des autres ont pris la place de mes priorités." },
@@ -589,12 +584,85 @@ export const n1Full: CourseContent = {
           ],
         },
         microSessions: [ms11, ms12, ms13, ms14, ms15],
+        // MICRO-SESSION 1.6 — Étude de cas Nadia (~30 min · LMS natif), énoncé complet.
         caseStudy: {
-          title: "Nadia : compétente, épuisée, prisonnière de ses propres réponses aux urgences (Nairobi)",
-          steps: [
-            "Étape 1 — Analyser : profil dominant de Nadia (Débordé réactif) et cause racine (avoir confondu « être disponible » et « être productive »).",
-            "Étape 2 — Plan d'action : point de fin de journée à 17h30 ; créneaux de disponibilité + boîte de demandes écrites ; négociation ascendante d'un créneau de concentration matinal.",
-            "Étape 3 — Transfert personnel : en quoi la situation de Nadia ressemble à votre Moment d'Ancrage (réponse sauvegardée pour le Bloc 4) ; le réflexe du Bloc 1 à appliquer dès cette semaine.",
+          title: "Activité longue — Étude de cas",
+          subtitle: "Nadia : compétente, épuisée, et prisonnière de ses propres réponses aux urgences",
+          durationEstimate: "30 min",
+          context:
+            "Nadia a 27 ans. Assistante de direction dans une agence de conseil à Nairobi. Depuis 18 mois, elle est devenue la personne à qui tout le monde s'adresse pour tout. Son directeur lui envoie des messages à 7h et à 22h. Ses collègues l'interrompent en moyenne toutes les 20 minutes. Sa liste de tâches propres ne diminue jamais. Elle est épuisée et ne sait pas comment changer sans paraître « moins professionnelle » dans sa culture kényane.",
+          steps: [],
+          structuredSteps: [
+            {
+              title: "Étape 1 — Analyser la situation de Nadia",
+              durationEstimate: "8 min",
+              intro: "",
+              questions: [
+                { id: "n1.1", kind: "mcq", prompt: "Quel est le profil de gestion du temps dominant de Nadia parmi les quatre profils vus au Bloc 0 ?", options: [
+                  { key: "A", label: "Le Débordé réactif — elle répond à tout ce qui arrive dans l'ordre où ça arrive." },
+                  { key: "B", label: "Le Procrastinateur organisé — elle reporte ses propres priorités au profit des demandes des autres." },
+                  { key: "C", label: "L'Urgentiste chronique — elle n'agit que sous pression maximale." },
+                  { key: "D", label: "L'Organisateur submergé — elle planifie mais les imprévus détruisent ses plans." },
+                ], correctKey: "A", allValid: false, savedForProject: false,
+                  feedback: "Nadia est un Débordé réactif classique. Sa disponibilité totale et sa réputation de fiabilité ont créé un appel d'air — chacun sait qu'il peut compter sur elle, alors chacun vient vers elle. Elle réagit au lieu d'agir. Sa compétence réelle est mise au service des agendas des autres plutôt que des siens." },
+                { id: "n1.2", kind: "mcq", prompt: "Quelle est la cause racine de la situation de Nadia ?", options: [
+                  { key: "A", label: "Son manager la surcharge délibérément — il faudrait lui parler." },
+                  { key: "B", label: "Nadia n'a pas de méthode de gestion du temps — elle a besoin d'un outil." },
+                  { key: "C", label: "Nadia a confondu « être disponible » et « être productive » — sa réputation de fiabilité est devenue un piège dont elle n'arrive pas à sortir sans paraître moins professionnelle." },
+                  { key: "D", label: "L'organisation kényane valorise trop la disponibilité — c'est une question culturelle qui la dépasse." },
+                ], correctKey: "C", allValid: false, savedForProject: false,
+                  feedback: "La cause racine est un piège culturel très fréquent : sa disponibilité totale a été valorisée et récompensée par la réputation d'être « fiable ». Sortir de ce piège demande une stratégie culturellement adaptée — pas simplement « faire moins »." },
+                { id: "n1.3", kind: "open", prompt: "Réflexion ouverte — En une phrase, décrivez ce que Nadia devrait changer EN PREMIER pour reprendre le contrôle de son temps — en restant professionnelle dans son contexte kényan.", allValid: false, feedback: "", minChars: 40, savedForProject: true },
+              ],
+            },
+            {
+              title: "Étape 2 — Plan d'action pour Nadia",
+              durationEstimate: "10 min",
+              intro: "",
+              questions: [
+                { id: "n2.1", kind: "mcq", prompt: "Pour arrêter de recevoir des messages de son directeur à 22h, quelle approche est la plus adaptée au contexte kényan ?", options: [
+                  { key: "A", label: "Nadia ne répond plus aux messages après 20h — son directeur comprendra progressivement." },
+                  { key: "B", label: "Nadia fixe un entretien pour expliquer que ces messages tardifs l'épuisent." },
+                  { key: "C", label: "Nadia propose un point de fin de journée de 15 minutes à 17h30 pour anticiper les besoins du lendemain, ce qui réduira les messages tardifs en créant un espace d'anticipation." },
+                  { key: "D", label: "Nadia demande à ses collègues de parler à son manager en son nom." },
+                ], correctKey: "C", allValid: false, savedForProject: false,
+                  feedback: "La solution C ne confronte pas le directeur sur son comportement (culturellement risqué), elle propose une alternative constructive qui sert ses intérêts. Un point quotidien de 15 minutes à 17h30 répond à son besoin de contrôle tout en réduisant les messages tardifs — un changement systémique présenté comme un service." },
+                { id: "n2.2", kind: "mcq", prompt: "Pour réduire les interruptions de ses collègues sans les froisser dans son organisation, quelle stratégie est la plus adaptée ?", options: [
+                  { key: "A", label: "Nadia installe des écouteurs et ne répond plus aux visites non planifiées." },
+                  { key: "B", label: "Nadia annonce à toute son équipe qu'elle ne sera disponible que sur rendez-vous." },
+                  { key: "C", label: "Nadia communique ses créneaux de disponibilité et propose une boîte de collecte de demandes écrites pour les autres moments." },
+                  { key: "D", label: "Nadia change de bureau pour être moins accessible physiquement." },
+                ], correctKey: "C", allValid: false, savedForProject: false,
+                  feedback: "Communiquer ses créneaux de disponibilité : elle ne rejette pas ses collègues (la relation est préservée), crée une structure prévisible (les collègues savent quand venir), et protège ses plages de travail concentré. La boîte de demandes écrites éduque progressivement sur la nature réelle des urgences." },
+                { id: "n2.3", kind: "mcq", prompt: "Comment Nadia protège-t-elle les 3 premières heures de sa journée — les plus productives mais les plus interrompues ?", options: [
+                  { key: "A", label: "Elle arrive 1h30 plus tôt pour travailler dans le calme avant ses collègues." },
+                  { key: "B", label: "Elle négocie avec son directeur un créneau de 2 heures le matin en mode travail concentré, le communique à son équipe, et désactive les notifications pendant ce créneau." },
+                  { key: "C", label: "Elle fait le travail le plus important le soir, une fois rentrée chez elle, dans le calme." },
+                  { key: "D", label: "Elle cherche une salle de réunion libre chaque matin pour travailler sans être dérangée." },
+                ], correctKey: "B", allValid: false, savedForProject: false,
+                  feedback: "La solution B est la plus systémique et durable : elle crée une norme organisationnelle (le créneau de concentration est connu et accepté) plutôt qu'une stratégie de contournement. La négociation ascendante avec le directeur donne une légitimité institutionnelle — essentielle dans les hiérarchies." },
+              ],
+            },
+            {
+              title: "Étape 3 — Transfert personnel",
+              durationEstimate: "7 min",
+              intro: "",
+              questions: [
+                { id: "n3.1", kind: "open", prompt: "En quoi la situation de Nadia ressemble-t-elle à celle que vous avez décrite dans votre Moment d'Ancrage au Bloc 0 — {{moment_ancrage}} ? Décrivez en deux phrases ce que vous partagez avec elle.", allValid: false, feedback: "", minChars: 60, savedForProject: true },
+                { id: "n3.2", kind: "mcq", prompt: "Si vous deviez appliquer un seul réflexe de ce Bloc 1 dès cette semaine dans votre organisation, lequel choisiriez-vous ?", options: [
+                  { key: "A", label: "Cartographier mes deux types de temps et identifier mon principal voleur de temps." },
+                  { key: "B", label: "Appliquer la matrice africaine des priorités à ma liste de tâches de lundi." },
+                  { key: "C", label: "Rédiger ma phrase de signalement bienveillant et la tester avec un collègue cette semaine." },
+                  { key: "D", label: "Concevoir mon système de temps protégé et le négocier avec ma hiérarchie africaine." },
+                ], allValid: true, savedForProject: false,
+                  feedback: "Le choix idéal dépend de votre profil de gestion du temps — chaque option est valide. Ce qui compte est de choisir une action concrète et de la mettre en œuvre avant la prochaine micro-session." },
+              ],
+            },
+          ],
+          summary: [
+            "Je comprends la tension entre le temps polychronique africain et le temps monochronique organisationnel — et je sais dans lequel j'opère principalement.",
+            "Je maîtrise la matrice africaine des priorités et j'ai identifié mes principales sources d'urgences artificielles.",
+            "J'ai conçu mon système de temps protégé et mes outils personnels de gestion des interruptions adaptés à mon contexte.",
           ],
         },
       },
@@ -606,12 +674,12 @@ export const n1Full: CourseContent = {
       type: "PRACTICE",
       title: "Pratiquer et progresser",
       objective: "Mettre en pratique les outils dans des situations africaines réalistes, en tenant compte des codes culturels et des dynamiques hiérarchiques.",
-      durationEstimate: "~2 h à 2 h 30 · 3 micro-sessions + 2 activités longues",
+      durationEstimate: "~1 h 35 · 3 micro-sessions + 2 activités longues",
       units: [
-        { label: "MS 2.1 — Vidéo 7 + exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 2.2 — Vidéo 8 + exercice", type: "micro-session", durationMin: 20 },
-        { label: "MS 2.3 — Vidéo 9 + exercice", type: "micro-session", durationMin: 20 },
-        { label: "Mises en situation guidées + quiz interbloc", type: "long-activity", durationMin: 40 },
+        { label: "MS 2.1 — Vidéo 7 + exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 2.2 — Vidéo 8 + exercice", type: "micro-session", durationMin: 10 },
+        { label: "MS 2.3 — Vidéo 9 + exercice", type: "micro-session", durationMin: 10 },
+        { label: "Mises en situation guidées + quiz interbloc (21 + 9 min)", type: "long-activity", durationMin: 30 },
         { label: "Application terrain (obligatoire)", type: "long-activity", durationMin: 35 },
       ],
       badge: {
@@ -621,7 +689,8 @@ export const n1Full: CourseContent = {
       },
       payload: {
         microSessions: [ms21, ms22, ms23],
-        guidedScenariosTitle: "",
+        guidedScenariosTitle: "Activité Expérientielle Longue — Mises en situation guidées",
+        guidedScenariosDuration: "21 min",
         guidedScenarios: [
           {
             title: "Prioriser sous pression — institution de microfinance à Dakar (Sénégal)",
@@ -679,15 +748,16 @@ export const n1Full: CourseContent = {
           },
         ],
         interBlockQuiz: {
-          title: "Quiz interbloc — consolidation des Blocs 1 et 2",
+          title: "Quiz interbloc — consolidation des Blocs 1 et 2 (non noté)",
+          durationEstimate: "9 min",
           scored: false,
           questions: [
             { id: "ib1", scenarioText: "Votre manager rwandais envoie un message à 20h avec « pour info ». Le lendemain il demande si vous l'avez vu. Que signifie « pour info » ici ?", options: [
-              { key: "A", label: "Aucune action attendue, c'était juste informatif." },
+              { key: "A", label: "Souvent une demande implicite — une brève confirmation est socialement attendue." },
               { key: "B", label: "Il attend une confirmation de lecture dans la soirée." },
-              { key: "C", label: "Souvent une demande implicite — une brève confirmation est socialement attendue." },
+              { key: "C", label: "Aucune action attendue, c'était juste informatif." },
               { key: "D", label: "Attendre qu'il précise explicitement ce qu'il attend." },
-            ], correctKey: "C", feedbackText: "« Pour info » signifie souvent « j'aimerais une réaction » sans le formuler ; lire les codes implicites est une compétence de navigation organisationnelle africaine.", subArea: "implicite" },
+            ], correctKey: "A", feedbackText: "« Pour info » signifie souvent « j'aimerais une réaction » sans le formuler ; lire les codes implicites est une compétence de navigation organisationnelle africaine.", subArea: "implicite" },
             { id: "ib2", scenarioText: "5 tâches lundi matin à Abidjan. Par laquelle commencez-vous selon la méthode du parcours ?", options: [
               { key: "A", label: "La plus courte pour une bonne dynamique." },
               { key: "B", label: "La plus importante pour ma mission, même difficile." },
@@ -715,15 +785,48 @@ export const n1Full: CourseContent = {
             { id: "ib6", scenarioText: "Votre semaine tanzanienne a été désorganisée par 4 urgences imprévues. Vendredi soir, que faites-vous ?", options: [
               { key: "A", label: "Je reste au bureau pour rattraper le retard." },
               { key: "B", label: "Je récupère physiquement, je rattraperai la semaine prochaine." },
-              { key: "C", label: "Je passe 20 min à noter les 3 résultats non accomplis et à les planifier, puis je pars." },
-              { key: "D", label: "J'envoie un email à mon manager pour signaler la perturbation." },
-            ], correctKey: "C", feedbackText: "Le rituel du vendredi : 20 minutes de planification maintenant valent 3 heures de confusion lundi matin.", subArea: "rituels" },
+              { key: "C", label: "J'envoie un email à mon manager pour signaler la perturbation." },
+              { key: "D", label: "Je passe 20 min à noter les 3 résultats non accomplis et à les planifier, puis je pars." },
+            ], correctKey: "D", feedbackText: "Le rituel du vendredi : 20 minutes de planification maintenant valent 3 heures de confusion lundi matin.", subArea: "rituels" },
           ],
         },
         fieldApplication: {
-          title: "",
+          title: "Activité Expérientielle Longue — Application terrain",
+          durationEstimate: "35 min",
           brief:
-            "Application terrain (obligatoire pour accéder au Bloc 3) : dans votre environnement professionnel africain réel, en repartant de {{moment_ancrage}}, identifiez votre principal problème de productivité, mettez en œuvre une solution concrète (système de temps protégé, phrase de signalement, « oui différent »), puis documentez la réaction de votre organisation et ce que vous ajustez.",
+            "Mission — Reprendre le contrôle de mon temps dans mon organisation. L'application terrain est obligatoire pour accéder au Bloc 3. Elle se déroule dans votre environnement professionnel réel, en repartant de votre Moment d'Ancrage : {{moment_ancrage}}.",
+          steps: [
+            {
+              title: "Étape 1 — Identifier mon principal problème de productivité (~10 min)",
+              intro: "Pré-rempli avec votre Moment d'Ancrage du Bloc 0 — complétez et précisez : {{moment_ancrage}}",
+              fields: [
+                { label: "La situation de gestion du temps que je veux résoudre", placeholder: "…" },
+                { label: "Les obstacles spécifiques à mon organisation", placeholder: "…" },
+                { label: "L'impact concret de ce problème sur ma performance et mon bien-être", placeholder: "…" },
+              ],
+            },
+            {
+              title: "Étape 2 — Mettre en œuvre une solution concrète (~15 min)",
+              intro: "Reprenez votre système de temps protégé du micro-exercice 1.5 : pour chaque outil, décrivez la mise en œuvre concrète et l'adaptation culturelle réalisée.",
+              fields: [
+                { label: "Mon système de temps protégé — mise en œuvre concrète", placeholder: "…" },
+                { label: "Mon système de temps protégé — adaptation culturelle réalisée", placeholder: "…" },
+                { label: "Ma phrase de signalement bienveillant — mise en œuvre concrète", placeholder: "…" },
+                { label: "Ma phrase de signalement bienveillant — adaptation culturelle réalisée", placeholder: "…" },
+                { label: "Mon « oui différent » avec ma hiérarchie — mise en œuvre concrète", placeholder: "…" },
+                { label: "Mon « oui différent » avec ma hiérarchie — adaptation culturelle réalisée", placeholder: "…" },
+              ],
+            },
+            {
+              title: "Étape 3 — Documenter la réaction et l'impact (~10 min)",
+              intro: "",
+              fields: [
+                { label: "Réaction de mon organisation à mes nouveaux comportements", placeholder: "…" },
+                { label: "Obstacles culturels africains rencontrés", placeholder: "…" },
+                { label: "Ce que j'ajuste pour la semaine suivante", placeholder: "…" },
+              ],
+            },
+          ],
           minChars: 200,
           gatesNextBlock: true,
         },
@@ -738,8 +841,9 @@ export const n1Full: CourseContent = {
       objective: "Ancrer des habitudes durables adaptées aux réalités africaines, mesurer sa progression et finaliser un plan d'action de 30 jours.",
       durationEstimate: "~1 h 30 · 3 micro-sessions + 1 activité longue",
       units: [
-        { label: "MS 3.1 — Vidéo 10 + auto-évaluation", type: "micro-session", durationMin: 20 },
-        { label: "Vidéo 11 + cas transversal de synthèse", type: "long-activity", durationMin: 30 },
+        { label: "MS 3.1 — Vidéo 10 + micro-exercice", type: "micro-session", durationMin: 15 },
+        { label: "Vidéo 11 (Productivité hybride) + cas transversal Sylvie", type: "long-activity", durationMin: 30 },
+        { label: "Auto-évaluation (6 critères)", type: "micro-task", durationMin: 10 },
         { label: "MS 3.3 — Plan d'action 30 jours", type: "micro-session", durationMin: 20 },
         { label: "MS 3.4 — Quiz final (noté · seuil 70 %)", type: "micro-session", durationMin: 15 },
       ],
@@ -750,8 +854,51 @@ export const n1Full: CourseContent = {
       },
       payload: {
         microSessions: [ms31, ms32],
+        // CAS TRANSVERSAL DE SYNTHÈSE (~20 min · LMS natif) — enchaîné juste
+        // après la vidéo « Productivité hybride » (MS 3.2), énoncé complet.
+        transversalCase: {
+          title: "Activité Expérientielle Longue — Cas transversal de synthèse",
+          subtitle: "Sylvie à Abidjan",
+          durationEstimate: "20 min",
+          context:
+            "Sylvie a 30 ans. Responsable administrative dans une agence de communication à Abidjan. Elle manage 4 personnes, dont 2 à distance. Ses journées sont envahies par les sollicitations internes et externes, elle n'arrive pas à finir ses propres dossiers, et son équipe manque de visibilité sur ses priorités. Elle a lu des livres sur la productivité mais aucune méthode n'a tenu plus de 3 semaines dans son environnement ivoirien.",
+          steps: [],
+          structuredSteps: [
+            {
+              title: "Cas Sylvie — diagnostic, méthode, équipe hybride",
+              durationEstimate: "20 min",
+              intro: "",
+              questions: [
+                { id: "s1", kind: "mcq", prompt: "Quel est le premier diagnostic à poser sur la situation de Sylvie avant de lui recommander un outil ?", options: [
+                  { key: "A", label: "Elle manque d'outils de productivité — il faut lui recommander une application." },
+                  { key: "B", label: "Son problème principal est la gestion de ses sollicitations — elle doit apprendre à dire non." },
+                  { key: "C", label: "Avant tout outil, il faut identifier si son problème est d'ordre personnel (méthode), organisationnel (culture de son agence) ou systémique (charge réellement excessive). L'outil vient après le diagnostic." },
+                  { key: "D", label: "Elle doit apprendre à déléguer davantage à son équipe." },
+                ], correctKey: "C", allValid: false, savedForProject: false,
+                  feedback: "Recommander un outil sans diagnostic traite le symptôme. Dans le contexte ivoirien de Sylvie, son problème semble mixte : personnel (méthode), organisationnel (culture de disponibilité) et peut-être systémique (charge réelle). Comprendre lequel est dominant conditionne l'efficacité de toute solution." },
+                { id: "s2", kind: "mcq", prompt: "Sylvie a essayé 4 fois un rituel de planification et a toujours abandonné au bout de 2 semaines. Quelle est la cause la plus probable dans son contexte africain ?", options: [
+                  { key: "A", label: "Elle manque de discipline personnelle." },
+                  { key: "B", label: "La méthode qu'elle utilisait était trop complexe et rigide pour l'imprévision de son organisation ivoirienne." },
+                  { key: "C", label: "La planification hebdomadaire ne fonctionne pas dans les organisations africaines." },
+                  { key: "D", label: "Elle n'avait pas le soutien de son manager." },
+                ], correctKey: "B", allValid: false, savedForProject: false,
+                  feedback: "B est presque toujours la cause réelle : les méthodes de planification rigides échouent dans les environnements africains à haute imprévision parce qu'elles sont conçues pour des contextes stables. La solution n'est pas plus de discipline — c'est une méthode plus flexible basée sur 3 résultats prioritaires et un buffer africain." },
+                { id: "s3", kind: "mcq", prompt: "Sylvie veut améliorer la productivité de son équipe hybride sans imposer de nouvelles contraintes. Quelle est sa première action ?", options: [
+                  { key: "A", label: "Introduire un outil de gestion de projet (Trello, Asana) pour centraliser les tâches." },
+                  { key: "B", label: "Organiser une réunion d'équipe pour établir des règles de communication communes — temps de réponse attendus, plages de disponibilité, canaux par type d'information." },
+                  { key: "C", label: "Recruter un assistant pour gérer les sollicitations à sa place." },
+                  { key: "D", label: "Demander à son manager de réduire sa charge de travail." },
+                ], correctKey: "B", allValid: false, savedForProject: false,
+                  feedback: "Avant tout outil, établir des règles de communication communes crée la structure relationnelle dans laquelle les outils peuvent fonctionner. Dans les équipes africaines, les règles implicites de communication sont la principale source de stress. Les rendre explicites et les négocier collectivement est la première intervention systémique." },
+                { id: "s4", kind: "open", prompt: "Réflexion ouverte — Quel est le rituel de productivité que vous allez installer EN PREMIER dans les 7 prochains jours dans votre organisation africaine ? Décrivez précisément : le rituel, le moment, la durée et comment vous allez l'ancrer dans votre réalité africaine. (Réponse ancrée dans votre Moment d'Ancrage : {{moment_ancrage}}.)", allValid: false, feedback: "", minChars: 100, savedForProject: true },
+              ],
+            },
+          ],
+          summary: [],
+        },
         selfAssessment: {
-          title: "",
+          title: "Auto-évaluation — 6 critères",
+          durationEstimate: "10 min",
           criteria: [
             "Je distingue les urgences réelles des urgences imposées dans mon organisation africaine",
             "Je protège régulièrement du temps de fond pour mes priorités importantes",
@@ -762,16 +909,43 @@ export const n1Full: CourseContent = {
           ],
           scale: ["1 — Pas encore", "2 — En cours d'installation", "3 — Souvent présent", "4 — Naturel et constant"],
         },
+        // MICRO-SESSION 3.3 — Plan d'action 30 jours (~20 min · soumission LMS),
+        // restructuré selon l'énoncé : 3 habitudes séquencées + signal de
+        // progression + pair de progression.
         actionPlan30d: {
-          title: "",
+          title: "Micro-session 3.3 — Plan d'action 30 jours",
+          durationEstimate: "20 min",
+          intro: "Transformez vos apprentissages en engagements concrets. Repartez de vos exercices précédents (rituel du Cas Sylvie, temps protégé du micro-exercice 1.5) — complétez et ajustez selon votre réalité africaine actuelle.",
           habits: [
-            { title: "Habitude 1 (semaines 1–3) — installée en premier", fields: ["Le rituel", "Le moment", "La durée", "Comment je l'ancre dans ma réalité africaine"] },
-            { title: "Habitude 2 (semaines 3–5) — après stabilisation de la 1re", fields: ["Le rituel", "Le moment", "La durée", "Mon signal de concentration"] },
-            { title: "Habitude 3 (semaines 5–8) — séquencée en dernier", fields: ["Le rituel", "Le moment", "La durée", "Rappel à mon pair de progression"] },
+            { title: "Habitude 1 — Semaines 1 et 2 : le rituel de lancement de journée", fields: [
+              "L'habitude concrète : chaque matin, avant d'ouvrir WhatsApp et mes emails, je passe … minutes à identifier ma seule priorité de la journée",
+              "Le moment précis · la durée (min)",
+              "Mon indicateur de réussite",
+              "L'obstacle africain que j'anticipe",
+              "Ma stratégie pour maintenir ce rituel malgré les imprévus",
+            ] },
+            { title: "Habitude 2 — Semaines 2 et 3 : le système de temps protégé", fields: [
+              "L'habitude concrète : chaque semaine, je protège … plage(s) de … minutes de travail concentré, communiquées à ma hiérarchie et mes collègues",
+              "Ma formulation de communication",
+              "Mon signal de concentration adapté à mon bureau africain",
+            ] },
+            { title: "Habitude 3 — Semaines 3 et 4 : le rituel de planification hebdomadaire", fields: [
+              "L'habitude concrète : chaque … (jour), à … h, je consacre … minutes à identifier mes 3 résultats prioritaires et planifier mon buffer africain",
+              "Mon résultat prioritaire n° 1 de la semaine prochaine (à faire maintenant)",
+              "Mon résultat prioritaire n° 2",
+              "Mon résultat prioritaire n° 3",
+            ] },
+            { title: "Mon signal de progression en 30 jours", fields: [
+              "D'ici 30 jours, le signe concret et observable qui me dira que ma gestion du temps s'est vraiment améliorée",
+            ] },
+            { title: "Mon pair de progression", fields: [
+              "Ce que je vais partager avec lui cette semaine",
+            ] },
           ],
         },
         finalQuiz: {
-          title: "",
+          title: "Micro-session 3.4 — Quiz final",
+          durationEstimate: "15 min",
           questions: [
             { id: "f1", scenarioText: "Lundi 8h, organisation sénégalaise, 8 tâches dont 3 « urgentes » (collègues) et 2 importantes (mission). Par laquelle commencez-vous ?", options: [
               { key: "A", label: "La plus facile pour démarrer." },
@@ -787,10 +961,10 @@ export const n1Full: CourseContent = {
             ], correctKey: "C", feedbackText: "Le « oui différent » appliqué aux urgences nocturnes : répond au besoin immédiat tout en protégeant la qualité de la livraison finale." },
             { id: "f3", scenarioText: "Un collègue entre pendant votre créneau de focus communiqué à l'équipe togolaise.", options: [
               { key: "A", label: "J'interromps et traite sa demande." },
-              { key: "B", label: "Je signale mon créneau et propose un moment précis dans l'heure." },
+              { key: "B", label: "Je lui dis de revenir vendredi." },
               { key: "C", label: "Je continue sans le regarder." },
-              { key: "D", label: "Je lui dis de revenir vendredi." },
-            ], correctKey: "B", feedbackText: "Signaler le créneau + proposer une alternative concrète : maintenir le focus et préserver la relation." },
+              { key: "D", label: "Je signale mon créneau et propose un moment précis dans l'heure." },
+            ], correctKey: "D", feedbackText: "Signaler le créneau + proposer une alternative concrète : maintenir le focus et préserver la relation." },
             { id: "f4", scenarioText: "Semaine de 45 h, organisation nigériane. Combien d'heures max en tâches concrètes ?", options: [
               { key: "A", label: "45 h — tout le temps disponible." },
               { key: "B", label: "40 h — 5 h pour les urgences mineures." },
@@ -798,11 +972,11 @@ export const n1Full: CourseContent = {
               { key: "D", label: "20 h — 3 grandes priorités uniquement." },
             ], correctKey: "C", feedbackText: "Le buffer africain de 30 % (≈ 13,5 h) absorbe les urgences sans détruire les priorités ; 40 h est insuffisant en haute imprévision." },
             { id: "f5", scenarioText: "Junior camerounais : premier draft insuffisant sur une tâche déléguée.", options: [
-              { key: "A", label: "Je reprends le travail moi-même." },
-              { key: "B", label: "Je planifie 30 min pour revoir, identifier les lacunes et convenir d'une v2 sous 48h." },
+              { key: "A", label: "Je planifie 30 min pour revoir, identifier les lacunes et convenir d'une v2 sous 48h." },
+              { key: "B", label: "Je reprends le travail moi-même." },
               { key: "C", label: "Je renvoie le draft avec des commentaires écrits et j'attends." },
               { key: "D", label: "J'escalade au manager pour me couvrir." },
-            ], correctKey: "B", feedbackText: "Un draft insuffisant n'est pas un échec de la délégation : 30 min de coaching forment le junior et maintiennent la qualité." },
+            ], correctKey: "A", feedbackText: "Un draft insuffisant n'est pas un échec de la délégation : 30 min de coaching forment le junior et maintiennent la qualité." },
             { id: "f6", scenarioText: "Vous abandonnez votre rituel de planification chaque vendredi « parce que trop à faire » (organisation kényane).", options: [
               { key: "A", label: "Je manque de discipline." },
               { key: "B", label: "Le créneau est mauvais — le vendredi épuisé ne marche pas ; essayer jeudi 16h ou vendredi 14h." },
@@ -817,10 +991,10 @@ export const n1Full: CourseContent = {
             ], correctKey: "A", feedbackText: "Clarifier avant d'exécuter évite de refaire ; 10 min de clarification peuvent éviter 3 h de travail dans le mauvais sens." },
             { id: "f8", scenarioText: "Votre semaine planifiée est désorganisée par 3 urgences imprévues majeures. Que signifie-t-elle pour votre système ?", options: [
               { key: "A", label: "Mon système ne marche pas — en changer." },
-              { key: "B", label: "Mon buffer était insuffisant — l'augmenter à 35–40 % et analyser si ces urgences étaient anticipables." },
+              { key: "B", label: "J'ai besoin d'un assistant pour filtrer." },
               { key: "C", label: "Les imprévus sont une fatalité." },
-              { key: "D", label: "J'ai besoin d'un assistant pour filtrer." },
-            ], correctKey: "B", feedbackText: "3 urgences non absorbées signalent un buffer trop faible ; beaucoup d'« imprévus » africains sont en réalité récurrents et anticipables." },
+              { key: "D", label: "Mon buffer était insuffisant — l'augmenter à 35–40 % et analyser si ces urgences étaient anticipables." },
+            ], correctKey: "D", feedbackText: "3 urgences non absorbées signalent un buffer trop faible ; beaucoup d'« imprévus » africains sont en réalité récurrents et anticipables." },
           ],
           passThreshold: 70,
         },
@@ -842,12 +1016,12 @@ export const n1Full: CourseContent = {
         // The 6 journal micro-entries are SUB-UNITS of the 2-week journal long
         // activity (6 × 5 min = its 30 min) — not independent top-level units.
         { label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: 30, children: [
-          { label: "Journal J+1", type: "micro-task", durationMin: 5 },
-          { label: "Journal J+3", type: "micro-task", durationMin: 5 },
-          { label: "Journal J+5", type: "micro-task", durationMin: 5 },
-          { label: "Journal J+7", type: "micro-task", durationMin: 5 },
-          { label: "Journal J+10", type: "micro-task", durationMin: 5 },
-          { label: "Journal J+14", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+2", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+4", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+6", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+9", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+11", type: "micro-task", durationMin: 5 },
+          { label: "Journal J+15", type: "micro-task", durationMin: 5 },
         ] },
       ],
       badge: {
@@ -862,18 +1036,20 @@ export const n1Full: CourseContent = {
           { title: "Section 1 — Description de la situation (~10 lignes)", helpText: "Pré-rempli depuis votre Moment d'Ancrage et l'Application terrain du Bloc 2 : contexte africain précis (pays, secteur, organisation), votre rôle, le problème, ses causes et son impact.", prefillFromMomentAncrage: true },
           { title: "Section 2 — La solution mise en œuvre", helpText: "Outil principal, espace de mise en œuvre (formel/informel), adaptation culturelle africaine réalisée.", prefillFromMomentAncrage: false },
           { title: "Section 3 — Résultat observé", helpText: "Impact sur votre productivité (concret, chiffré si possible) ; ce que vous avez appris sur les codes africains de gestion du temps.", prefillFromMomentAncrage: false },
-          { title: "Section 4 — Journal des 2 semaines (6 micro-entrées)", helpText: "Les 6 micro-entrées poussées automatiquement (J+1 → J+14).", prefillFromMomentAncrage: false },
-          { title: "Section 5 — Apprentissage personnel", helpText: "Ce que vous avez compris sur votre relation au temps ; l'obstacle culturel surmonté ; 3 prochaines occasions de reprendre le contrôle.", prefillFromMomentAncrage: false },
+          { title: "Section 4 — Journal des 2 semaines (6 micro-entrées)", helpText: "Les 6 micro-entrées poussées automatiquement (J+2 → J+15), 5 minutes chacune. Chaque micro-entrée non complétée dans les 24h déclenche un rappel bienveillant ancré dans votre Moment d'Ancrage.", prefillFromMomentAncrage: false },
+          { title: "Section 5 — Apprentissage personnel", helpText: "Ce que vous avez compris sur votre relation au temps ; l'obstacle culturel surmonté ou contourné ; les 3 prochaines occasions de reprendre le contrôle ; ce que vous diriez à un pair qui commence ce parcours demain.", prefillFromMomentAncrage: false },
         ],
         journal: {
           // Every journal prompt re-injects the Moment d'Ancrage (Pilier 5.1).
+          // Cadence J+2 → J+15 avec la question spécifique de chaque micro-entrée
+          // (énoncé « Journal des 2 semaines », réponses 50 à 100 mots).
           entries: [
-            { day: 1, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement africain — verbale, comportementale ou intérieure.", minWords: 50 },
-            { day: 3, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle africain réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50 },
-            { day: 5, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre façon de répondre aux sollicitations depuis le début ? Donnez un exemple concret.", minWords: 50 },
-            { day: 7, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression, et quelle a été sa perspective sur votre démarche ?", minWords: 50 },
-            { day: 10, prompt: "En repartant de {{moment_ancrage}}, quelle est la micro-victoire de productivité africaine la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50 },
-            { day: 14, prompt: "Par rapport à {{moment_ancrage}}, ce que ce parcours a transformé dans votre relation au temps, et les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50 },
+            { day: 2, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé à mettre en œuvre votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement — verbale, comportementale ou intérieure.", minWords: 50 },
+            { day: 4, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50 },
+            { day: 6, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre propre façon de répondre aux sollicitations depuis que vous avez commencé ? Donnez un exemple concret.", minWords: 50 },
+            { day: 9, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression ? Quelle a été sa perspective sur votre démarche dans votre contexte ?", minWords: 50 },
+            { day: 11, prompt: "En repartant de {{moment_ancrage}}, quelle est la micro-victoire de productivité la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50 },
+            { day: 15, prompt: "Par rapport à {{moment_ancrage}}, ce que ce parcours a transformé dans votre relation au temps dans votre organisation, et les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50 },
           ],
         },
         rubric: {

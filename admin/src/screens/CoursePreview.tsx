@@ -43,7 +43,7 @@ function Qs({ items, scored = true }: { items: any[]; scored?: boolean }) {
   return (
     <>{(items ?? []).map((q, i) => (
       <div key={i} style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5 }}>{i + 1}. {q.scenarioText || q.text || q.question}</div>
+        <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 5 }}>{i + 1}. {q.scenarioText || q.text || q.question || q.prompt}</div>
         {(q.options ?? []).map((o: Opt) => (
           <div key={o.key} style={{ fontSize: 12.5, padding: "5px 9px", border: "1px solid var(--line)", borderRadius: 7, marginBottom: 4, background: scored && q.correctKey === o.key ? "var(--success-tint)" : "#fff" }}>
             <b>{o.key}.</b> {o.label} {scored && q.correctKey === o.key && <span style={{ color: "var(--success)", fontWeight: 700 }}> ✓</span>}
@@ -63,6 +63,29 @@ function Exercise({ ex }: { ex: any }) {
       {ex.type === "multi" && <Qs items={[{ options: ex.options, correctKey: ex.correctKey, feedbackText: ex.feedbackText }]} />}
       {ex.type === "guidedForm" && (ex.fields ?? []).map((f: any, i: number) => <div key={i} style={{ fontSize: 12, color: "var(--fg-2)" }}>• {f.label}</div>)}
       {ex.type === "written" && <div style={{ fontSize: 11.5, color: "var(--fg-3)" }}>Réponse écrite (≥ {ex.minChars} car.)</div>}
+    </div>
+  );
+}
+
+function CasePreview({ cs }: { cs: any }) {
+  if (!cs) return null;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <div style={eye}>{cs.title}{cs.durationEstimate ? ` · ${cs.durationEstimate}` : ""}</div>
+      {cs.subtitle && <div style={{ fontSize: 13, fontWeight: 700, marginTop: 2 }}>{cs.subtitle}</div>}
+      {cs.context && <div style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 4 }}>{cs.context}</div>}
+      {(cs.structuredSteps ?? []).map((st: any, i: number) => (
+        <div key={i} style={{ borderTop: "1px dashed var(--line)", paddingTop: 8, marginTop: 8 }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700 }}>{st.title}{st.durationEstimate ? ` · ${st.durationEstimate}` : ""}</div>
+          {st.intro && <div style={{ fontSize: 12, color: "var(--fg-2)" }}>{st.intro}</div>}
+          <Qs items={(st.questions ?? []).filter((q: any) => q.kind !== "open")} />
+          {(st.questions ?? []).filter((q: any) => q.kind === "open").map((q: any, j: number) => (
+            <div key={j} style={{ fontSize: 12, color: "var(--fg-2)", marginTop: 4 }}>✍️ {q.prompt} <span style={{ color: "var(--fg-3)" }}>(réponse libre ≥ {q.minChars ?? 20} car.{q.savedForProject ? " · sauvegardée pour le Bloc 4" : ""})</span></div>
+          ))}
+        </div>
+      ))}
+      {(cs.steps ?? []).length > 0 && (cs.structuredSteps ?? []).length === 0 && <ol style={{ paddingLeft: 18, fontSize: 12 }}>{cs.steps.map((x: string, i: number) => <li key={i}>{x}</li>)}</ol>}
+      {(cs.summary ?? []).length > 0 && <div style={{ fontSize: 12, marginTop: 6 }}><b>Résumé des apprentissages clés :</b><ul style={{ margin: "2px 0", paddingLeft: 18 }}>{cs.summary.map((x: string, i: number) => <li key={i}>{x}</li>)}</ul></div>}
     </div>
   );
 }
@@ -118,10 +141,14 @@ function BlockView({ b }: { b: Block }) {
         </div>
       ))}
 
-      {p.caseStudy && <div style={{ marginTop: 8 }}><div style={eye}>Étude de cas — {p.caseStudy.title}</div><ol style={{ paddingLeft: 18, fontSize: 12 }}>{(p.caseStudy.steps ?? []).map((s: string, i: number) => <li key={i}>{s}</li>)}</ol></div>}
+      <CasePreview cs={p.caseStudy} />
+      <CasePreview cs={p.transversalCase} />
       {p.guidedScenarios?.length > 0 && <div style={{ marginTop: 8 }}><div style={eye}>{p.guidedScenariosTitle || "Mises en situation"}</div>{p.guidedScenarios.map((sc: any, i: number) => <div key={i} style={{ fontSize: 12.5, marginTop: 4 }}><b>{sc.title}</b><Qs items={sc.steps ?? []} /></div>)}</div>}
       {p.interBlockQuiz && <div style={{ marginTop: 8 }}><div style={eye}>{p.interBlockQuiz.title || "Quiz interbloc"}</div><Qs items={p.interBlockQuiz.questions} /></div>}
-      {p.fieldApplication && <div style={{ ...card, background: "var(--orange-50)", marginTop: 8 }}><div style={eye}>📍 {p.fieldApplication.title || "Application terrain"} {p.fieldApplication.gatesNextBlock ? "(obligatoire)" : ""}</div><div style={{ fontSize: 12.5 }}>{p.fieldApplication.brief}</div></div>}
+      {p.fieldApplication && <div style={{ ...card, background: "var(--orange-50)", marginTop: 8 }}><div style={eye}>📍 {p.fieldApplication.title || "Application terrain"} {p.fieldApplication.gatesNextBlock ? "(obligatoire)" : ""}{p.fieldApplication.durationEstimate ? ` · ${p.fieldApplication.durationEstimate}` : ""}</div><div style={{ fontSize: 12.5 }}>{p.fieldApplication.brief}</div>
+        {(p.fieldApplication.steps ?? []).map((st: any, i: number) => (
+          <div key={i} style={{ marginTop: 6 }}><div style={{ fontSize: 12.5, fontWeight: 700 }}>{st.title}</div>{(st.fields ?? []).map((f: any, j: number) => <div key={j} style={{ fontSize: 12, color: "var(--fg-2)" }}>• {f.label}</div>)}</div>
+        ))}</div>}
       {p.selfAssessment && <div style={{ marginTop: 8 }}><div style={eye}>{p.selfAssessment.title || "Auto-évaluation"}</div><div style={{ fontSize: 12 }}>Critères : {(p.selfAssessment.criteria ?? []).join(", ")}</div></div>}
       {p.actionPlan30d && <div style={{ marginTop: 8 }}><div style={eye}>{p.actionPlan30d.title || "Plan d'action 30 j"}</div>{(p.actionPlan30d.habits ?? []).map((hb: any, i: number) => <div key={i} style={{ fontSize: 12 }}>• {hb.title}</div>)}</div>}
       {p.finalQuiz && <div style={{ marginTop: 8 }}><div style={eye}>{p.finalQuiz.title || "Quiz final"} · seuil {p.finalQuiz.passThreshold}%</div><Qs items={p.finalQuiz.questions} /></div>}

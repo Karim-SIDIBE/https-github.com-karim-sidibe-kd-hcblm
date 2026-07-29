@@ -68,7 +68,7 @@ export function blockRequirements(block: Block): RequiredItem[] {
           itemType: "MICRO_SESSION" as const, key: m.id, label: `Micro-session ${m.id}`,
         })),
       ];
-      if (block.payload.caseStudy) req.push({ itemType: "CASE_STUDY", key: "case", label: "Étude de cas" });
+      if (block.payload.caseStudy) req.push({ itemType: "CASE_STUDY", key: "case", label: block.payload.caseStudy.subtitle || block.payload.caseStudy.title || "Étude de cas" });
       return req;
     }
     case "PRACTICE": {
@@ -87,6 +87,11 @@ export function blockRequirements(block: Block): RequiredItem[] {
         ...block.payload.microSessions.map((m) => ({
           itemType: "MICRO_SESSION" as const, key: m.id, label: `Micro-session ${m.id}`,
         })),
+        // The transversal synthesis case (e.g. Sylvie) is a required long
+        // activity of the block when the content declares one.
+        ...(block.payload.transversalCase
+          ? [{ itemType: "CASE_STUDY" as const, key: "case", label: block.payload.transversalCase.subtitle || block.payload.transversalCase.title }]
+          : []),
         { itemType: "SELF_ASSESSMENT", key: "self", label: "Auto-évaluation" },
         { itemType: "ACTION_PLAN", key: "plan", label: "Plan d'action 30 jours" },
         {

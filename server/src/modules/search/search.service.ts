@@ -32,17 +32,17 @@ export function chunkContent(content: CourseContentT): Chunk[] {
         break;
       case "COMPREHENSION":
         b.payload.diagnosticQuiz.questions.forEach((q) => push(i, `blocks[${i}].diagnostic.${q.id}`, `${q.scenarioText} ${q.feedbackText}`));
-        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise.prompt}`));
+        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise?.prompt ?? ""}`));
         if (b.payload.caseStudy) push(i, `blocks[${i}].case`, `${b.payload.caseStudy.title}. ${b.payload.caseStudy.steps.join(" ")}`);
         break;
       case "PRACTICE":
-        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise.prompt}`));
+        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise?.prompt ?? ""}`));
         b.payload.guidedScenarios.forEach((s, k) => push(i, `blocks[${i}].scenario${k}`, `${s.title}. ${s.contextAfricain} ${s.steps.map((st) => st.question).join(" ")}`));
         if (b.payload.interBlockQuiz) b.payload.interBlockQuiz.questions.forEach((q) => push(i, `blocks[${i}].interblock.${q.id}`, q.scenarioText));
         push(i, `blocks[${i}].field`, b.payload.fieldApplication.brief);
         break;
       case "ANCHORING":
-        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise.prompt}`));
+        b.payload.microSessions.forEach((m) => push(i, `blocks[${i}].${m.id}`, `${m.title}. ${m.summaryPoints.join(". ")} ${m.video.keyMessage} ${m.video.africanExample} ${m.exercise?.prompt ?? ""}`));
         push(i, `blocks[${i}].selfAssessment`, b.payload.selfAssessment.criteria.join(". "));
         b.payload.finalQuiz.questions.forEach((q) => push(i, `blocks[${i}].final.${q.id}`, `${q.scenarioText} ${q.feedbackText}`));
         break;

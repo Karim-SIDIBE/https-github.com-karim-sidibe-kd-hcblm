@@ -4,7 +4,7 @@ import { api, type MediaAsset } from "../lib/api";
 
 type Opt = { key: string; label: string };
 type Ex = { type: string; prompt: string; feedbackText: string; options?: Opt[]; correctKey?: string; minChars?: number; fields?: { label: string; placeholder?: string }[] };
-type Session = { id: string; title: string; durationEstimate: string; summaryPoints: string[]; video: any; exercise: Ex };
+type Session = { id: string; title: string; durationEstimate: string; summaryPoints: string[]; video: any; exercise?: Ex };
 type SQ = {
   id: string; scenarioText: string; feedbackText: string; subArea?: string;
   type?: "single" | "multiple" | "truefalse" | "numeric" | "short";
@@ -319,7 +319,12 @@ function SessionCard({ s, si, total, ri, media, set, handleProps }: { s: Session
           <div style={{ marginTop: 8 }}><label style={lbl}>Message clé</label><input style={field} value={s.video?.keyMessage ?? ""} onChange={(e) => onS((x) => { x.video.keyMessage = e.target.value; })} /></div>
         </div>
         <div><label style={lbl}>3 points clés</label>{[0, 1, 2].map((k) => <input key={k} style={{ ...field, marginBottom: 5 }} value={s.summaryPoints?.[k] ?? ""} placeholder={`Point ${k + 1}`} onChange={(e) => onS((x) => { x.summaryPoints = x.summaryPoints ?? ["", "", ""]; x.summaryPoints[k] = e.target.value; })} />)}</div>
-        <div><label style={lbl}>Exercice</label><ExerciseEditor ex={s.exercise} path={(c) => arr(c)[si].exercise} set={set} /></div>
+        {s.exercise
+          ? <div>
+              <div className="row between"><label style={lbl}>Exercice</label><button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { if (confirm("Retirer l'exercice ? La micro-session devient « vidéo seule » et enchaîne sur l'élément suivant.")) set((c) => { delete arr(c)[si].exercise; }); }}>Retirer l'exercice</button></div>
+              <ExerciseEditor ex={s.exercise} path={(c) => arr(c)[si].exercise!} set={set} />
+            </div>
+          : <button type="button" className="btn btn--sm" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { arr(c)[si].exercise = { type: "written", prompt: "", feedbackText: "", minChars: 120 }; })}>+ Ajouter un exercice (sinon : vidéo seule)</button>}
       </div>
     </div>
   );
@@ -384,11 +389,13 @@ function genUnits(block: any): Unit[] {
   const push = (label: string, type: string, durationMin: number) => u.push({ label, type, durationMin });
   if (block.type === "ONBOARDING") { push("Onboarding & ancrage", "micro-session", 10); push("Vidéo déclencheur + quiz", "micro-session", 15); }
   if (p.diagnosticQuiz) push("Quiz diagnostique", "micro-session", 15);
-  (p.microSessions ?? []).forEach((s: any) => push(`Micro-session ${s.id} — ${s.title}`, "micro-session", 20));
-  if (p.caseStudy) push(`Étude de cas — ${p.caseStudy.title}`, "long-activity", 25);
-  if (p.guidedScenarios?.length) push("Mises en situation guidées", "long-activity", 40);
-  if (p.fieldApplication) push("Application terrain", "long-activity", 35);
-  if (p.selfAssessment) push("Auto-évaluation", "micro-session", 15);
+  const min = (est: string | undefined, dflt: number) => { const m = /\d+/.exec(est ?? ""); return m ? Number(m[0]) : dflt; };
+  (p.microSessions ?? []).forEach((s: any) => push(`Micro-session ${s.id} — ${s.title}`, "micro-session", min(s.durationEstimate, 10)));
+  if (p.caseStudy) push(`Étude de cas — ${p.caseStudy.subtitle || p.caseStudy.title}`, "long-activity", min(p.caseStudy.durationEstimate, 30));
+  if (p.transversalCase) push(`Cas transversal — ${p.transversalCase.subtitle || p.transversalCase.title}`, "long-activity", min(p.transversalCase.durationEstimate, 20));
+  if (p.guidedScenarios?.length) push("Mises en situation guidées + quiz interbloc", "long-activity", 30);
+  if (p.fieldApplication) push("Application terrain", "long-activity", min(p.fieldApplication.durationEstimate, 35));
+  if (p.selfAssessment) push("Auto-évaluation", "micro-task", min(p.selfAssessment.durationEstimate, 10));
   if (p.actionPlan30d) push("Plan d'action 30 jours", "micro-session", 20);
   if (p.finalQuiz) push("Quiz final", "micro-session", 15);
   if (block.type === "CERTIFICATION") {
@@ -489,6 +496,61 @@ function ItemOrderCard({ block, ri, set }: { block: any; ri: number; set: Set })
   );
 }
 
+/* ---------------- structured case study (Bloc 1 / Bloc 3 transversal) ---------------- */
+type CQ = { id: string; kind: "mcq" | "open"; prompt: string; options?: Opt[]; correctKey?: string; allValid?: boolean; feedback?: string; minChars?: number; savedForProject?: boolean };
+type CStep = { title: string; durationEstimate?: string; intro?: string; questions: CQ[] };
+export const newCaseStudy = (title: string) => ({ title, subtitle: "", context: "", durationEstimate: "", steps: [], structuredSteps: [], summary: [] });
+function CaseStudyEditor({ cs, path, set }: { cs: any; path: (c: Content) => any; set: Set }) {
+  const steps: CStep[] = cs.structuredSteps ?? [];
+  return (
+    <>
+      <div className="row" style={{ gap: 8 }}>
+        <div style={{ flex: 1 }}><label style={lbl}>Titre de l'activité (affiché à l'apprenant)</label><input style={field} value={cs.title ?? ""} onChange={(e) => set((c) => { path(c).title = e.target.value; })} /></div>
+        <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="30 min" value={cs.durationEstimate ?? ""} onChange={(e) => set((c) => { path(c).durationEstimate = e.target.value; })} /></div>
+      </div>
+      <div><label style={lbl}>Sous-titre (le cas)</label><input style={field} placeholder="Nadia : compétente, épuisée…" value={cs.subtitle ?? ""} onChange={(e) => set((c) => { path(c).subtitle = e.target.value; })} /></div>
+      <div><label style={lbl}>Contexte</label><textarea style={{ ...field, minHeight: 60 }} value={cs.context ?? ""} onChange={(e) => set((c) => { path(c).context = e.target.value; })} /></div>
+      {steps.map((st, i) => (
+        <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 11 }}>
+          <div className="row between" style={{ marginBottom: 8 }}><b style={{ fontSize: 12.5 }}>Étape {i + 1}</b>
+            <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { path(c).structuredSteps.splice(i, 1); })}>🗑️</button></div>
+          <div className="row" style={{ gap: 8 }}>
+            <div style={{ flex: 1 }}><label style={lbl}>Titre de l'étape</label><input style={field} value={st.title ?? ""} onChange={(e) => set((c) => { path(c).structuredSteps[i].title = e.target.value; })} /></div>
+            <div style={{ width: 110 }}><label style={lbl}>Durée</label><input style={field} placeholder="8 min" value={st.durationEstimate ?? ""} onChange={(e) => set((c) => { path(c).structuredSteps[i].durationEstimate = e.target.value; })} /></div>
+          </div>
+          <div style={{ marginTop: 8 }}><label style={lbl}>Intro (optionnel, {"{{moment_ancrage}}"} autorisé)</label><input style={field} value={st.intro ?? ""} onChange={(e) => set((c) => { path(c).structuredSteps[i].intro = e.target.value; })} /></div>
+          {(st.questions ?? []).map((q, j) => (
+            <div key={j} style={{ background: "var(--bg-soft)", borderRadius: 8, padding: 10, marginTop: 8 }}>
+              <div className="row between"><b style={{ fontSize: 12 }}>Question {j + 1}</b>
+                <span className="row" style={{ gap: 6 }}>
+                  <select style={{ ...field, width: 160 }} value={q.kind} onChange={(e) => set((c) => { const x = path(c).structuredSteps[i].questions[j]; x.kind = e.target.value as CQ["kind"]; if (x.kind === "mcq" && !x.options) { x.options = [{ key: "A", label: "" }, { key: "B", label: "" }]; x.correctKey = "A"; } })}>
+                    <option value="mcq">QCM</option><option value="open">Réflexion ouverte</option>
+                  </select>
+                  <button type="button" className="btn btn--sm" onClick={() => set((c) => { path(c).structuredSteps[i].questions.splice(j, 1); })}>✕</button>
+                </span>
+              </div>
+              <textarea style={{ ...field, minHeight: 44, margin: "6px 0" }} value={q.prompt ?? ""} placeholder={"Énoncé ({{moment_ancrage}} autorisé)"} onChange={(e) => set((c) => { path(c).structuredSteps[i].questions[j].prompt = e.target.value; })} />
+              {q.kind === "mcq" && <>
+                <Options opts={q.options ?? []} correctKey={q.correctKey} scored path={(c) => path(c).structuredSteps[i].questions[j]} set={set} />
+                <label className="row" style={{ gap: 7, alignItems: "center", fontSize: 12.5, marginTop: 6 }}><input type="checkbox" checked={!!q.allValid} onChange={(e) => set((c) => { path(c).structuredSteps[i].questions[j].allValid = e.target.checked; })} /> Toutes les réponses sont valables (question de profil — jamais « faux »)</label>
+                <div style={{ marginTop: 6 }}><label style={lbl}>Feedback</label><textarea style={{ ...field, minHeight: 40 }} value={q.feedback ?? ""} onChange={(e) => set((c) => { path(c).structuredSteps[i].questions[j].feedback = e.target.value; })} /></div>
+              </>}
+              {q.kind === "open" && <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                <div style={{ width: 130 }}><label style={lbl}>Min. caractères</label><input style={field} type="number" min={1} value={q.minChars ?? 40} onChange={(e) => set((c) => { path(c).structuredSteps[i].questions[j].minChars = Number(e.target.value); })} /></div>
+                <label className="row" style={{ gap: 7, alignItems: "center", fontSize: 12.5, marginTop: 16 }}><input type="checkbox" checked={!!q.savedForProject} onChange={(e) => set((c) => { path(c).structuredSteps[i].questions[j].savedForProject = e.target.checked; })} /> Réponse sauvegardée pour le projet du Bloc 4</label>
+              </div>}
+            </div>
+          ))}
+          <button type="button" className="btn btn--sm" style={{ marginTop: 8 }} onClick={() => set((c) => { (path(c).structuredSteps[i].questions ??= []).push({ id: `q${Date.now().toString(36)}`, kind: "mcq", prompt: "", options: [{ key: "A", label: "" }, { key: "B", label: "" }], correctKey: "A", allValid: false, feedback: "", savedForProject: false }); })}>+ Question</button>
+        </div>
+      ))}
+      <button type="button" className="btn btn--sm btn--primary" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { const x = path(c); (x.structuredSteps ??= []).push({ title: `Étape ${(x.structuredSteps?.length ?? 0) + 1}`, durationEstimate: "", intro: "", questions: [] }); })}>+ Étape</button>
+      <div><label style={lbl}>Résumé des apprentissages clés (affiché à la fin)</label><StringList items={cs.summary ?? []} path={(c) => (path(c).summary ??= [])} set={set} ph="Apprentissage" /></div>
+      {(cs.steps?.length ?? 0) > 0 && <div><label style={lbl}>Étapes (ancien format texte libre)</label><StringList items={cs.steps ?? []} path={(c) => path(c).steps} set={set} ph="Étape" /></div>}
+    </>
+  );
+}
+
 /* ---------------- per-block editor ---------------- */
 function ImportedNote({ text, onClear }: { text: string; onClear?: () => void }) {
   const [open, setOpen] = useState(true);
@@ -563,7 +625,10 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {block.type === "COMPREHENSION" && (
         <>
           {p.diagnosticQuiz && <Card title="Quiz diagnostique (noté)">
-            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz diagnostique (défaut)" value={p.diagnosticQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.diagnosticQuiz.title = e.target.value; })} /></div>
+            <div className="row" style={{ gap: 8 }}>
+              <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz diagnostique (défaut)" value={p.diagnosticQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.diagnosticQuiz.title = e.target.value; })} /></div>
+              <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="15 min" value={p.diagnosticQuiz.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.diagnosticQuiz.durationEstimate = e.target.value; })} /></div>
+            </div>
             <PoolConfig pool={p.diagnosticQuiz.pool} path={(c) => c.blocks[ri].payload.diagnosticQuiz} set={set} /><ScoredQuestions questions={p.diagnosticQuiz.questions} path={(c) => c.blocks[ri].payload.diagnosticQuiz.questions} set={set} /></Card>}
         </>
       )}
@@ -583,30 +648,56 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {/* ---- Bloc 1 case study ---- */}
       {block.type === "COMPREHENSION" && (
         p.caseStudy
-          ? <Card title="Étude de cas" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { delete c.blocks[ri].payload.caseStudy; })}>Retirer</button>}>
-              <div><label style={lbl}>Titre</label><input style={field} value={p.caseStudy.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.caseStudy.title = e.target.value; })} /></div>
-              <div><label style={lbl}>Étapes</label><StringList items={p.caseStudy.steps ?? []} path={(c) => c.blocks[ri].payload.caseStudy.steps} set={set} ph="Étape" /></div>
+          ? <Card title="Étude de cas (activité longue)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { delete c.blocks[ri].payload.caseStudy; })}>Retirer</button>}>
+              <CaseStudyEditor cs={p.caseStudy} path={(c) => c.blocks[ri].payload.caseStudy} set={set} />
             </Card>
-          : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.caseStudy = { title: "Étude de cas", steps: [""] }; })}>+ Ajouter une étude de cas</button>
+          : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.caseStudy = newCaseStudy("Activité longue — Étude de cas"); })}>+ Ajouter une étude de cas</button>
       )}
 
       {/* ---- Bloc 2 ---- */}
       {block.type === "PRACTICE" && (
         <>
           <Card title="Mises en situation guidées">
-            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Mises en situation guidées (défaut)" value={p.guidedScenariosTitle ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.guidedScenariosTitle = e.target.value; })} /></div>
+            <div className="row" style={{ gap: 8 }}>
+              <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Mises en situation guidées (défaut)" value={p.guidedScenariosTitle ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.guidedScenariosTitle = e.target.value; })} /></div>
+              <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="21 min" value={p.guidedScenariosDuration ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.guidedScenariosDuration = e.target.value; })} /></div>
+            </div>
             <GuidedScenarios scenarios={p.guidedScenarios ?? []} ri={ri} set={set} /></Card>
           {p.interBlockQuiz
             ? <Card title="Quiz interbloc (non noté)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { delete c.blocks[ri].payload.interBlockQuiz; })}>Retirer</button>}>
-                <div><label style={lbl}>Titre</label><input style={field} value={p.interBlockQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.interBlockQuiz.title = e.target.value; })} /></div>
+                <div className="row" style={{ gap: 8 }}>
+                  <div style={{ flex: 1 }}><label style={lbl}>Titre</label><input style={field} value={p.interBlockQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.interBlockQuiz.title = e.target.value; })} /></div>
+                  <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="9 min" value={p.interBlockQuiz.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.interBlockQuiz.durationEstimate = e.target.value; })} /></div>
+                </div>
                 <PoolConfig pool={p.interBlockQuiz.pool} path={(c) => c.blocks[ri].payload.interBlockQuiz} set={set} />
                 <ScoredQuestions questions={p.interBlockQuiz.questions} path={(c) => c.blocks[ri].payload.interBlockQuiz.questions} set={set} />
               </Card>
             : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.interBlockQuiz = { title: "Quiz interbloc", scored: false, questions: [newSQ(1)] }; })}>+ Ajouter un quiz interbloc</button>}
           {p.fieldApplication && (
             <Card title="Application terrain">
-              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Application terrain (défaut)" value={p.fieldApplication.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.title = e.target.value; })} /></div>
+              <div className="row" style={{ gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Application terrain (défaut)" value={p.fieldApplication.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.title = e.target.value; })} /></div>
+                <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="35 min" value={p.fieldApplication.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.durationEstimate = e.target.value; })} /></div>
+              </div>
               <div><label style={lbl}>Consigne ({"{{moment_ancrage}}"} autorisé)</label><textarea style={{ ...field, minHeight: 46 }} value={p.fieldApplication.brief ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.brief = e.target.value; })} /></div>
+              <div><label style={lbl}>Étapes guidées (optionnel — sinon : une seule zone de texte)</label>
+                {(p.fieldApplication.steps ?? []).map((st: any, i: number) => (
+                  <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10, marginBottom: 6 }}>
+                    <div className="row between"><b style={{ fontSize: 12 }}>Étape {i + 1}</b><button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.fieldApplication.steps.splice(i, 1); if (!c.blocks[ri].payload.fieldApplication.steps.length) delete c.blocks[ri].payload.fieldApplication.steps; })}>✕</button></div>
+                    <input style={{ ...field, margin: "6px 0" }} value={st.title ?? ""} placeholder="Titre de l'étape" onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.steps[i].title = e.target.value; })} />
+                    <input style={{ ...field, marginBottom: 6 }} value={st.intro ?? ""} placeholder={"Intro ({{moment_ancrage}} autorisé)"} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.steps[i].intro = e.target.value; })} />
+                    {(st.fields ?? []).map((f: any, j: number) => (
+                      <div className="row" key={j} style={{ gap: 6, marginBottom: 5 }}>
+                        <input style={{ ...field, flex: 2 }} value={f.label ?? ""} placeholder="Intitulé du champ" onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.steps[i].fields[j].label = e.target.value; })} />
+                        <input style={{ ...field, flex: 1 }} value={f.placeholder ?? ""} placeholder="Aide" onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.steps[i].fields[j].placeholder = e.target.value; })} />
+                        <button type="button" className="btn btn--sm" disabled={(st.fields?.length ?? 0) <= 1} onClick={() => set((c) => { c.blocks[ri].payload.fieldApplication.steps[i].fields.splice(j, 1); })}>✕</button>
+                      </div>
+                    ))}
+                    <button type="button" className="btn btn--sm" onClick={() => set((c) => { (c.blocks[ri].payload.fieldApplication.steps[i].fields ??= []).push({ label: "", placeholder: "" }); })}>+ Champ</button>
+                  </div>
+                ))}
+                <button type="button" className="btn btn--sm" onClick={() => set((c) => { (c.blocks[ri].payload.fieldApplication.steps ??= []).push({ title: `Étape ${(p.fieldApplication.steps?.length ?? 0) + 1}`, intro: "", fields: [{ label: "", placeholder: "" }] }); })}>+ Étape guidée</button>
+              </div>
               <div className="row" style={{ gap: 14, alignItems: "center" }}>
                 <div style={{ width: 140 }}><label style={lbl}>Min. caractères</label><input style={field} type="number" min={1} value={p.fieldApplication.minChars ?? 200} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.minChars = Number(e.target.value); })} /></div>
                 <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13, marginTop: 16 }}><input type="checkbox" checked={!!p.fieldApplication.gatesNextBlock} onChange={(e) => set((c) => { c.blocks[ri].payload.fieldApplication.gatesNextBlock = e.target.checked; })} /> Verrouille le bloc suivant</label>
@@ -619,22 +710,37 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {/* ---- Bloc 3 ---- */}
       {block.type === "ANCHORING" && (
         <>
+          {p.transversalCase
+            ? <Card title="Cas transversal de synthèse (activité longue)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { if (confirm("Retirer le cas transversal ?")) set((c) => { delete c.blocks[ri].payload.transversalCase; }); }}>Retirer</button>}>
+                <CaseStudyEditor cs={p.transversalCase} path={(c) => c.blocks[ri].payload.transversalCase} set={set} />
+              </Card>
+            : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.transversalCase = newCaseStudy("Activité Expérientielle Longue — Cas transversal de synthèse"); })}>+ Ajouter un cas transversal de synthèse</button>}
           {p.finalQuiz && <Card title="Quiz final (noté)" action={<span className="pill pill--soft">Seuil {p.finalQuiz.passThreshold ?? "?"}%</span>}>
-            <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz final (défaut)" value={p.finalQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.title = e.target.value; })} /></div>
+            <div className="row" style={{ gap: 8 }}>
+              <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Quiz final (défaut)" value={p.finalQuiz.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.title = e.target.value; })} /></div>
+              <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="15 min" value={p.finalQuiz.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.durationEstimate = e.target.value; })} /></div>
+            </div>
             <div style={{ width: 200 }}><label style={lbl}>Seuil de réussite (%)</label><input style={field} type="number" min={0} max={100} value={p.finalQuiz.passThreshold ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.finalQuiz.passThreshold = Number(e.target.value); })} /></div>
             <PoolConfig pool={p.finalQuiz.pool} path={(c) => c.blocks[ri].payload.finalQuiz} set={set} />
             <ScoredQuestions questions={p.finalQuiz.questions} path={(c) => c.blocks[ri].payload.finalQuiz.questions} set={set} />
           </Card>}
           {p.selfAssessment && (
             <Card title="Auto-évaluation">
-              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Auto-évaluation (défaut)" value={p.selfAssessment.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.selfAssessment.title = e.target.value; })} /></div>
+              <div className="row" style={{ gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Auto-évaluation (défaut)" value={p.selfAssessment.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.selfAssessment.title = e.target.value; })} /></div>
+                <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="10 min" value={p.selfAssessment.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.selfAssessment.durationEstimate = e.target.value; })} /></div>
+              </div>
               <div><label style={lbl}>Critères</label><StringList items={p.selfAssessment.criteria ?? []} path={(c) => c.blocks[ri].payload.selfAssessment.criteria} set={set} ph="Critère" /></div>
               <div><label style={lbl}>Échelle</label><StringList items={p.selfAssessment.scale ?? []} path={(c) => c.blocks[ri].payload.selfAssessment.scale} set={set} ph="Niveau" /></div>
             </Card>
           )}
           {p.actionPlan30d && (
             <Card title="Plan d'action 30 jours">
-              <div><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Plan d'action 30 jours (défaut)" value={p.actionPlan30d.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.title = e.target.value; })} /></div>
+              <div className="row" style={{ gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={lbl}>Titre affiché à l'apprenant</label><input style={field} placeholder="Plan d'action 30 jours (défaut)" value={p.actionPlan30d.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.title = e.target.value; })} /></div>
+                <div style={{ width: 120 }}><label style={lbl}>Durée affichée</label><input style={field} placeholder="20 min" value={p.actionPlan30d.durationEstimate ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.durationEstimate = e.target.value; })} /></div>
+              </div>
+              <div><label style={lbl}>Intro affichée à l'apprenant</label><textarea style={{ ...field, minHeight: 40 }} value={p.actionPlan30d.intro ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.intro = e.target.value; })} /></div>
               {(p.actionPlan30d.habits ?? []).map((h: any, i: number) => (
                 <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
                   <div className="row between"><b style={{ fontSize: 12.5 }}>Habitude {i + 1}</b><button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.actionPlan30d.habits.splice(i, 1); })}>✕</button></div>
@@ -665,10 +771,13 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
             </Card>
           )}
           {p.journal?.entries && (
-            <Card title="Journal (6 entrées J+1 → J+14)">
+            <Card title={`Journal des 2 semaines (${p.journal.entries.length} micro-entrées)`}>
               {p.journal.entries.map((e: any, i: number) => (
                 <div key={i} className="row" style={{ gap: 8, alignItems: "center" }}>
-                  <span className="pill pill--navy" style={{ width: 56, textAlign: "center" }}>J+{e.day}</span>
+                  <span className="row" style={{ gap: 4, alignItems: "center", width: 84, flexShrink: 0 }}>
+                    <span className="pill pill--navy">J+</span>
+                    <input style={{ ...field, width: 52 }} type="number" min={1} max={60} value={e.day ?? 1} onChange={(ev) => set((c) => { c.blocks[ri].payload.journal.entries[i].day = Number(ev.target.value); })} title="jour de la relance" />
+                  </span>
                   <input style={{ ...field, flex: 1 }} value={e.prompt ?? ""} placeholder="Consigne du jour" onChange={(ev) => set((c) => { c.blocks[ri].payload.journal.entries[i].prompt = ev.target.value; })} />
                   <div style={{ width: 110 }}><input style={field} type="number" min={1} value={e.minWords ?? 50} onChange={(ev) => set((c) => { c.blocks[ri].payload.journal.entries[i].minWords = Number(ev.target.value); })} title="mots min." /></div>
                 </div>
