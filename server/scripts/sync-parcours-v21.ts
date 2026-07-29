@@ -54,8 +54,11 @@ let keptVideos = 0;
 for (const nb of next.blocks as AnyRec[]) {
   const cb = byIndex.get(nb.index);
   if (!cb) continue;
-  // 1) admin-declared display arrangement survives
-  if (Array.isArray(cb.itemOrder) && cb.itemOrder.length) nb.itemOrder = cb.itemOrder;
+  // 1) admin-declared display arrangement survives — EXCEPT on Blocs 3 & 4,
+  //    whose canonical order is now the prescribed découpage (groupe
+  //    « Productivité hybride », sections 4.1→4.4 avec le journal en 4e) ;
+  //    un ancien itemOrder y disperserait les groupes.
+  if (nb.index < 3 && Array.isArray(cb.itemOrder) && cb.itemOrder.length) nb.itemOrder = cb.itemOrder;
   // 2) bound videos survive (mediaId, url, duration, subtitles…)
   if (nb.payload?.triggerVideo && cb.payload?.triggerVideo) { nb.payload.triggerVideo = cb.payload.triggerVideo; keptVideos++; }
   const curMs = new Map<string, AnyRec>((cb.payload?.microSessions ?? []).map((m: AnyRec) => [m.id, m]));

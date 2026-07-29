@@ -32,7 +32,22 @@ export type BlockItem = {
    *  « Nadia : compétente, épuisée… » or « Vidéo déclencheur + Quiz (non noté) »). */
   sublabel?: string;
   durationSec?: number;
+  /** Display-group header this item renders under (indented). Set on every
+   *  member; `groupFirst` marks where the header line is drawn. */
+  groupTitle?: string;
+  groupDurationLabel?: string;
+  groupFirst?: boolean;
 };
+
+/**
+ * Is this item satisfied by the completion set? The Bloc 4 section lines are
+ * display aliases of the single "project" completion (the project submits as
+ * one deliverable), so they all light up when the project is submitted.
+ */
+export function isItemDone(item: { key: string; kind: ItemKind }, completedKeys: ReadonlySet<string> | readonly string[]): boolean {
+  const done = completedKeys instanceof Set ? completedKeys : new Set(completedKeys as readonly string[]);
+  return done.has(item.key) || (item.kind === "project" && done.has("project"));
+}
 
 /** Map a non-quiz/non-session item kind to its ItemCompletion itemType. */
 export const ITEM_TYPE: Partial<Record<ItemKind, string>> = {
@@ -82,13 +97,38 @@ export function blockItems(block: Block, t?: Translate): BlockItem[] {
     interblock: block.type === "PRACTICE" ? qCount(block.payload.interBlockQuiz) : 0,
     final: block.type === "ANCHORING" ? qCount(block.payload.finalQuiz) : 0,
   };
-  return items.map((it) => ({
+  const sized = items.map((it) => ({
     ...it,
     durationSec: it.durationSec
       || (it.kind in quizN && quizN[it.kind as keyof typeof quizN] ? quizEstimate(quizN[it.kind as keyof typeof quizN]!) : 0)
       || KIND_ESTIMATE[it.kind]
       || 300,
   }));
+  // Author-declared display groups (« Activité Expérientielle Longue — … ») :
+  // members render indented under one header; a grouped micro-session drops its
+  // « Micro-session X.Y » numbering (it reads as a sub-step of the activity).
+  const groups = (block as { itemGroups?: { title: string; durationLabel?: string; keys: string[] }[] }).itemGroups ?? [];
+  if (groups.length) {
+    const msTitle = new Map<string, string>(
+      "microSessions" in block.payload ? (block.payload.microSessions as MicroSession[]).map((m) => [m.id, m.title]) : [],
+    );
+    for (const it of sized) {
+      const g = groups.find((x) => x.keys.includes(it.key));
+      if (!g) continue;
+      it.groupTitle = g.title;
+      it.groupDurationLabel = g.durationLabel || undefined;
+      if (it.kind === "session" && msTitle.has(it.key)) it.label = msTitle.get(it.key)!;
+    }
+  }
+  // The header renders before the FIRST member in display order — recompute
+  // after ordering so itemOrder rearrangements keep a single header per group.
+  const headerSeen = new Set<string>();
+  for (const it of sized) {
+    if (!it.groupTitle) continue;
+    it.groupFirst = !headerSeen.has(it.groupTitle);
+    headerSeen.add(it.groupTitle);
+  }
+  return sized;
 }
 
 function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
@@ -108,12 +148,13 @@ function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
         durationSec: KIND_ESTIMATE.onboarding,
       }];
       // The trigger ("déclencheur") video + quiz — a distinct key so it never
-      // collides with the trigger QUIZ completion key ("trigger").
+      // collides with the trigger QUIZ completion key ("trigger"). Its declared
+      // estimate covers vidéo + quiz ("10 min"), not just the video runtime.
       if (block.payload.triggerVideo) items.push({
         key: "declencheur", kind: "session",
         label: tr("ci.ms02", "Micro-session 0.2 — Déclencheur"),
         sublabel: tr("ci.ms02sub", "Vidéo déclencheur + Quiz (non noté)"),
-        durationSec: block.payload.triggerVideo.durationSec,
+        durationSec: parseEstimate((block.payload as { triggerDuration?: string }).triggerDuration) || block.payload.triggerVideo.durationSec,
       });
       return items;
     }
@@ -147,8 +188,23 @@ function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
       return items;
     }
     case "CERTIFICATION": {
-      const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({ key: `J+${e.day}`, kind: "journal" as const, label: tr("ci.journal", `Journal J+${e.day}`, { day: e.day }) }));
-      return [{ key: "project", kind: "project", label: tr("pj.title", "Projet de certification") }, ...journal];
+      // The 5 sections display as their own lines (MS 4.1–4.3, then the journal
+      // long activity in Section 4's slot, then MS 4.4 — Section 5). They are
+      // display ALIASES of the single "project" completion (one submission);
+      // `isItemDone` maps them all to the "project" key. Section index 3 (the
+      // journal section) is replaced by the grouped journal micro-entries.
+      const sections = block.payload.sections ?? [];
+      const journal: BlockItem[] = block.payload.journal.entries.map((e) => ({
+        key: `J+${e.day}`, kind: "journal" as const, label: tr("ci.journal", `Journal J+${e.day}`, { day: e.day }),
+        groupTitle: sections[3]?.title || tr("ci.journalGroup", "Journal des 2 semaines"),
+      }));
+      if (sections.length !== 5) return [{ key: "project", kind: "project", label: tr("pj.title", "Projet de certification") }, ...journal];
+      const sectionItem = (i: number): BlockItem => ({
+        key: i === 0 ? "project" : `project@${i}`, kind: "project",
+        label: sections[i]!.title,
+        durationSec: parseEstimate((sections[i] as { durationEstimate?: string }).durationEstimate) || undefined,
+      });
+      return [sectionItem(0), sectionItem(1), sectionItem(2), ...journal, sectionItem(4)];
     }
   }
 }
@@ -167,7 +223,7 @@ export function nextBlockItem(block: Block, currentKey: string, completedKeys: r
   const items = blockItems(block, t);
   const done = new Set(completedKeys);
   const at = items.findIndex((it) => it.key === currentKey);
-  return items.find((it, i) => i > at && !done.has(it.key) && it.key !== currentKey) ?? null;
+  return items.find((it, i) => i > at && !isItemDone(it, done) && it.key !== currentKey) ?? null;
 }
 
 export type SessionRef = { blockIndex: number; id: string; title: string; summaryPoints: string[] };

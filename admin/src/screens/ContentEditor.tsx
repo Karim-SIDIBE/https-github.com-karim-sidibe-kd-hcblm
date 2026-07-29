@@ -399,15 +399,18 @@ function genUnits(block: any): Unit[] {
   if (p.actionPlan30d) push("Plan d'action 30 jours", "micro-session", 20);
   if (p.finalQuiz) push("Quiz final", "micro-session", 15);
   if (block.type === "CERTIFICATION") {
-    (p.sections ?? []).forEach((s: any, i: number) => push(`Section ${i + 1} — ${s.title}`, "micro-session", 15));
-    // The journal micro-entries are SUB-UNITS of the 2-week long activity
-    // (n × 5 min compose its duration), not independent top-level units.
-    if (p.journal?.entries) {
-      u.push({
-        label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: (p.journal.entries.length || 6) * 5,
-        children: p.journal.entries.map((e: any) => ({ label: `Journal J+${e.day}`, type: "micro-task", durationMin: 5 })),
-      });
-    }
+    // Learner order: sections 1–3, then the Section-4 journal long activity
+    // (its micro-entries as sub-units), then Section 5.
+    const sections = p.sections ?? [];
+    const journalUnit = p.journal?.entries ? {
+      label: sections[3]?.title || "Journal des 2 semaines", type: "long-activity", durationMin: (p.journal.entries.length || 6) * 5,
+      children: p.journal.entries.map((e: any) => ({ label: `Journal J+${e.day}`, type: "micro-task", durationMin: 5 })),
+    } : null;
+    sections.forEach((s: any, i: number) => {
+      if (i === 3) { if (journalUnit) u.push(journalUnit); return; }
+      push(s.title || `Section ${i + 1}`, "micro-session", min(s.durationEstimate, 15));
+    });
+    if (sections.length !== 5 && journalUnit) u.push(journalUnit);
   }
   return u;
 }
@@ -485,14 +488,47 @@ function ItemOrderCard({ block, ri, set }: { block: any; ri: number; set: Set })
       : <span className="pill pill--soft">ordre par défaut</span>}>
       <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Glissez-déposez pour agencer les éléments tels que l'apprenant les verra dans ce bloc. La progression n'impose pas cet ordre (les éléments restent tous accessibles) ; le bouton « Reprendre » le suit.</p>
       {items.map((it, i) => (
-        <div className="row" key={it.key} {...dnd.row(i)} style={{ gap: 8, alignItems: "center", padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none", background: "#fff" }}>
+        <div className="row" key={it.key} {...dnd.row(i)} style={{ gap: 8, alignItems: "center", padding: "7px 9px", border: "1px solid var(--line)", borderRadius: 8, outline: dnd.over === i ? "1px solid var(--orange-400)" : "none", background: "#fff", marginLeft: (it as any).groupTitle ? 18 : 0 }}>
           <Grip {...dnd.handleProps(i)} />
           <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--fg-2)", width: 20, textAlign: "right" }}>{i + 1}.</span>
           <span style={{ flex: 1, fontSize: 13 }}>{it.label}</span>
+          {(it as any).groupTitle && <span className="pill pill--warn" style={{ fontSize: 10.5 }} title={(it as any).groupTitle}>groupé</span>}
           <span className="pill pill--soft" style={{ fontSize: 11 }}>{KIND_FR[it.kind] ?? it.kind}</span>
         </div>
       ))}
+      <ItemGroupsEditor block={block} ri={ri} items={items} set={set} />
     </Card>
+  );
+}
+
+/** Display groups (« Activité Expérientielle Longue — … ») : consecutive items
+ *  render indented under a shared header in the learner's course list. */
+function ItemGroupsEditor({ block, ri, items, set }: { block: any; ri: number; items: { key: string; label: string }[]; set: Set }) {
+  const groups: { title: string; durationLabel?: string; keys: string[] }[] = block.itemGroups ?? [];
+  const arr = (c: Content) => ((c.blocks[ri] as any).itemGroups ??= []);
+  return (
+    <div style={{ borderTop: "1px dashed var(--line)", paddingTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+      <b style={{ fontSize: 12.5 }}>Groupes d'affichage (activités longues composées)</b>
+      {groups.map((g, gi) => (
+        <div key={gi} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
+          <div className="row" style={{ gap: 8 }}>
+            <input style={{ ...field, flex: 1 }} value={g.title} placeholder="Titre du groupe (ex. Activité Expérientielle Longue — …)" onChange={(e) => set((c) => { arr(c)[gi].title = e.target.value; })} />
+            <input style={{ ...field, width: 140 }} value={g.durationLabel ?? ""} placeholder="5 + 20 + 10 min" title="Libellé de durée du groupe (sinon : somme calculée)" onChange={(e) => set((c) => { arr(c)[gi].durationLabel = e.target.value; })} />
+            <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => set((c) => { arr(c).splice(gi, 1); if (!arr(c).length) delete (c.blocks[ri] as any).itemGroups; })}>🗑️</button>
+          </div>
+          <div className="row" style={{ gap: 10, flexWrap: "wrap", marginTop: 8 }}>
+            {items.map((it) => (
+              <label key={it.key} className="row" style={{ gap: 5, alignItems: "center", fontSize: 12 }}>
+                <input type="checkbox" checked={g.keys.includes(it.key)} onChange={(e) => set((c) => { const ks = new Set(arr(c)[gi].keys); e.target.checked ? ks.add(it.key) : ks.delete(it.key); arr(c)[gi].keys = items.map((x) => x.key).filter((k) => ks.has(k)); })} />
+                {it.label.length > 42 ? `${it.label.slice(0, 42)}…` : it.label}
+              </label>
+            ))}
+          </div>
+        </div>
+      ))}
+      <button type="button" className="btn btn--sm" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { arr(c).push({ title: "Activité Expérientielle Longue — ", durationLabel: "", keys: [] }); })}>+ Groupe</button>
+      <span className="muted" style={{ fontSize: 11.5 }}>Les éléments cochés s'affichent indentés sous le titre du groupe, dans l'ordre du parcours. Une micro-session groupée perd sa numérotation « Micro-session X.Y » (elle devient une sous-étape).</span>
+    </div>
   );
 }
 
@@ -613,6 +649,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
               <div className="row" style={{ gap: 10 }}>
                 <div style={{ flex: 1 }}><label style={lbl}>Titre</label><input style={field} value={tv.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.title = e.target.value; })} /></div>
                 <div style={{ width: 120 }}><label style={lbl}>Durée (sec)</label><input style={field} type="number" min={1} value={tv.durationSec ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.durationSec = Number(e.target.value); })} /></div>
+                <div style={{ width: 150 }}><label style={lbl}>Durée MS 0.2 affichée</label><input style={field} placeholder="10 min (vidéo + quiz)" value={p.triggerDuration ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerDuration = e.target.value; })} /></div>
               </div>
               <div><label style={lbl}>Message clé</label><input style={field} value={tv.keyMessage ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.keyMessage = e.target.value; })} /></div>
             </Card>
@@ -766,8 +803,10 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
                 <div key={i} className="row" style={{ gap: 8 }}>
                   <input style={{ ...field, flex: 1 }} value={s.title ?? ""} placeholder={`Section ${i + 1}`} onChange={(e) => set((c) => { c.blocks[ri].payload.sections[i].title = e.target.value; })} />
                   <input style={{ ...field, flex: 2 }} value={s.helpText ?? ""} placeholder="Aide" onChange={(e) => set((c) => { c.blocks[ri].payload.sections[i].helpText = e.target.value; })} />
+                  <input style={{ ...field, width: 90 }} value={s.durationEstimate ?? ""} placeholder="15 min" title="Durée affichée dans la liste Cours" onChange={(e) => set((c) => { c.blocks[ri].payload.sections[i].durationEstimate = e.target.value; })} />
                 </div>
               ))}
+              <span className="muted" style={{ fontSize: 11.5 }}>La section 4 (journal) s'affiche côté apprenant comme l'activité longue regroupant les 6 micro-entrées — sa durée = 6 × 5 min.</span>
             </Card>
           )}
           {p.journal?.entries && (

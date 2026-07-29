@@ -342,8 +342,8 @@ const ms31: MicroSession = {
 
 const ms32: MicroSession = {
   id: "3.2",
-  title: "Productivité hybride dans les organisations africaines",
-  durationEstimate: "10 min",
+  title: "Vidéo 11 — Productivité hybride dans les organisations africaines",
+  durationEstimate: "5 min",
   summaryPoints: [
     "Adapter ses outils et sa communication selon le mode (présentiel/distanciel) en gardant la dimension relationnelle.",
     "Protocole en 4 composantes : asynchrone d'abord, check-in relationnel, protection de la bande passante humaine, clôture de semaine collective.",
@@ -380,7 +380,7 @@ export const n1Full: CourseContent = {
     "À la fin de ce parcours, vous saurez reprendre le contrôle de votre temps dans votre organisation africaine : distinguer l'urgent de l'important, protéger vos priorités réelles, déléguer et dire non avec élégance, et tenir des rituels adaptés à votre réalité. Concrètement, la journée que vous venez de décrire ne se reproduira plus de la même façon.",
   audience:
     "Jeunes professionnels (0–5 ans) dans des organisations africaines, débordés par les interruptions et la culture de l'urgence.",
-  durationEstimate: "~6 h 30 · 15 micro-sessions + 5 activités longues",
+  durationEstimate: "6 h 25 · Bloc 0 20 min · Blocs 1-2 1 h 35 · Bloc 3 1 h 25 · Bloc 4 1 h 30",
   passThreshold: 70,
   certificate: {
     title: "Certificat de Niveau 1 — Gestion du Temps & Productivité en Environnements Professionnels Africains",
@@ -428,6 +428,7 @@ export const n1Full: CourseContent = {
           errorToAvoid:
             "Confondre occupation et productivité — la personne la plus occupée et disponible n'est pas la plus productive, souvent la plus exploitée.",
         }),
+        triggerDuration: "10 min",
         triggerQuiz: {
           questions: [
             {
@@ -839,13 +840,21 @@ export const n1Full: CourseContent = {
       type: "ANCHORING",
       title: "Installer des habitudes durables",
       objective: "Ancrer des habitudes durables adaptées aux réalités africaines, mesurer sa progression et finaliser un plan d'action de 30 jours.",
-      durationEstimate: "~1 h 30 · 3 micro-sessions + 1 activité longue",
+      durationEstimate: "~1 h 25 · 3 micro-sessions + 1 activité longue",
       units: [
         { label: "MS 3.1 — Vidéo 10 + micro-exercice", type: "micro-session", durationMin: 15 },
-        { label: "Vidéo 11 (Productivité hybride) + cas transversal Sylvie", type: "long-activity", durationMin: 30 },
-        { label: "Auto-évaluation (6 critères)", type: "micro-task", durationMin: 10 },
-        { label: "MS 3.3 — Plan d'action 30 jours", type: "micro-session", durationMin: 20 },
-        { label: "MS 3.4 — Quiz final (noté · seuil 70 %)", type: "micro-session", durationMin: 15 },
+        { label: "Activité Expérientielle Longue — Productivité hybride", type: "long-activity", durationMin: 35, children: [
+          { label: "Vidéo 11 — Productivité hybride dans les organisations africaines", type: "micro-task", durationMin: 5 },
+          { label: "Cas transversal Sylvie", type: "micro-task", durationMin: 20 },
+          { label: "Auto-évaluation (6 critères)", type: "micro-task", durationMin: 10 },
+        ] },
+        { label: "MS 3.2 — Plan d'action 30 jours", type: "micro-session", durationMin: 20 },
+        { label: "MS 3.3 — Quiz final (noté · seuil 70 %)", type: "micro-session", durationMin: 15 },
+      ],
+      // Affichage apprenant : la vidéo 3.2, le cas Sylvie et l'auto-évaluation
+      // se présentent comme UNE activité longue (5 + 20 + 10 min).
+      itemGroups: [
+        { title: "Activité Expérientielle Longue — Productivité hybride", durationLabel: "5 + 20 + 10 min", keys: ["3.2", "case", "self"] },
       ],
       badge: {
         type: "ANCHORING",
@@ -857,7 +866,7 @@ export const n1Full: CourseContent = {
         // CAS TRANSVERSAL DE SYNTHÈSE (~20 min · LMS natif) — enchaîné juste
         // après la vidéo « Productivité hybride » (MS 3.2), énoncé complet.
         transversalCase: {
-          title: "Activité Expérientielle Longue — Cas transversal de synthèse",
+          title: "Cas transversal de synthèse",
           subtitle: "Sylvie à Abidjan",
           durationEstimate: "20 min",
           context:
@@ -897,7 +906,7 @@ export const n1Full: CourseContent = {
           summary: [],
         },
         selfAssessment: {
-          title: "Auto-évaluation — 6 critères",
+          title: "Auto-évaluation (6 critères)",
           durationEstimate: "10 min",
           criteria: [
             "Je distingue les urgences réelles des urgences imposées dans mon organisation africaine",
@@ -913,7 +922,7 @@ export const n1Full: CourseContent = {
         // restructuré selon l'énoncé : 3 habitudes séquencées + signal de
         // progression + pair de progression.
         actionPlan30d: {
-          title: "Micro-session 3.3 — Plan d'action 30 jours",
+          title: "Micro-session 3.2 — Plan d'action 30 jours",
           durationEstimate: "20 min",
           intro: "Transformez vos apprentissages en engagements concrets. Repartez de vos exercices précédents (rituel du Cas Sylvie, temps protégé du micro-exercice 1.5) — complétez et ajustez selon votre réalité africaine actuelle.",
           habits: [
@@ -944,7 +953,7 @@ export const n1Full: CourseContent = {
           ],
         },
         finalQuiz: {
-          title: "Micro-session 3.4 — Quiz final",
+          title: "Micro-session 3.3 — Quiz final",
           durationEstimate: "15 min",
           questions: [
             { id: "f1", scenarioText: "Lundi 8h, organisation sénégalaise, 8 tâches dont 3 « urgentes » (collègues) et 2 importantes (mission). Par laquelle commencez-vous ?", options: [
@@ -1009,13 +1018,12 @@ export const n1Full: CourseContent = {
       objective: "Démontrer l'acquisition des fondamentaux en appliquant les apprentissages à une situation réelle dans son contexte professionnel africain.",
       durationEstimate: "~1 h 30 · 4 micro-sessions + 1 activité longue (6 micro-tâches)",
       units: [
-        { label: "MS 4.1 — Section 1 : description de la situation", type: "micro-session", durationMin: 15 },
-        { label: "MS 4.2 — Section 2 : solution mise en œuvre", type: "micro-session", durationMin: 15 },
-        { label: "MS 4.3 — Section 3 : résultat observé", type: "micro-session", durationMin: 15 },
-        { label: "MS 4.4 — Section 4 : apprentissage personnel", type: "micro-session", durationMin: 15 },
+        { label: "Micro-session 4.1 — Section 1 — Description de la situation (~10 lignes)", type: "micro-session", durationMin: 15 },
+        { label: "Micro-session 4.2 — Section 2 — La solution mise en œuvre", type: "micro-session", durationMin: 15 },
+        { label: "Micro-session 4.3 — Section 3 — Résultat observé", type: "micro-session", durationMin: 15 },
         // The 6 journal micro-entries are SUB-UNITS of the 2-week journal long
         // activity (6 × 5 min = its 30 min) — not independent top-level units.
-        { label: "Journal de pratique (2 semaines)", type: "long-activity", durationMin: 30, children: [
+        { label: "Activité Expérientielle Longue — Section 4 — Journal des 2 semaines (6 micro-entrées)", type: "long-activity", durationMin: 30, children: [
           { label: "Journal J+2", type: "micro-task", durationMin: 5 },
           { label: "Journal J+4", type: "micro-task", durationMin: 5 },
           { label: "Journal J+6", type: "micro-task", durationMin: 5 },
@@ -1023,6 +1031,7 @@ export const n1Full: CourseContent = {
           { label: "Journal J+11", type: "micro-task", durationMin: 5 },
           { label: "Journal J+15", type: "micro-task", durationMin: 5 },
         ] },
+        { label: "Micro-session 4.4 — Section 5 — Apprentissage personnel", type: "micro-session", durationMin: 15 },
       ],
       badge: {
         type: "CERTIFICATE",
@@ -1033,11 +1042,11 @@ export const n1Full: CourseContent = {
         projectBrief:
           "Identifier le principal problème de gestion du temps dans votre environnement professionnel africain réel — en repartant de {{moment_ancrage}} — mettre en œuvre une solution concrète adaptée aux codes culturels de votre organisation, et documenter l'impact observé sur votre productivité et votre bien-être sur 14 jours.",
         sections: [
-          { title: "Section 1 — Description de la situation (~10 lignes)", helpText: "Pré-rempli depuis votre Moment d'Ancrage et l'Application terrain du Bloc 2 : contexte africain précis (pays, secteur, organisation), votre rôle, le problème, ses causes et son impact.", prefillFromMomentAncrage: true },
-          { title: "Section 2 — La solution mise en œuvre", helpText: "Outil principal, espace de mise en œuvre (formel/informel), adaptation culturelle africaine réalisée.", prefillFromMomentAncrage: false },
-          { title: "Section 3 — Résultat observé", helpText: "Impact sur votre productivité (concret, chiffré si possible) ; ce que vous avez appris sur les codes africains de gestion du temps.", prefillFromMomentAncrage: false },
-          { title: "Section 4 — Journal des 2 semaines (6 micro-entrées)", helpText: "Les 6 micro-entrées poussées automatiquement (J+2 → J+15), 5 minutes chacune. Chaque micro-entrée non complétée dans les 24h déclenche un rappel bienveillant ancré dans votre Moment d'Ancrage.", prefillFromMomentAncrage: false },
-          { title: "Section 5 — Apprentissage personnel", helpText: "Ce que vous avez compris sur votre relation au temps ; l'obstacle culturel surmonté ou contourné ; les 3 prochaines occasions de reprendre le contrôle ; ce que vous diriez à un pair qui commence ce parcours demain.", prefillFromMomentAncrage: false },
+          { title: "Micro-session 4.1 — Section 1 — Description de la situation (~10 lignes)", durationEstimate: "15 min", helpText: "Pré-rempli depuis votre Moment d'Ancrage et l'Application terrain du Bloc 2 : contexte africain précis (pays, secteur, organisation), votre rôle, le problème, ses causes et son impact.", prefillFromMomentAncrage: true },
+          { title: "Micro-session 4.2 — Section 2 — La solution mise en œuvre", durationEstimate: "15 min", helpText: "Outil principal, espace de mise en œuvre (formel/informel), adaptation culturelle africaine réalisée.", prefillFromMomentAncrage: false },
+          { title: "Micro-session 4.3 — Section 3 — Résultat observé", durationEstimate: "15 min", helpText: "Impact sur votre productivité (concret, chiffré si possible) ; ce que vous avez appris sur les codes africains de gestion du temps.", prefillFromMomentAncrage: false },
+          { title: "Activité Expérientielle Longue — Section 4 — Journal des 2 semaines (6 micro-entrées)", durationEstimate: "30 min", helpText: "Les 6 micro-entrées poussées automatiquement (J+2 → J+15), 5 minutes chacune. Chaque micro-entrée non complétée dans les 24h déclenche un rappel bienveillant ancré dans votre Moment d'Ancrage.", prefillFromMomentAncrage: false },
+          { title: "Micro-session 4.4 — Section 5 — Apprentissage personnel", durationEstimate: "15 min", helpText: "Ce que vous avez compris sur votre relation au temps ; l'obstacle culturel surmonté ou contourné ; les 3 prochaines occasions de reprendre le contrôle ; ce que vous diriez à un pair qui commence ce parcours demain.", prefillFromMomentAncrage: false },
         ],
         journal: {
           // Every journal prompt re-injects the Moment d'Ancrage (Pilier 5.1).

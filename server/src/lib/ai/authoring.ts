@@ -74,6 +74,7 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
             { key: "B", name: "Profil B", description: "Description à rédiger." },
           ],
           triggerVideo: { title: "Vidéo déclencheur", url: "", durationSec: 600, keyMessage: "Message clé.", africanExample: "Exemple africain.", errorToAvoid: "Erreur à éviter.", scriptText: "" },
+          triggerDuration: "",
           triggerQuiz: { questions: [{ id: "t1", text: "Question de profilage ?", options: [{ key: "A", label: "Option A" }, { key: "B", label: "Option B" }] }] },
           progressPeer: { mandatory: true },
         },
@@ -118,11 +119,11 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
         payload: {
           projectBrief: `Réalisez un projet appliqué à votre contexte réel, en repartant de ${T}.`,
           sections: [
-            { title: "Section 1 — Contexte", helpText: "", prefillFromMomentAncrage: true },
-            { title: "Section 2 — Solution", helpText: "", prefillFromMomentAncrage: false },
-            { title: "Section 3 — Impact", helpText: "", prefillFromMomentAncrage: false },
-            { title: "Section 4 — Journal", helpText: "", prefillFromMomentAncrage: false },
-            { title: "Section 5 — Apprentissage", helpText: "", prefillFromMomentAncrage: false },
+            { title: "Section 1 — Contexte", helpText: "", durationEstimate: "", prefillFromMomentAncrage: true },
+            { title: "Section 2 — Solution", helpText: "", durationEstimate: "", prefillFromMomentAncrage: false },
+            { title: "Section 3 — Impact", helpText: "", durationEstimate: "", prefillFromMomentAncrage: false },
+            { title: "Section 4 — Journal", helpText: "", durationEstimate: "", prefillFromMomentAncrage: false },
+            { title: "Section 5 — Apprentissage", helpText: "", durationEstimate: "", prefillFromMomentAncrage: false },
           ],
           journal: {
             entries: [

@@ -3,7 +3,7 @@ import type { CourseContent } from "@kd/shared";
 import { api, engine, store, getIdentity } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
 import { clearCachedPositions, getCachedProgress, getCachedResume, setCachedProgress, setCachedResume, syncSeenBadges, type ProgressSnapshot, type ResumeSnapshot } from "../lib/cache";
-import { blockItems } from "../lib/content";
+import { blockItems, isItemDone } from "../lib/content";
 import { purgeAllAvailability } from "../lib/offline";
 import { remainingSeconds, formatDuration, type Session } from "../lib/format";
 import { navigate, routes } from "../lib/router";
@@ -77,7 +77,7 @@ export function Home({ eid }: { eid: string }) {
   const itemsOf = (b: (typeof blocks)[number]): Session[] => {
     const st = stateOf(b.index);
     const done = new Set(progress?.blocks.find((x) => x.index === b.index)?.completedKeys ?? []);
-    return blockItems(b as any).map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: st === "completed" || done.has(it.key) }));
+    return blockItems(b as any).map((it) => ({ key: it.key, durationSec: it.durationSec ?? 0, done: st === "completed" || isItemDone(it, done) }));
   };
   const remSec = remainingSeconds(blocks.flatMap(itemsOf));
   const currentBlock = blocks.find((b) => stateOf(b.index) === "available");

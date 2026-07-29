@@ -79,6 +79,7 @@ export const n1Minimal: CourseContent = {
           { key: "B", name: "L'Organisateur submergé", description: "Je planifie mais les imprévus détruisent mes plans." },
         ],
         triggerVideo: video("Occupé ou productif ?"),
+        triggerDuration: "",
         triggerQuiz: {
           questions: [
             { id: "q0.1", text: "Comment vivez-vous le temps au travail ?", options: [
@@ -167,11 +168,11 @@ export const n1Minimal: CourseContent = {
       payload: {
         projectBrief: `Identifier le principal problème de gestion du temps dans votre environnement réel, à partir de ${T}, et documenter l'impact sur 14 jours.`,
         sections: [
-          { title: "Contexte (situation de départ)", helpText: "Repartez de votre Moment d'Ancrage.", prefillFromMomentAncrage: true },
-          { title: "Problème prioritaire", helpText: "", prefillFromMomentAncrage: false },
-          { title: "Solution mise en œuvre", helpText: "", prefillFromMomentAncrage: false },
-          { title: "Impact mesuré (14 j)", helpText: "", prefillFromMomentAncrage: false },
-          { title: "Apprentissages", helpText: "", prefillFromMomentAncrage: false },
+          { title: "Contexte (situation de départ)", durationEstimate: "", helpText: "Repartez de votre Moment d'Ancrage.", prefillFromMomentAncrage: true },
+          { title: "Problème prioritaire", durationEstimate: "", helpText: "", prefillFromMomentAncrage: false },
+          { title: "Solution mise en œuvre", durationEstimate: "", helpText: "", prefillFromMomentAncrage: false },
+          { title: "Impact mesuré (14 j)", durationEstimate: "", helpText: "", prefillFromMomentAncrage: false },
+          { title: "Apprentissages", durationEstimate: "", helpText: "", prefillFromMomentAncrage: false },
         ],
         journal: {
           entries: [

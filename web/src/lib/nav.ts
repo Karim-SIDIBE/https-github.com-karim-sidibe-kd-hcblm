@@ -11,7 +11,7 @@
  * incomplete item of the next unlocked block, else null (→ back to the list).
  */
 import type { CourseContent } from "@kd/shared";
-import { blockItems, type BlockItem, type ItemKind } from "./content";
+import { blockItems, isItemDone, type BlockItem, type ItemKind } from "./content";
 import { navigate, routes } from "./router";
 import type { TFn } from "./i18n";
 
@@ -53,7 +53,7 @@ export function nextTarget(
     const at = items.findIndex((it) => it.key === currentKey);
     // Forward only: chaining never sends the learner BACK to an earlier item
     // (that was the « Session suivante » relance la session précédente bug).
-    const next = items.find((it, i) => i > at && it.key !== currentKey && !done.has(it.key));
+    const next = items.find((it, i) => i > at && it.key !== currentKey && !isItemDone(it, done));
     if (next) return { blockIndex, item: next };
   }
 
@@ -64,7 +64,7 @@ export function nextTarget(
     .find((b) => stateOf(b.index) !== "locked");
   if (after) {
     const done = doneOf(after.index);
-    const item = blockItems(after as never, t).find((it) => !done.has(it.key));
+    const item = blockItems(after as never, t).find((it) => !isItemDone(it, done));
     if (item) return { blockIndex: after.index, item };
   }
   return null;
