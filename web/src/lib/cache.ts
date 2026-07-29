@@ -46,6 +46,34 @@ export function clearCachedPositions(eid: string) {
   } catch { /* no storage */ }
 }
 
+// --- in-progress drafts (quiz / case study / scenarios) ----------------------
+// An interruption at question 9 must resume at question 9, not question 1: the
+// answered-so-far state is persisted per (enrolment, activity) and restored on
+// return. `sig` fingerprints the question set — if the materialised questions
+// changed (re-publish, new pool draw), the stale draft is dropped.
+
+export type ActivityDraft = { sig: string; idx: number; answers: Record<string, string>; meta?: Record<string, unknown>; savedAt: number };
+const dKey = (eid: string, slot: string) => `klms_draft_${eid}_${slot}`;
+
+export function loadDraft(eid: string, slot: string, sig: string): ActivityDraft | null {
+  const d = read<ActivityDraft>(dKey(eid, slot));
+  return d && d.sig === sig ? d : null;
+}
+export const saveDraft = (eid: string, slot: string, d: ActivityDraft) => write(dKey(eid, slot), d);
+export function clearDraft(eid: string, slot: string) {
+  try { localStorage.removeItem(dKey(eid, slot)); } catch { /* no storage */ }
+}
+/** Drop every draft of an enrolment (enrolment reset). */
+export function clearDrafts(eid: string) {
+  try {
+    const prefix = `klms_draft_${eid}_`;
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith(prefix)) localStorage.removeItem(k);
+    }
+  } catch { /* no storage */ }
+}
+
 // --- badge "seen" tracking (powers the unlock celebration) -------------------
 
 export type BadgeSnapshot = { type: string; message?: string | null; peerNotified?: boolean };

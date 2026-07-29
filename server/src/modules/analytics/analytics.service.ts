@@ -9,6 +9,7 @@ import { CourseContent, type CourseContent as CourseContentT } from "../../domai
 import { computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
 import { forecastCompletion, type ForecastRow } from "../../domain/engine/forecast.js";
 import { dropoutRisk } from "../../domain/engine/risk.js";
+import { shuffleQuestionOptions } from "../../domain/engine/shuffle.js";
 import { aggregateCompetencies } from "../../domain/engine/competency.js";
 import type { SubAreaScore } from "../../domain/engine/progress.js";
 import { credentialUrl } from "../../lib/credentials/openbadge.js";
@@ -182,9 +183,13 @@ export async function diagnosticReview(enrollmentId: string) {
   if (!enr) return { taken: false as const, wrong: [] };
   const content = CourseContent.parse(enr.courseVersion.content);
   const block = content.blocks.find((b) => b.type === "COMPREHENSION");
-  const qs = block?.type === "COMPREHENSION" ? block.payload.diagnosticQuiz.questions : [];
+  // The learner answered the PER-LEARNER lettering (options shuffled + re-keyed
+  // at materialisation) — rebuild the same view before comparing/stored keys.
+  const raw = block?.type === "COMPREHENSION" ? block.payload.diagnosticQuiz.questions : [];
+  const qs = raw.map((q) => shuffleQuestionOptions(q as never, `${enrollmentId}:diagnostic`)) as typeof raw;
   const wrong = qs
-    .filter((q) => answers[q.id] != null && answers[q.id] !== q.correctKey)
+    // Profiling questions have no wrong answer — they never need revision.
+    .filter((q) => !q.profiling && answers[q.id] != null && answers[q.id] !== q.correctKey)
     .map((q) => ({ id: q.id, subArea: q.subArea ?? null, prompt: q.scenarioText, options: q.options, correctKey: q.correctKey, yourKey: answers[q.id]!, feedback: q.feedbackText }));
   return { taken: true as const, total: qs.length, wrong };
 }

@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { isAnswerCorrect } from "@kd/shared/scoring";
+import { clearDraft, loadDraft, saveDraft } from "../lib/cache";
 import { useT } from "../lib/i18n";
 
 export type QuizQuestion = {
@@ -25,17 +26,27 @@ export type QuestionMeta = Record<string, { timeMs: number; feedbackViewed: bool
  * types (single MCQ, multiple-select, true/false, numeric) with immediate
  * per-question feedback. Answers are type-encoded strings (see @kd/shared/scoring).
  */
-export function Quiz({ questions, onSubmit }: {
+export function Quiz({ questions, onSubmit, draft }: {
   questions: QuizQuestion[];
   onSubmit: (answers: Record<string, string>, meta: QuestionMeta) => void | Promise<void>;
+  /** Persist the in-progress answers so an interruption resumes at the same
+   *  question (per enrolment + quiz); cleared once the quiz is submitted. */
+  draft?: { eid: string; slot: string };
 }) {
   const t = useT();
-  const [idx, setIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [meta, setMeta] = useState<QuestionMeta>({});
+  // Question-set fingerprint: a re-materialised quiz (re-publish, new draw)
+  // silently drops a stale draft instead of restoring mismatched answers.
+  const sig = useMemo(() => questions.map((q) => q.id).join("|"), [questions]);
+  const restored = useMemo(() => (draft ? loadDraft(draft.eid, draft.slot, sig) : null), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [idx, setIdx] = useState(() => Math.min(restored?.idx ?? 0, Math.max(0, questions.length - 1)));
+  const [answers, setAnswers] = useState<Record<string, string>>(() => restored?.answers ?? {});
+  const [meta, setMeta] = useState<QuestionMeta>(() => (restored?.meta as QuestionMeta) ?? {});
   const [phase, setPhase] = useState<"answer" | "feedback">("answer");
   const [busy, setBusy] = useState(false);
   const start = useRef(Date.now());
+  const persist = (nextIdx: number, a: Record<string, string>, m: QuestionMeta) => {
+    if (draft) saveDraft(draft.eid, draft.slot, { sig, idx: nextIdx, answers: a, meta: m as Record<string, unknown>, savedAt: Date.now() });
+  };
 
   const q = questions[idx]!;
   const type = q.type ?? "single";
@@ -53,13 +64,18 @@ export function Quiz({ questions, onSubmit }: {
   const hasAnswer = type === "numeric" || type === "short" ? chosen.trim() !== "" : chosen !== "";
 
   function validate() {
-    setMeta((m) => ({ ...m, [q.id]: { timeMs: Date.now() - start.current, feedbackViewed: true } }));
+    const m = { ...meta, [q.id]: { timeMs: Date.now() - start.current, feedbackViewed: true } };
+    setMeta(m);
     setPhase("feedback");
+    persist(idx, answers, m); // an interruption here resumes at THIS question
   }
   async function next() {
-    if (!last) { setIdx(idx + 1); setPhase("answer"); start.current = Date.now(); return; }
+    if (!last) { persist(idx + 1, answers, meta); setIdx(idx + 1); setPhase("answer"); start.current = Date.now(); return; }
     setBusy(true);
-    try { await onSubmit(answers, meta); } finally { setBusy(false); }
+    try {
+      await onSubmit(answers, meta);
+      if (draft) clearDraft(draft.eid, draft.slot); // submitted — the draft is spent
+    } finally { setBusy(false); }
   }
 
   const pct = ((idx + (phase === "feedback" ? 1 : 0)) / questions.length) * 100;

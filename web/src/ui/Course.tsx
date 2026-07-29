@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { onProgress, rememberEnrollment } from "../lib/autosync";
-import { clearCachedPositions, getCachedProgress, setCachedProgress, syncSeenBadges, type ProgressSnapshot } from "../lib/cache";
+import { clearCachedPositions, clearDrafts, getCachedProgress, setCachedProgress, syncSeenBadges, type ProgressSnapshot } from "../lib/cache";
 import { formatDuration } from "../lib/format";
 import { blockItems, blockDurationSec, isItemDone, ITEM_TYPE, type BlockItem, type ItemKind } from "../lib/content";
 import { availabilityOf, makeAvailable, purgeAllAvailability, removeAvailability, purgeExpired, purgeCompleted, type Availability } from "../lib/offline";
@@ -63,6 +63,7 @@ export function Course({ eid }: { eid: string }) {
         // celebrated some): purge every per-device leftover of the previous run.
         if (Array.isArray(data.badges) && syncSeenBadges(eid, (data.badges as { type: string }[]).map((b) => b.type)) === "reset") {
           clearCachedPositions(eid);
+          clearDrafts(eid);
           await purgeAllAvailability(eid);
           setAvail({}); // the registry is now empty — reflect it immediately
         }

@@ -111,7 +111,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           <button className="hf-btn hf-btn--primary hf-btn--block" onClick={continueNext}>{t("common.continue")}</button>
         </>
       ) : (
-        <Quiz questions={data.questions} onSubmit={onSubmit} />
+        <Quiz questions={data.questions} onSubmit={onSubmit} draft={{ eid, slot: `quiz_${kind}` }} />
       )}
     </div>
   );

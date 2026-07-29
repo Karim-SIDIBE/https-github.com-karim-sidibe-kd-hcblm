@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { engine, store } from "../lib/app";
-import { getCachedProgress, setCachedProgress } from "../lib/cache";
+import { clearDraft, getCachedProgress, loadDraft, saveDraft, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { Breadcrumb } from "./Breadcrumb";
@@ -57,13 +57,13 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   const caseSpec: CaseSpec | null = itemKey === "case" ? (p.caseStudy ?? p.transversalCase ?? null) : null;
   let body: JSX.Element | null = null;
   if (itemKey === "scenarios" && p.guidedScenarios?.length) {
-    body = <Scenarios t={t} title={p.guidedScenariosTitle || t("ci.scenarios")} scenarios={p.guidedScenarios} onFinish={async (d) => { await complete("GUIDED_SCENARIOS", d); }} onClose={() => advance()} />;
+    body = <Scenarios t={t} title={p.guidedScenariosTitle || t("ci.scenarios")} scenarios={p.guidedScenarios} draft={{ eid, slot: `act_${block}_${itemKey}` }} onFinish={async (d) => { await complete("GUIDED_SCENARIOS", d); }} onClose={() => advance()} />;
   } else if (itemKey === "self" && p.selfAssessment) {
     body = <SelfAssessment t={t} title={p.selfAssessment.title || t("ci.self")} criteria={p.selfAssessment.criteria} scale={p.selfAssessment.scale} onFinish={async (d) => { advance(await complete("SELF_ASSESSMENT", d)); }} />;
   } else if (itemKey === "plan" && p.actionPlan30d) {
     body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} intro={p.actionPlan30d.intro || ""} habits={p.actionPlan30d.habits} onFinish={async (d) => { advance(await complete("ACTION_PLAN", d)); }} />;
   } else if (caseSpec && (caseSpec.structuredSteps?.length ?? 0) > 0) {
-    body = <StructuredCase t={t} caseStudy={caseSpec} onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
+    body = <StructuredCase t={t} caseStudy={caseSpec} draft={{ eid, slot: `act_${block}_${itemKey}` }} onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
   } else if (caseSpec) {
     body = <CaseStudy t={t} caseStudy={caseSpec as { title: string; steps: string[] }} onFinish={async (d) => { advance(await complete("CASE_STUDY", d)); }} />;
   }
@@ -73,25 +73,31 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
 }
 
 /** Guided scenarios: one situation at a time, immediate feedback per step. */
-function Scenarios({ t, title, scenarios, onFinish, onClose }: {
+function Scenarios({ t, title, scenarios, draft, onFinish, onClose }: {
   t: TFn; title: string; scenarios: Scenario[];
+  draft?: { eid: string; slot: string };
   onFinish: (data: unknown) => Promise<void>; onClose: () => void;
 }) {
   const steps = useMemo(() => scenarios.flatMap((sc, si) => sc.steps.map((st, j) => ({ sc, st, first: j === 0, key: `s${si + 1}q${j + 1}` }))), [scenarios]);
-  const [idx, setIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Resume an interrupted run at the step reached (draft keyed per enrolment).
+  const sig = useMemo(() => steps.map((s) => s.key).join("|"), [steps]);
+  const restored = useMemo(() => (draft ? loadDraft(draft.eid, draft.slot, sig) : null), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [idx, setIdx] = useState(() => Math.min(restored?.idx ?? 0, Math.max(0, steps.length - 1)));
+  const [answers, setAnswers] = useState<Record<string, string>>(() => restored?.answers ?? {});
   const [phase, setPhase] = useState<"answer" | "feedback" | "done">("answer");
   const [busy, setBusy] = useState(false);
+  const persist = (nextIdx: number, a: Record<string, string>) => { if (draft) saveDraft(draft.eid, draft.slot, { sig, idx: nextIdx, answers: a, savedAt: Date.now() }); };
 
   const cur = steps[idx]!;
   const chosen = answers[cur.key] ?? "";
   const correctCount = steps.filter((s) => answers[s.key] === s.st.correctKey).length;
 
   async function next() {
-    if (idx + 1 < steps.length) { setIdx(idx + 1); setPhase("answer"); return; }
+    if (idx + 1 < steps.length) { persist(idx + 1, answers); setIdx(idx + 1); setPhase("answer"); return; }
     setBusy(true);
     try {
       await onFinish({ answers, correct: correctCount, total: steps.length });
+      if (draft) clearDraft(draft.eid, draft.slot);
       setPhase("done");
     } finally { setBusy(false); }
   }
@@ -135,7 +141,7 @@ function Scenarios({ t, title, scenarios, onFinish, onClose }: {
             );
           })}
         </div>
-        {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!chosen} onClick={() => setPhase("feedback")}>{t("quiz.validate")}</button>}
+        {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!chosen} onClick={() => { persist(idx, answers); setPhase("feedback"); }}>{t("quiz.validate")}</button>}
         {phase === "feedback" && (
           <div className="stack pt-reveal">
             <span className={`hf-pill ${chosen === cur.st.correctKey ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{chosen === cur.st.correctKey ? t("quiz.good") : t("quiz.review")}</span>
@@ -227,8 +233,9 @@ function ActionPlan({ t, title, intro, habits, onFinish }: {
  * questions never marked wrong) and open reflections (saved for the Bloc 4
  * certification project). Ends with the « résumé des apprentissages clés ».
  */
-function StructuredCase({ t, caseStudy, onFinish, onClose }: {
+function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
   t: TFn; caseStudy: CaseSpec;
+  draft?: { eid: string; slot: string };
   onFinish: (data: unknown) => Promise<unknown>; onClose: () => void;
 }) {
   const steps = caseStudy.structuredSteps ?? [];
@@ -236,10 +243,14 @@ function StructuredCase({ t, caseStudy, onFinish, onClose }: {
     () => steps.flatMap((st, si) => st.questions.map((q, qi) => ({ st, si, q, first: qi === 0 }))),
     [steps],
   );
-  const [idx, setIdx] = useState(-1); // -1 = context screen
-  const [answers, setAnswers] = useState<Record<string, string>>({});
+  // Resume an interrupted case at the question reached (draft per enrolment).
+  const sig = useMemo(() => flat.map((f) => f.q.id).join("|"), [flat]);
+  const restored = useMemo(() => (draft ? loadDraft(draft.eid, draft.slot, sig) : null), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [idx, setIdx] = useState(() => (restored ? Math.min(restored.idx, Math.max(0, flat.length - 1)) : -1)); // -1 = context screen
+  const [answers, setAnswers] = useState<Record<string, string>>(() => restored?.answers ?? {});
   const [phase, setPhase] = useState<"answer" | "feedback" | "done">("answer");
   const [busy, setBusy] = useState(false);
+  const persist = (nextIdx: number, a: Record<string, string>) => { if (draft) saveDraft(draft.eid, draft.slot, { sig, idx: nextIdx, answers: a, savedAt: Date.now() }); };
 
   const total = flat.length;
   const cur = idx >= 0 ? flat[idx] : undefined;
@@ -252,11 +263,12 @@ function StructuredCase({ t, caseStudy, onFinish, onClose }: {
     : false;
 
   async function next() {
-    if (idx + 1 < total) { setIdx(idx + 1); setPhase("answer"); return; }
+    if (idx + 1 < total) { persist(idx + 1, answers); setIdx(idx + 1); setPhase("answer"); return; }
     setBusy(true);
     try {
       const open = Object.fromEntries(flat.filter((f) => f.q.kind === "open").map((f) => [f.q.id, (answers[f.q.id] ?? "").trim()]));
       await onFinish({ answers, open, correct: correctCount, total: mcqs.length });
+      if (draft) clearDraft(draft.eid, draft.slot);
       setPhase("done");
     } finally { setBusy(false); }
   }
@@ -343,7 +355,7 @@ function StructuredCase({ t, caseStudy, onFinish, onClose }: {
           </div>
         )}
 
-        {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canValidate} onClick={() => setPhase("feedback")}>{t("quiz.validate")}</button>}
+        {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canValidate} onClick={() => { persist(idx, answers); setPhase("feedback"); }}>{t("quiz.validate")}</button>}
         {phase === "feedback" && (
           <div className="stack pt-reveal">
             {cur!.q.kind === "mcq" && (
