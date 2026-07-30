@@ -11,7 +11,7 @@
  */
 import { z } from "zod";
 import { env } from "../../config/env.js";
-import { aiAvailable, callClaudeText, extractJson, type ClaudeRequest } from "./client.js";
+import { aiAvailable, callClaudeText, extractJson, stripMarkdown, type ClaudeRequest } from "./client.js";
 
 // ---------------------------------------------------------------------------
 // Formative feedback
@@ -34,10 +34,13 @@ export type FormativeResult = { feedback: string; aiGenerated: boolean; provider
 
 const FORMATIVE_SYSTEM =
   "Tu es un coach pédagogique bienveillant pour des professionnels en environnements africains (gestion du " +
-  "temps). Tu donnes un retour FORMATIF sur une production écrite : 2 à 3 points forts concrets, puis 2 à 3 " +
-  "pistes d'amélioration actionnables, en français, à la 2e personne du pluriel, jamais culpabilisant. Tu " +
+  "temps). Tu donnes un retour FORMATIF sur une production écrite : exactement 2 points forts concrets, puis " +
+  "2 pistes d'amélioration actionnables, en français, à la 2e personne du pluriel, jamais culpabilisant. Tu " +
   "rattaches tes remarques aux compétences visées et au contexte africain réel de l'apprenant. Tu ne donnes " +
-  "PAS de note chiffrée.";
+  "PAS de note chiffrée. LONGUEUR : 250 mots maximum au total — sois sélectif, chaque point en 2 à 3 phrases, " +
+  "et termine toujours ta dernière phrase (jamais de plan interrompu). FORMAT : texte brut uniquement, " +
+  "l'interface n'affiche PAS le Markdown — aucun #, ##, **, *, ---, ni titre : des paragraphes courts, " +
+  "éventuellement des puces « • ».";
 
 export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
   const comps = input.competencies.map((c) => `${c.code} — ${c.label}`).join(" ; ");
@@ -49,12 +52,14 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     `"""${input.submissionText}"""`,
     `Compétences visées : ${comps}.`,
     input.momentAncrage ? `Moment d'Ancrage de l'apprenant : « ${input.momentAncrage} ».` : "",
-    "Rédige un retour formatif structuré, SPÉCIFIQUE à cette réponse et à cette consigne : cite des éléments précis de la réponse (reformule-les), évalue leur adéquation à la consigne, puis donne des pistes concrètes ancrées dans le contexte du bloc. Jamais de retour générique.",
+    "Rédige un retour formatif court (250 mots max, texte brut sans Markdown), SPÉCIFIQUE à cette réponse et à cette consigne : cite des éléments précis de la réponse (reformule-les), évalue leur adéquation à la consigne, puis donne des pistes concrètes ancrées dans le contexte du bloc. Jamais de retour générique.",
   ].filter(Boolean).join("\n");
 
   return {
     model: env.AI_MODEL,
-    max_tokens: 600,
+    // Safety margin, not a shaping constraint: the 250-word target lives in the
+    // system prompt; the cap only guarantees the model never stops mid-sentence.
+    max_tokens: 1024,
     system: [{ type: "text", text: FORMATIVE_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
@@ -94,7 +99,7 @@ function fallbackFormative(input: FormativeInput): string {
 export async function generateFormativeFeedback(input: FormativeInput): Promise<FormativeResult> {
   if (!aiAvailable()) return { feedback: fallbackFormative(input), aiGenerated: false, provider: "heuristic" };
   try {
-    const text = await callClaudeText(buildFormativeRequest(input));
+    const text = stripMarkdown(await callClaudeText(buildFormativeRequest(input)));
     return { feedback: text, aiGenerated: true, provider: env.AI_MODEL };
   } catch {
     return { feedback: fallbackFormative(input), aiGenerated: false, provider: "heuristic (ai-fallback)" };

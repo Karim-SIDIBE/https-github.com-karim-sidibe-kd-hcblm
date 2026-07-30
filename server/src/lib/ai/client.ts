@@ -37,6 +37,21 @@ export async function callClaudeText(request: ClaudeRequest): Promise<string> {
   return text;
 }
 
+/**
+ * Strip Markdown decoration from learner-facing AI text — the PWA renders
+ * plain text (whiteSpace: pre-wrap), so `#`/`**` would show up literally.
+ * The prompts already forbid Markdown; this is the guarantee.
+ */
+export function stripMarkdown(text: string): string {
+  return text
+    .replace(/^#{1,6}\s+/gm, "")          // heading markers
+    .replace(/^\s*-{3,}\s*$/gm, "")        // horizontal rules
+    .replace(/\*\*(.+?)\*\*/g, "$1")       // bold
+    .replace(/(^|\s)\*(\S[^*\n]*?)\*(?=[\s.,;:!?)]|$)/g, "$1$2") // italic (keeps « 2 * 3 »)
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Extract the first JSON object/array from a model response (defensive). */
 export function extractJson(text: string): unknown {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
