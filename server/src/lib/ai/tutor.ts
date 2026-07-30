@@ -7,7 +7,7 @@
  * instead of hallucinating. Answers are personalized with the learner's PAM.
  */
 import { env } from "../../config/env.js";
-import { aiAvailable, callClaudeText, type ClaudeRequest } from "./client.js";
+import { aiAvailable, callClaudeText, stripMarkdown, type ClaudeRequest } from "./client.js";
 import { tokenize } from "./embeddings.js";
 
 export type RetrievedChunk = { score: number; blockIndex: number | null; path: string; text: string };
@@ -34,6 +34,7 @@ const SYSTEM =
   "Règles STRICTES : tu réponds UNIQUEMENT à partir des EXTRAITS de cours fournis ci-dessous. " +
   "Si les extraits ne permettent pas de répondre, dis-le honnêtement et invite à reformuler ou à consulter le bloc concerné — n'invente jamais. " +
   "Tu réponds en français, de façon concise et encourageante, et tu cites les blocs utilisés (ex. « Bloc 1 »). " +
+  "FORMAT : texte brut uniquement, l'interface n'affiche pas le Markdown — aucun #, **, ni titre ; termine toujours ta dernière phrase. " +
   "Quand c'est pertinent, relie ta réponse à la situation personnelle de l'apprenant (son Moment d'Ancrage).";
 
 function contextBlock(chunks: RetrievedChunk[]): string {
@@ -77,7 +78,7 @@ export async function answer(question: string, chunks: RetrievedChunk[], history
     return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: "extractive", citations };
   }
   try {
-    const text = await callClaudeText(buildTutorRequest(question, chunks, history, momentAncrage));
+    const text = stripMarkdown(await callClaudeText(buildTutorRequest(question, chunks, history, momentAncrage)));
     return { text, grounded: true, aiGenerated: true, provider: env.AI_MODEL, citations };
   } catch {
     return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: "extractive (ai-fallback)", citations };
