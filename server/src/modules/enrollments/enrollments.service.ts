@@ -9,7 +9,8 @@ import { Prisma, type ItemType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { CourseContent, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
-import { computeProgress, scoreQuiz, diagnosticProfile, type CompletionRecord } from "../../domain/engine/progress.js";
+import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
+import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
@@ -17,7 +18,9 @@ import { SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { activityId, buildStatement, quizResult, secondsToIsoDuration, XAPI_EXT, type VerbKey } from "../../domain/engine/xapi.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
-import { issueCredential } from "../credentials/credentials.service.js";
+import { issueCredential, certificate as certificatePdfOf } from "../credentials/credentials.service.js";
+import { credentialUrl } from "../../lib/credentials/openbadge.js";
+import { sendSmtpEmail, smtpConfigured } from "../../lib/notify/email.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
@@ -253,20 +256,90 @@ async function upsertCompletion(
 /** Exercise interaction metadata for granular xAPI (§5.3 / §5.4). */
 export type ExerciseMeta = { timeMs?: number; feedbackViewed?: boolean; response?: string; correct?: boolean };
 
+/** Plain text of a stored section/deliverable payload. */
+function textOfData(data: unknown): string {
+  if (typeof data === "string") return data.trim();
+  if (data && typeof data === "object" && typeof (data as { text?: unknown }).text === "string") return ((data as { text: string }).text).trim();
+  return "";
+}
+
+/**
+ * Progressive Bloc 4 (« Amélioration » — déblocage séquentiel) :
+ *  - a journal micro-entry opens only once its J+n date is reached, `n` days
+ *    after the completion of micro-session 4.3 (the notification schedule) ;
+ *  - Section 5 (the final micro-session) opens only after sections 1–3 AND the
+ *    six journal entries.
+ * Server-enforced so the offline queue can never bypass the sequence.
+ */
+function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, itemType: ItemType, itemKey: string) {
+  const cert = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert?.type !== "CERTIFICATION" || blockIndex !== cert.index) return;
+  const done = new Set(ctx.enrollment.completions.filter((c) => c.blockIndex === blockIndex).map((c) => c.itemKey));
+
+  if (itemType === "JOURNAL_ENTRY") {
+    const day = Number(/^J\+(\d+)$/.exec(itemKey)?.[1] ?? Number.NaN);
+    if (Number.isNaN(day)) return;
+    const started = ctx.enrollment.journalStartedAt;
+    if (!started) {
+      throw new EngineError(423, "journal_locked", "Le journal des 2 semaines s'ouvre après la micro-session 4.3 (Section 3).");
+    }
+    const unlockAt = journalUnlockAt(started, day);
+    if (Date.now() < unlockAt.getTime()) {
+      throw new EngineError(423, "journal_locked", `La micro-entrée J+${day} s'ouvrira le ${unlockAt.toLocaleDateString("fr-FR")} — vous serez notifié·e.`);
+    }
+  }
+
+  if (itemType === "PROJECT" && itemKey === PROJECT_FINAL_SECTION_KEY) {
+    const missingSections = [0, 1, 2].map(projectSectionKey).filter((k) => !done.has(k));
+    const missingJournal = cert.payload.journal.entries.map((e) => `J+${e.day}`).filter((k) => !done.has(k));
+    if (missingSections.length > 0 || missingJournal.length > 0) {
+      throw new EngineError(423, "section_locked", "La Section 5 s'ouvre après les sections 1 à 3 et les 6 micro-entrées du journal.");
+    }
+  }
+}
+
+/** Assemble the full certification project from the per-section completions:
+ *  sections 1–3 (stored), the auto-composed journal chapter (Section 4,
+ *  750–850 caractères) and the just-submitted Section 5. */
+function assembleProjectContent(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, finalData: unknown) {
+  const cert = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert?.type !== "CERTIFICATION") return { text: textOfData(finalData) };
+  const byKey = new Map(ctx.enrollment.completions.filter((c) => c.blockIndex === blockIndex).map((c) => [c.itemKey, c] as const));
+  const journalTexts = cert.payload.journal.entries
+    .map((e) => ({ day: e.day, text: textOfData(byKey.get(`J+${e.day}`)?.data) }))
+    .filter((e) => e.text);
+  const section4 = composeJournalChapter(journalTexts);
+  const parts = cert.payload.sections.map((sec, i) => ({
+    title: sec.title,
+    text: i === 3 ? section4 : i === 4 ? textOfData(finalData) : textOfData(byKey.get(projectSectionKey(i))?.data),
+  }));
+  // `sections` stays a { title → text } record — the evaluator console and the
+  // rubric-suggestion reader both consume that historical shape.
+  return {
+    sections: Object.fromEntries(parts.map((sec) => [sec.title, sec.text])),
+    section4,
+    text: parts.map((sec) => `${sec.title}\n${sec.text}`).join("\n\n"),
+  };
+}
+
 export async function completeItem(
   enrollmentId: string, blockIndex: number, itemType: ItemType, itemKey: string, data?: unknown, meta: ExerciseMeta = {},
 ) {
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
+  assertBloc4ItemUnlocked(ctx, blockIndex, itemType, itemKey);
   const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
   await upsertCompletion(enrollmentId, blockIndex, itemType, itemKey, null, data ?? null);
-  // Bloc 4 project: open/refresh the certification-project record (starts the
-  // 5-business-day SLA clock). The full lifecycle is kept in-platform (§6.3).
-  if (itemType === "PROJECT") {
+  // Bloc 4 project (progressive): sections 1–3 and 5 are their own completions;
+  // ONLY the final section (Section 5) assembles the whole project — the four
+  // typed sections + the journal chapter (auto-composed Section 4) — and opens
+  // the certification-project record for human evaluation (starts the SLA clock).
+  if (itemType === "PROJECT" && itemKey === PROJECT_FINAL_SECTION_KEY) {
+    const assembled = assembleProjectContent(ctx, blockIndex, data);
     await prisma.projectSubmission.upsert({
       where: { enrollmentId },
-      update: { submittedAt: new Date(), content: (data ?? null) as Prisma.InputJsonValue, revisionStatus: "SUBMITTED", slaAlertedAt: null },
-      create: { enrollmentId, blockIndex, content: (data ?? null) as Prisma.InputJsonValue },
+      update: { submittedAt: new Date(), content: assembled as Prisma.InputJsonValue, revisionStatus: "SUBMITTED", slaAlertedAt: null },
+      create: { enrollmentId, blockIndex, content: assembled as Prisma.InputJsonValue },
     });
     await dispatchEvent("PROJECT_SUBMITTED", {
       enrollmentId, learnerId: ctx.enrollment.userId, courseId: ctx.enrollment.courseId, blockIndex,
@@ -543,10 +616,13 @@ export async function reconcile(enrollmentId: string) {
     });
     // Mint a verifiable credential (OB 2.0 + signed OB 3.0). Non-fatal.
     try {
-      await issueCredential({
+      const cred = await issueCredential({
         badgeId: badge.id, enrollmentId, recipientEmail: enrollment.user.email, recipientName: enrollment.user.name,
         courseSlug: enrollment.course.slug, badgeType: type, content, block,
       });
+      // The FINAL certification (distinct from block badges) is also delivered
+      // as a PDF: e-mailed with the verification link, downloadable in-app.
+      if (type === "CERTIFICATE") await sendCertificateEmail(enrollment.user.email, enrollment.user.name, content.certificate.title, cred.id, enrollmentId);
     } catch (e) {
       console.error(`[credential] issuance failed for badge ${badge.id}:`, e instanceof Error ? e.message : e);
     }
@@ -578,11 +654,15 @@ export async function reconcile(enrollmentId: string) {
     newlyIssued.push({ type, message });
   }
 
-  // Anchor the journal trigger schedule when the certification block first
-  // unlocks ("block start" — Pilier 5.1).
+  // Anchor the journal trigger schedule on the COMPLETION of micro-session 4.3
+  // (Section 3) — the J+2 → J+15 micro-entries are pushed and unlocked from
+  // that date (« Amélioration » — déblocage progressif du Bloc 4).
   const cert = content.blocks.find((b) => b.type === "CERTIFICATION");
-  if (cert && !enrollment.journalStartedAt && progress.blocks[cert.index]?.state !== "locked") {
-    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { journalStartedAt: new Date() } });
+  let journalStartedAt = enrollment.journalStartedAt;
+  const section3Done = cert && enrollment.completions.some((c) => c.blockIndex === cert.index && c.itemKey === projectSectionKey(2));
+  if (cert && !journalStartedAt && section3Done) {
+    journalStartedAt = new Date();
+    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { journalStartedAt } });
   }
 
   // Course completion → CERTIFIED.
@@ -602,7 +682,35 @@ export async function reconcile(enrollmentId: string) {
     momentAncrageCaptured: Boolean(enrollment.momentAncrage),
     learnerName: enrollment.user.name,
     peer: enrollment.peerName ? { name: enrollment.peerName, notified: badges.length > 0 } : null,
+    /// Anchor of the Bloc 4 journal schedule (completion of 4.3) — lets the
+    /// client display each micro-entry's unlock date.
+    journalStartedAt: journalStartedAt ? journalStartedAt.toISOString() : null,
   };
+}
+
+/** E-mail the final certification as a PDF attachment (verification link in the
+ *  body). Direct SMTP when configured (attachments); queued link-only otherwise.
+ *  Best-effort — issuance never fails because of the mail. */
+async function sendCertificateEmail(email: string, name: string, certTitle: string, credentialId: string, enrollmentId: string) {
+  const verify = credentialUrl(credentialId);
+  const body = [
+    `Félicitations ${name} !`,
+    ``,
+    `Votre certification « ${certTitle} » est validée. Vous trouverez votre certificat en pièce jointe (PDF).`,
+    ``,
+    `Lien de vérification publique : ${verify}`,
+    `Vous pouvez aussi la télécharger à tout moment depuis l'onglet Badges de la plateforme, et l'ajouter à votre profil LinkedIn.`,
+  ].join("\n");
+  try {
+    if (smtpConfigured()) {
+      const pdf = await certificatePdfOf(credentialId);
+      await sendSmtpEmail(email, `Votre certification — ${certTitle}`, body, [{ filename: "certification.pdf", content: pdf, contentType: "application/pdf" }]);
+    } else {
+      await enqueueNotification({ enrollmentId, recipientKind: "LEARNER", recipient: email, channel: "EMAIL", subject: `Votre certification — ${certTitle}`, body, provider: "certificate" });
+    }
+  } catch (e) {
+    console.error("[certificate] e-mail failed:", e instanceof Error ? e.message : e);
+  }
 }
 
 // --- auto-resume + position (Pilier 6.2) ------------------------------------
@@ -723,3 +831,36 @@ export async function listEnrollmentsForUser(userId: string) {
     };
   });
 }
+
+// --- progressive Bloc 4 state + transcript (« Amélioration » lot) ------------
+
+/** Everything the Project screen needs to render the PROGRESSIVE Bloc 4:
+ *  per-section completion + stored text, the journal schedule (unlock dates),
+ *  the auto-composed Section 4 chapter, and whether Section 5 is open. */
+export async function projectState(enrollmentId: string) {
+  const ctx = await loadContext(enrollmentId);
+  const cert = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert?.type !== "CERTIFICATION") throw new EngineError(409, "no_block", "Bloc 4 absent");
+  const byKey = new Map(ctx.enrollment.completions.filter((c) => c.blockIndex === cert.index).map((c) => [c.itemKey, c] as const));
+  const started = ctx.enrollment.journalStartedAt;
+
+  const journal = cert.payload.journal.entries.map((e) => {
+    const done = byKey.has(`J+${e.day}`);
+    const unlocksAt = started ? journalUnlockAt(started, e.day) : null;
+    return { day: e.day, done, unlocksAt: unlocksAt ? unlocksAt.toISOString() : null, unlocked: done || (unlocksAt != null && Date.now() >= unlocksAt.getTime()) };
+  });
+  const journalDone = journal.every((j) => j.done);
+  const journalTexts = cert.payload.journal.entries
+    .map((e) => ({ day: e.day, text: textOfData(byKey.get(`J+${e.day}`)?.data) }))
+    .filter((e) => e.text);
+
+  const sections = cert.payload.sections.map((sec, i) => {
+    if (i === 3) return { key: "journal", title: sec.title, helpText: sec.helpText, auto: true as const, done: journalDone, text: composeJournalChapter(journalTexts), locked: false };
+    const key = projectSectionKey(i);
+    const locked = i === 4 && (!journalDone || [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k)));
+    return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: textOfData(byKey.get(key)?.data), locked };
+  });
+
+  return { sections, journal, journalStartedAt: started ? started.toISOString() : null, finalSectionKey: PROJECT_FINAL_SECTION_KEY };
+}
+

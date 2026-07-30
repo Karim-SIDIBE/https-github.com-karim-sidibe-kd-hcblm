@@ -3,6 +3,8 @@ import { engine, store } from "../lib/app";
 import { clearDraft, getCachedProgress, loadDraft, saveDraft, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
+import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
+import { api } from "../lib/app";
 import { Breadcrumb } from "./Breadcrumb";
 import { useT, type TFn } from "../lib/i18n";
 
@@ -63,7 +65,9 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   } else if (itemKey === "plan" && p.actionPlan30d) {
     body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} intro={p.actionPlan30d.intro || ""} habits={p.actionPlan30d.habits} onFinish={async (d) => { advance(await complete("ACTION_PLAN", d)); }} />;
   } else if (caseSpec && (caseSpec.structuredSteps?.length ?? 0) > 0) {
-    body = <StructuredCase t={t} caseStudy={caseSpec} draft={{ eid, slot: `act_${block}_${itemKey}` }} onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
+    body = <StructuredCase t={t} caseStudy={caseSpec} draft={{ eid, slot: `act_${block}_${itemKey}` }}
+      aiFeedback={async () => (await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey }))?.feedback ?? null}
+      onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
   } else if (caseSpec) {
     body = <CaseStudy t={t} caseStudy={caseSpec as { title: string; steps: string[] }} onFinish={async (d) => { advance(await complete("CASE_STUDY", d)); }} />;
   }
@@ -197,7 +201,16 @@ function ActionPlan({ t, title, intro, habits, onFinish }: {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const vkey = (hi: number, f: string) => `${hi}:${f}`;
-  const allDone = habits.every((h, hi) => h.fields.every((f) => (values[vkey(hi, f)] ?? "").trim().length > 0));
+  const quality: string | null = (() => {
+    for (const [hi, h] of habits.entries()) for (const f of h.fields) {
+      const v = (values[vkey(hi, f)] ?? "").trim();
+      if (!v) continue;
+      const r = assessmentReason(assessText(v, { requireNumber: fieldExpectsNumber(f) }), t);
+      if (r) return `${f} — ${r}`;
+    }
+    return null;
+  })();
+  const allDone = quality == null && habits.every((h, hi) => h.fields.every((f) => (values[vkey(hi, f)] ?? "").trim().length > 0));
 
   async function submit() {
     setBusy(true);
@@ -233,11 +246,13 @@ function ActionPlan({ t, title, intro, habits, onFinish }: {
  * questions never marked wrong) and open reflections (saved for the Bloc 4
  * certification project). Ends with the « résumé des apprentissages clés ».
  */
-function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
+function StructuredCase({ t, caseStudy, draft, aiFeedback, onFinish, onClose }: {
   t: TFn; caseStudy: CaseSpec;
   draft?: { eid: string; slot: string };
+  aiFeedback?: () => Promise<string | null>;
   onFinish: (data: unknown) => Promise<unknown>; onClose: () => void;
 }) {
+  const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
   const steps = caseStudy.structuredSteps ?? [];
   const flat = useMemo(
     () => steps.flatMap((st, si) => st.questions.map((q, qi) => ({ st, si, q, first: qi === 0 }))),
@@ -258,8 +273,10 @@ function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
   const mcqs = flat.filter((f) => f.q.kind === "mcq" && !f.q.allValid);
   const correctCount = mcqs.filter((f) => answers[f.q.id] === f.q.correctKey).length;
 
+  const openQuality = cur && cur.q.kind === "open" && chosen.trim().length >= (cur.q.minChars ?? 20)
+    ? assessmentReason(assessText(chosen, { minWords: 3 }), t) : null;
   const canValidate = cur
-    ? cur.q.kind === "mcq" ? chosen !== "" : chosen.trim().length >= (cur.q.minChars ?? 20)
+    ? cur.q.kind === "mcq" ? chosen !== "" : chosen.trim().length >= (cur.q.minChars ?? 20) && !openQuality
     : false;
 
   async function next() {
@@ -270,6 +287,10 @@ function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
       await onFinish({ answers, open, correct: correctCount, total: mcqs.length });
       if (draft) clearDraft(draft.eid, draft.slot);
       setPhase("done");
+      if (aiFeedback && navigator.onLine && Object.values(open).some((v) => v)) {
+        setAi({ loading: true, text: null });
+        try { setAi({ loading: false, text: await aiFeedback() }); } catch { setAi({ loading: false, text: null }); }
+      }
     } finally { setBusy(false); }
   }
 
@@ -285,6 +306,13 @@ function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
           <div className="hf-card hf-card--mint stack">
             <strong className="h4">{t("act.caseSummary")}</strong>
             <ul style={{ margin: 0, paddingLeft: 20 }}>{caseStudy.summary!.map((s, i) => <li key={i} className="body">{s}</li>)}</ul>
+          </div>
+        )}
+        {ai.loading && <p className="meta">✨ {t("ex.aiLoading")}</p>}
+        {ai.text && (
+          <div className="hf-card hf-card--icy">
+            <div className="eyebrow">✨ {t("ex.aiTitle")}</div>
+            <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{ai.text}</p>
           </div>
         )}
         <button className="hf-btn hf-btn--primary hf-btn--block" onClick={onClose}>{t("common.continue")}</button>
@@ -348,13 +376,14 @@ function StructuredCase({ t, caseStudy, draft, onFinish, onClose }: {
 
         {cur!.q.kind === "open" && (
           <div className="hf-textwrap">
-            <textarea className="hf-field" value={chosen} disabled={phase !== "answer"} placeholder={t("act.openAnswerPh")} style={{ minHeight: 130 }}
+            <textarea className="hf-field" spellCheck lang="fr" value={chosen} disabled={phase !== "answer"} placeholder={t("act.openAnswerPh")} style={{ minHeight: 130 }}
               onChange={(e) => setAnswers((a) => ({ ...a, [cur!.q.id]: e.target.value }))}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length} / {cur!.q.minChars ?? 20}</span>
           </div>
         )}
 
+        {openQuality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{openQuality}</p>}
         {phase === "answer" && <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canValidate} onClick={() => { persist(idx, answers); setPhase("feedback"); }}>{t("quiz.validate")}</button>}
         {phase === "feedback" && (
           <div className="stack pt-reveal">
@@ -381,7 +410,8 @@ function CaseStudy({ t, caseStudy, onFinish }: {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const MIN = 150;
-  const ok = text.trim().length >= MIN;
+  const quality = text.trim().length >= MIN ? assessmentReason(assessText(text, { minWords: 5 }), t) : null;
+  const ok = text.trim().length >= MIN && !quality;
 
   async function submit() {
     setBusy(true);
@@ -405,6 +435,7 @@ function CaseStudy({ t, caseStudy, onFinish }: {
             onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
           <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {MIN}</span>
         </div>
+        {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
         <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!ok || busy} onClick={() => void submit()}>{busy ? "…" : t("dl.submit")}</button>
       </div>
     </div>

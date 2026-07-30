@@ -45,6 +45,36 @@ export async function transcript(enrollmentId: string) {
   const progress = computeProgress(content, records(e.completions), Boolean(e.momentAncrage));
 
   const score = (blockIndex: number, key: string) => e.completions.find((c) => c.blockIndex === blockIndex && c.itemKey === key)?.scorePct ?? null;
+
+  // Relevé de résultats (« Amélioration » lot) — one row per scored quiz or
+  // graded activity (score %, or correct/total for the non-graded checks),
+  // labelled from the content, in completion order.
+  const rowLabels = new Map<string, { label: string; scored: boolean }>();
+  for (const b of content.blocks) {
+    if (b.type === "COMPREHENSION") {
+      rowLabels.set(`${b.index}:diagnostic`, { label: b.payload.diagnosticQuiz.title || "Quiz diagnostique", scored: true });
+      if (b.payload.caseStudy) rowLabels.set(`${b.index}:case`, { label: b.payload.caseStudy.subtitle || b.payload.caseStudy.title, scored: false });
+    } else if (b.type === "PRACTICE") {
+      if (b.payload.interBlockQuiz) rowLabels.set(`${b.index}:interblock`, { label: b.payload.interBlockQuiz.title || "Quiz interbloc", scored: false });
+      if (b.payload.guidedScenarios.length) rowLabels.set(`${b.index}:scenarios`, { label: b.payload.guidedScenariosTitle || "Mises en situation guidées", scored: false });
+    } else if (b.type === "ANCHORING") {
+      rowLabels.set(`${b.index}:final`, { label: b.payload.finalQuiz.title || "Quiz final", scored: true });
+      if (b.payload.transversalCase) rowLabels.set(`${b.index}:case`, { label: b.payload.transversalCase.subtitle || b.payload.transversalCase.title, scored: false });
+    } else if (b.type === "CERTIFICATION") {
+      rowLabels.set(`${b.index}:rubric`, { label: "Évaluation finale du projet (grille /100)", scored: true });
+    }
+  }
+  const rows = e.completions
+    .map((c) => {
+      const meta = rowLabels.get(`${c.blockIndex}:${c.itemKey}`);
+      const d = (c.data ?? {}) as { correct?: number; total?: number };
+      const correct = typeof d.correct === "number" ? d.correct : null;
+      const total = typeof d.total === "number" ? d.total : null;
+      if (!meta || (c.scorePct == null && correct == null)) return null;
+      return { key: `${c.blockIndex}:${c.itemKey}`, label: meta.label, scorePct: c.scorePct, correct, total, scored: meta.scored && c.scorePct != null, at: c.completedAt.toISOString() };
+    })
+    .filter((r): r is NonNullable<typeof r> => r != null)
+    .sort((a, b) => a.at.localeCompare(b.at));
   const attendance = await prisma.sessionRegistration.findMany({
     where: { userId: e.userId, session: { courseId: e.courseId } }, include: { session: { select: { title: true, startsAt: true } } },
   });
@@ -63,6 +93,7 @@ export async function transcript(enrollmentId: string) {
       blocks: progress.blocks.map((b) => ({ index: b.index, type: b.type, state: b.state })),
     },
     scores: { diagnostic: score(1, "diagnostic"), finalQuiz: score(3, "final"), rubric: score(4, "rubric") },
+    rows,
     badges: e.badges.map((b) => ({ type: b.type, issuedAt: b.issuedAt })),
     credentials: e.credentials.map((c) => ({ id: c.id, type: c.achievementType, revoked: Boolean(c.revokedAt), url: credentialUrl(c.id), verifyUrl: `${credentialUrl(c.id)}/verify` })),
     liveSessions: attendance.map((a) => ({ title: a.session.title, startsAt: a.session.startsAt, attended: a.attended, minutes: a.attendanceMinutes })),

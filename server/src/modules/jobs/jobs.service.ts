@@ -47,9 +47,12 @@ export async function runProjectSlaAlerts(now: Date = new Date()) {
 }
 
 /**
- * Journal trigger scheduler (Pilier 5.1) — pushes the PAM-injected journal prompt
- * at Day+1/+3/+5/+7/+10/+14 from the certification block start, independently of
- * learner activity. Idempotent per (enrolment, day); skips entries already done.
+ * Journal trigger scheduler (Pilier 5.1) — pushes the PAM-injected journal
+ * prompt at each entry's J+n offset from `journalStartedAt` (anchored on the
+ * COMPLETION of micro-session 4.3 — « Amélioration » lot), independently of
+ * learner activity. The notification is also the entry's UNLOCK signal: the
+ * engine refuses a journal completion before its date. Idempotent per
+ * (enrolment, day); skips entries already done.
  */
 export async function runJournalTriggers(now: Date = new Date()) {
   const enrollments = await prisma.enrollment.findMany({

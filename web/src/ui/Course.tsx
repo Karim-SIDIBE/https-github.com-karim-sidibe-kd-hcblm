@@ -31,6 +31,7 @@ export function Course({ eid }: { eid: string }) {
   const [msg, setMsg] = useState<string | null>(null);
   const [avail, setAvail] = useState<Record<string, Availability>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
+  const [journalStart, setJournalStart] = useState<string | null>(null);
 
   // Recompute every element's offline availability from the local registry.
   const refreshAvail = useCallback((b: Bundle | null) => {
@@ -59,6 +60,7 @@ export function Course({ eid }: { eid: string }) {
       const data = await api.progress(eid);
       if (data?.progress) {
         setProgress(data.progress); setCachedProgress(eid, data.progress);
+        setJournalStart((data as { journalStartedAt?: string | null }).journalStartedAt ?? null);
         // Enrolment reset detected (server badges gone while this device had
         // celebrated some): purge every per-device leftover of the previous run.
         if (Array.isArray(data.badges) && syncSeenBadges(eid, (data.badges as { type: string }[]).map((b) => b.type)) === "reset") {
@@ -110,6 +112,24 @@ export function Course({ eid }: { eid: string }) {
 
   const stateOf = (i: number) => progress?.blocks.find((b) => b.index === i)?.state ?? (i === 0 ? "available" : "locked");
   const doneKeys = (i: number) => new Set(progress?.blocks.find((b) => b.index === i)?.completedKeys ?? []);
+
+  // Progressive Bloc 4 : each journal micro-entry unlocks J+n days after the
+  // completion of 4.3 ; Section 5 unlocks after sections 1–3 + the 6 entries.
+  const itemLock = (b: { type?: string }, it: BlockItem, done: Set<string>, items: BlockItem[]): string | null => {
+    if ((b as { type?: string }).type !== "CERTIFICATION" || isItemDone(it, done)) return null;
+    const m = /^J\+(\d+)$/.exec(it.key);
+    if (m) {
+      if (!journalStart) return t("course.lockAfter43");
+      const at = new Date(journalStart).getTime() + Number(m[1]) * 86400000;
+      if (Date.now() < at) return t("course.lockUntil", { date: new Date(at).toLocaleDateString("fr-FR") });
+      return null;
+    }
+    if (it.key === "project@4") {
+      const need = ["project", "project@1", "project@2", ...items.filter((x) => /^J\+\d+$/.test(x.key)).map((x) => x.key)];
+      if (!need.every((k) => done.has(k))) return t("course.lockFinalSection");
+    }
+    return null;
+  };
 
   function onItem(blockIndex: number, it: BlockItem) {
     if (it.kind === "onboarding") return navigate(routes.onboarding(eid));
@@ -167,6 +187,7 @@ export function Course({ eid }: { eid: string }) {
                 const isDone = isItemDone(it, done) || (it.kind === "onboarding" && st === "completed");
                 const k = akey(b.index, it.key);
                 const av = avail[k];
+                const lock = itemLock(b as never, it, done, items);
                 // Grouped items (« Activité Expérientielle Longue — … ») render
                 // indented under one header line drawn before the first member.
                 const groupHeader = it.groupFirst ? (
@@ -188,6 +209,7 @@ export function Course({ eid }: { eid: string }) {
                           <strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>
                           {it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}
                           {it.sublabel ? <div className="meta" style={{ marginTop: 2 }}>{it.sublabel}</div> : null}
+                          {lock ? <div className="meta" style={{ marginTop: 2 }}>🔒 {lock}</div> : null}
                         </span>
                       </span>
                       {!locked && !isDone && !NAVIGABLE.includes(it.kind)

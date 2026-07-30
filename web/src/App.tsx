@@ -81,6 +81,10 @@ function Brand() {
   );
 }
 
+/** The symbol of each block badge (consigne « Amélioration » — 2e point) :
+ *  clé = entrée, cerveau = compréhension, biceps = pratique, ancre = ancrage. */
+export const BADGE_SYMBOL: Record<string, string> = { ENTRY: "🔑", COMPREHENSION: "🧠", PRACTICE: "💪", ANCHORING: "⚓", CERTIFICATE: "🎓" };
+
 /** Full-screen celebration the moment a badge is unlocked (commit or resync). */
 function BadgeCelebration() {
   const t = useT();
@@ -95,12 +99,12 @@ function BadgeCelebration() {
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", display: "grid", placeItems: "center", zIndex: 1000, padding: 16 }} onClick={close} role="dialog" aria-modal="true">
       <div className="hf-card center stack pt-reveal" style={{ maxWidth: 430, width: "100%" }} onClick={(e) => e.stopPropagation()}>
-        <p style={{ fontSize: 52, margin: 0 }}>🏅</p>
+        <p style={{ fontSize: 52, margin: 0 }}>{BADGE_SYMBOL[party.badges[0]!.type] ?? "🏅"}</p>
         <h2 style={{ margin: 0 }}>{t("badge.unlocked")}</h2>
         {party.badges.map((b) => (
           <div key={b.type} className="hf-card hf-card--peach stack" style={{ gap: 6 }}>
-            <strong className="h4">{NAME[b.type] ? t(NAME[b.type]!) : b.type}</strong>
-            {b.message && <p className="body" style={{ margin: 0 }}>{b.message}</p>}
+            <strong className="h4">{BADGE_SYMBOL[b.type] ? `${BADGE_SYMBOL[b.type]} ` : ""}{NAME[b.type] ? t(NAME[b.type]!) : b.type}</strong>
+            {b.message && <p className="body" style={{ margin: 0 }}><span style={{ marginRight: 6 }}>{BADGE_SYMBOL[b.type] ?? ""}</span>{b.message}</p>}
             {b.peerNotified && <span className="hf-pill hf-pill--mint hf-pill--sm" style={{ alignSelf: "center" }}>{t("badge.peerNotified")}</span>}
           </div>
         ))}
