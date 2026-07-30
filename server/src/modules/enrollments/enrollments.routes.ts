@@ -4,6 +4,7 @@ import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
   getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
+  projectState,
 } from "./enrollments.service.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { nudgeOne } from "../jobs/jobs.service.js";
@@ -221,6 +222,14 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   });
 
   // Bloc 4 project record — full lifecycle metadata (owner or staff; §6.3).
+  // Progressive Bloc 4: per-section state, journal unlock schedule, composed
+  // Section 4 — everything the learner's Project screen renders.
+  app.get("/enrollments/:id/project/state", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await projectState(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+
   app.get("/enrollments/:id/project", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await getProjectSubmission(id) }; } catch (err) { return handle(reply, err); }

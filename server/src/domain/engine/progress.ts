@@ -99,19 +99,39 @@ export function blockRequirements(block: Block): RequiredItem[] {
           label: `Quiz final ≥ ${block.payload.finalQuiz.passThreshold}%`,
         },
       ];
-    case "CERTIFICATION":
-      return [
-        { itemType: "PROJECT", key: "project", label: "Projet certifiant soumis" },
-        ...block.payload.journal.entries.map((e) => ({
-          itemType: "JOURNAL_ENTRY" as const, key: `J+${e.day}`, label: `Journal J+${e.day}`,
-        })),
-        {
-          itemType: "RUBRIC_EVALUATION", key: "rubric", minScore: block.payload.rubric.threshold,
-          label: `Évaluation grille ≥ ${block.payload.rubric.threshold}/100`,
-        },
-      ];
+    case "CERTIFICATION": {
+      // Each project section is its OWN completion (progressive Bloc 4): the
+      // learner submits 4.1→4.3, the journal micro-entries unlock on their
+      // J+n schedule, then Section 5 closes the project (assembled submission).
+      // Section index 3 (the journal section) is represented by the entries.
+      const req: RequiredItem[] = [];
+      block.payload.sections.forEach((s, i) => {
+        if (i === 3) {
+          req.push(...block.payload.journal.entries.map((e) => ({
+            itemType: "JOURNAL_ENTRY" as const, key: `J+${e.day}`, label: `Journal J+${e.day}`,
+          })));
+        } else {
+          req.push({ itemType: "PROJECT", key: projectSectionKey(i), label: s.title });
+        }
+      });
+      req.push({
+        itemType: "RUBRIC_EVALUATION", key: "rubric", minScore: block.payload.rubric.threshold,
+        label: `Évaluation grille ≥ ${block.payload.rubric.threshold}/100`,
+      });
+      return req;
+    }
   }
 }
+
+/** Completion key of project section i — matches the shared block-items keys
+ *  ("project" for section 1, then "project@i"). */
+export function projectSectionKey(i: number): string {
+  return i === 0 ? "project" : `project@${i}`;
+}
+
+/** The FINAL project section key (Section 5 — its completion assembles and
+ *  submits the whole project for human evaluation). */
+export const PROJECT_FINAL_SECTION_KEY = "project@4";
 
 /** Is a single required item satisfied by the completion set? */
 function isSatisfied(req: RequiredItem, byKey: Map<string, CompletionRecord>): boolean {

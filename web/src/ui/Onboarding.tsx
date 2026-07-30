@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
+import { blockDurationSec } from "../lib/content";
+import { assessText, assessmentReason } from "../lib/textcheck";
+import { formatDuration } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
 
@@ -20,6 +23,7 @@ export function Onboarding({ eid }: { eid: string }) {
   const t = useT();
   const [payload, setPayload] = useState<Onboarding | null>(null);
   const [blockTitle, setBlockTitle] = useState("");
+  const [blockDur, setBlockDur] = useState(0);
   const [objective, setObjective] = useState("");
   const [step, setStep] = useState<Step | null>(null);
   const [pam, setPam] = useState("");
@@ -33,7 +37,10 @@ export function Onboarding({ eid }: { eid: string }) {
     (async () => {
       const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
       const block0 = b?.content?.blocks?.find((x: any) => x.type === "ONBOARDING");
-      if (alive && block0) { setPayload(block0.payload); setBlockTitle(block0.title ?? ""); }
+      if (alive && block0) {
+        setPayload(block0.payload); setBlockTitle(block0.title ?? "");
+        try { setBlockDur(blockDurationSec(block0)); } catch { /* draft block */ }
+      }
       if (alive) setObjective(b?.content?.objective ?? "");
       let pamDone = false, profileDone = false, triggerDone = false, peerDone = false;
       try {
@@ -49,9 +56,10 @@ export function Onboarding({ eid }: { eid: string }) {
   }, [eid]);
 
   const minChars = payload?.momentAncrage.minChars ?? 50;
+  const pamQuality = pam.trim().length >= minChars ? assessmentReason(assessText(pam, { minWords: 5 }), t) : null;
 
   async function submitPam() {
-    if (pam.trim().length < minChars) return;
+    if (pam.trim().length < minChars || pamQuality) return;
     setBusy(true);
     try { await engine.commit(eid, "moment_ancrage", { text: pam.trim() }); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
   }
@@ -75,7 +83,7 @@ export function Onboarding({ eid }: { eid: string }) {
       <Back />
       {/* Écrans 2–5 : fil d'Ariane harmonisé — Bloc 0, micro-session 0.1 (10 min),
           et « ÉTAPE x SUR 3 » en face. */}
-      {blockTitle && <div className="meta" style={{ fontWeight: 600 }}>{t("home.block", { n: 0 })} · {blockTitle}</div>}
+      {blockTitle && <div className="meta" style={{ fontWeight: 600 }}>{t("home.block", { n: 0 })} · {blockTitle}{blockDur > 0 ? ` — ${formatDuration(blockDur)}` : ""}</div>}
       <div className="row between" style={{ gap: 8 }}>
         <div className="meta">{t("ci.ms01")} — 10 min</div>
         {step !== "done" && <div className="eyebrow" style={{ whiteSpace: "nowrap", textTransform: "uppercase" }}>{t("ob.step", { n: stepNo })}</div>}
@@ -87,11 +95,12 @@ export function Onboarding({ eid }: { eid: string }) {
           <h1>{t("ob.startingPoint")}</h1>
           <div className="hf-pam"><span className="tag">{t("ob.pamTag")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{payload.momentAncrage.promptText}</div></div>
           <div className="hf-textwrap">
-            <textarea className="hf-field" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
+            <textarea className="hf-field" spellCheck lang="fr" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} style={{ minHeight: 160 }} />
             <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars}</span>
           </div>
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars} onClick={submitPam}>{busy ? "…" : t("ob.saveContinue")}</button>
+          {pamQuality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{pamQuality}</p>}
+          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars || Boolean(pamQuality)} onClick={submitPam}>{busy ? "…" : t("ob.saveContinue")}</button>
         </div>
       )}
 

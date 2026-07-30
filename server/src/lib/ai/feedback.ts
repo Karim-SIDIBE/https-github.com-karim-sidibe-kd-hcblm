@@ -22,6 +22,12 @@ export type FormativeInput = {
   itemLabel: string;
   competencies: { code: string; label: string }[];
   momentAncrage?: string | null;
+  /** Course title — the feedback must speak the course's language. */
+  courseTitle?: string;
+  /** Current block ("Bloc 1 — Comprendre les dynamiques…"). */
+  blockLabel?: string;
+  /** The exact prompt/consigne the learner answered (PAM already injected). */
+  promptContext?: string;
 };
 
 export type FormativeResult = { feedback: string; aiGenerated: boolean; provider: string };
@@ -36,11 +42,14 @@ const FORMATIVE_SYSTEM =
 export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
   const comps = input.competencies.map((c) => `${c.code} — ${c.label}`).join(" ; ");
   const user = [
+    input.courseTitle ? `Parcours : « ${input.courseTitle} ».` : "",
+    input.blockLabel ? `Bloc en cours : ${input.blockLabel}.` : "",
+    input.promptContext ? `Consigne à laquelle l'apprenant répond :\n"""${input.promptContext}"""` : "",
     `Production de l'apprenant (« ${input.itemLabel} ») :`,
     `"""${input.submissionText}"""`,
     `Compétences visées : ${comps}.`,
     input.momentAncrage ? `Moment d'Ancrage de l'apprenant : « ${input.momentAncrage} ».` : "",
-    "Rédige un retour formatif structuré (points forts puis pistes d'amélioration).",
+    "Rédige un retour formatif structuré, SPÉCIFIQUE à cette réponse et à cette consigne : cite des éléments précis de la réponse (reformule-les), évalue leur adéquation à la consigne, puis donne des pistes concrètes ancrées dans le contexte du bloc. Jamais de retour générique.",
   ].filter(Boolean).join("\n");
 
   return {
@@ -52,15 +61,34 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
 }
 
 function fallbackFormative(input: FormativeInput): string {
-  const len = input.submissionText.trim().length;
-  const depth = len >= 400 ? "votre réponse est détaillée" : len >= 150 ? "votre réponse pose les bases" : "votre réponse est encore courte";
+  // Deterministic but SPECIFIC: quote the answer, measure it against the
+  // consigne's own vocabulary, and point at what the consigne asks that the
+  // answer does not yet cover. (A real AI key makes this fully personalised.)
+  const text = input.submissionText.trim();
+  const words = text.split(/\s+/).filter(Boolean);
+  const firstIdea = text.split(/(?<=[.!?])\s+/)[0]?.slice(0, 110) ?? "";
+  const norm = (w: string) => w.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9%]/g, "");
+  const stop = new Set(["dans","avec","pour","votre","vous","les","des","une","est","qui","que","ce","cette","vos","son","ses","mon","mes","leur","plus","tout","tous","sans","sur","par","aux","the","and","your","with"]);
+  const promptWords = [...new Set((input.promptContext ?? "").split(/\s+/).map(norm).filter((w) => w.length >= 5 && !stop.has(w)))];
+  const answerWords = new Set(words.map(norm));
+  const covered = promptWords.filter((w) => answerWords.has(w));
+  const missing = promptWords.filter((w) => !answerWords.has(w)).slice(0, 3);
+  const hasNumber = /\d/.test(text) || /\b(un|deux|trois|quatre|cinq|dix|quinze|vingt|trente|cent)\b/i.test(text);
   const comps = input.competencies.map((c) => c.label).slice(0, 2).join(" et ");
-  return [
-    `Retour formatif (généré automatiquement — un évaluateur affinera) :`,
-    `• Points forts : ${depth} et aborde le sujet « ${input.itemLabel} ».`,
-    `• Pistes : ancrez davantage vos exemples dans votre contexte africain réel, et reliez-les explicitement aux compétences ${comps}.`,
-    `• Prochaine étape : précisez un résultat concret et mesurable.`,
-  ].join("\n");
+  const lines = [
+    `Retour formatif (généré automatiquement — un évaluateur pourra affiner) :`,
+    `• Ce que dit votre réponse : « ${firstIdea}${firstIdea.length >= 110 ? "…" : ""} » — ${words.length} mots sur « ${input.itemLabel} »${input.blockLabel ? ` (${input.blockLabel})` : ""}.`,
+  ];
+  if (promptWords.length > 0) {
+    lines.push(covered.length > 0
+      ? `• Adéquation à la consigne : vous reprenez ${covered.length} notion(s) attendue(s) (${covered.slice(0, 3).join(", ")}).${missing.length ? ` Pensez aussi à : ${missing.join(", ")}.` : ""}`
+      : `• Adéquation à la consigne : votre réponse ne reprend pas encore les notions attendues${missing.length ? ` (${missing.join(", ")})` : ""} — relisez l'énoncé et ancrez chaque idée dedans.`);
+  }
+  lines.push(hasNumber
+    ? `• Point fort : vous chiffrez votre réponse — gardez ce réflexe, un engagement mesurable se tient mieux.`
+    : `• Piste : ajoutez un élément mesurable (durée, fréquence, pourcentage) — un engagement chiffré se tient mieux qu'une intention.`);
+  lines.push(`• Prochaine étape : reliez explicitement votre réponse à votre réalité professionnelle (contexte, interlocuteurs) et aux compétences ${comps}.`);
+  return lines.join("\n");
 }
 
 export async function generateFormativeFeedback(input: FormativeInput): Promise<FormativeResult> {

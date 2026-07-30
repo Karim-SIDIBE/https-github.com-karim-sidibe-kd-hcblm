@@ -40,13 +40,13 @@ export type BlockItem = {
 };
 
 /**
- * Is this item satisfied by the completion set? The Bloc 4 section lines are
- * display aliases of the single "project" completion (the project submits as
- * one deliverable), so they all light up when the project is submitted.
+ * Is this item satisfied by the completion set? Bloc 4 sections are their own
+ * completions since the progressive-project lot ("project", "project@1", …) —
+ * the key match is exact.
  */
 export function isItemDone(item: { key: string; kind: ItemKind }, completedKeys: ReadonlySet<string> | readonly string[]): boolean {
   const done = completedKeys instanceof Set ? completedKeys : new Set(completedKeys as readonly string[]);
-  return done.has(item.key) || (item.kind === "project" && done.has("project"));
+  return done.has(item.key);
 }
 
 /** Map a non-quiz/non-session item kind to its ItemCompletion itemType. */

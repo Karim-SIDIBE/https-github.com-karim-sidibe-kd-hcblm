@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import type { Exercise as ExerciseSpec } from "@kd/shared";
+import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
 import { useT } from "../lib/i18n";
 
 export type { ExerciseSpec };
@@ -29,10 +30,28 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
   const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
   const minChars = exercise.minChars ?? 200;
-  const canAnswer =
+  // Text-quality gate (3e point) : the button stays blocked WITH THE REASON
+  // until every answer reads as real French/English (numbers where expected).
+  const quality: string | null = (() => {
+    if (exercise.type === "written") {
+      if (text.trim().length < minChars) return null; // the counter already explains
+      return assessmentReason(assessText(text, { minWords: 3 }), t);
+    }
+    if (exercise.type === "guidedForm") {
+      for (const f of exercise.fields ?? []) {
+        const v = (values[f.label] ?? "").trim();
+        if (!v) continue;
+        const r = assessmentReason(assessText(v, { requireNumber: fieldExpectsNumber(f.label, f.placeholder) }), t);
+        if (r) return `${f.label} — ${r}`;
+      }
+      return null;
+    }
+    return null;
+  })();
+  const canAnswer = quality == null && (
     exercise.type === "multi" ? choice !== "" :
     exercise.type === "written" ? text.trim().length >= minChars :
-    (exercise.fields ?? []).every((f) => (values[f.label] ?? "").trim().length > 0);
+    (exercise.fields ?? []).every((f) => (values[f.label] ?? "").trim().length > 0));
 
   function response(): string {
     if (exercise.type === "multi") return choice;
@@ -75,7 +94,7 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
 
           {exercise.type === "written" && (
             <div className="hf-textwrap">
-              <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 150 }}
+              <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
               <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars}</span>
             </div>
@@ -83,11 +102,12 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
 
           {exercise.type === "guidedForm" && (exercise.fields ?? []).map((f) => (
             <label key={f.label}>{f.label}
-              <input className="hf-field" value={values[f.label] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.label]: e.target.value }))}
+              <input className="hf-field" spellCheck lang="fr" value={values[f.label] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [f.label]: e.target.value }))}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             </label>
           ))}
 
+          {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!canAnswer || busy} onClick={validate}>{busy ? "…" : t("ex.validate")}</button>
         </div>
       )}
