@@ -114,6 +114,79 @@ export type FunnelStep = {
   completions: number; pctOfEnrolled: number;
 };
 
+// --- 5. Pedagogical alerts ---------------------------------------------------
+
+export type InsightAlert = {
+  kind: "question" | "funnel" | "video";
+  label: string;
+  detail: string;
+};
+
+export type AlertThresholds = {
+  /** Minimum answers before a question's success rate is trusted. */
+  minAnswers: number;
+  /** A question at or below this success rate raises an alert. */
+  questionPctMax: number;
+  /** Minimum enrolled/learners before funnel & video rates are trusted. */
+  minLearners: number;
+  /** A funnel step losing at least this many percentage points vs the previous one. */
+  funnelDropPts: number;
+  /** A video finished by fewer than this share of its viewers. */
+  videoFinishedMin: number;
+};
+
+export const DEFAULT_ALERT_THRESHOLDS: AlertThresholds = {
+  minAnswers: 5, questionPctMax: 40, minLearners: 5, funnelDropPts: 40, videoFinishedMin: 50,
+};
+
+/**
+ * Turn the steering indicators into actionable alerts. Small samples are
+ * excluded on purpose: one learner failing one question is noise, not a signal.
+ */
+export function detectInsightAlerts(
+  ins: {
+    enrolled: number;
+    questions: (QuestionDifficulty & { label: string })[];
+    videos: VideoCompletion[];
+    funnel: FunnelStep[];
+  },
+  t: AlertThresholds = DEFAULT_ALERT_THRESHOLDS,
+): InsightAlert[] {
+  const alerts: InsightAlert[] = [];
+  for (const q of ins.questions) {
+    if (q.total >= t.minAnswers && q.pctCorrect <= t.questionPctMax) {
+      alerts.push({
+        kind: "question",
+        label: q.label,
+        detail: `${q.pctCorrect} % de réussite sur ${q.total} réponses (bloc ${q.blockIndex ?? "—"} · ${q.itemKey ?? ""}) — énoncé ou notion à revoir.`,
+      });
+    }
+  }
+  if (ins.enrolled >= t.minLearners) {
+    for (let i = 1; i < ins.funnel.length; i++) {
+      const prev = ins.funnel[i - 1]!;
+      const cur = ins.funnel[i]!;
+      if (prev.pctOfEnrolled - cur.pctOfEnrolled >= t.funnelDropPts) {
+        alerts.push({
+          kind: "funnel",
+          label: cur.label,
+          detail: `chute de ${prev.pctOfEnrolled} % à ${cur.pctOfEnrolled} % des inscrits entre « ${prev.label} » et « ${cur.label} » — point d'abandon à examiner.`,
+        });
+      }
+    }
+  }
+  for (const v of ins.videos) {
+    if (v.learners >= t.minLearners && v.finishedPct < t.videoFinishedMin) {
+      alerts.push({
+        kind: "video",
+        label: `Bloc ${v.blockIndex ?? "—"} · ${v.itemKey ?? ""}`,
+        detail: `seulement ${v.finishedPct} % des ${v.learners} spectateurs terminent la vidéo (visionnage moyen ${v.avgPct} %) — longueur ou accroche à revoir.`,
+      });
+    }
+  }
+  return alerts;
+}
+
 /**
  * Order the completion counts along the canonical required-item sequence so the
  * drop-off point reads left-to-right like the learner's journey.

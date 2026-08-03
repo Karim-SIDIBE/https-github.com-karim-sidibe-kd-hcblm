@@ -13,6 +13,7 @@ import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import * as storage from "../../lib/storage/storage.js";
 import { parseScorm, parseCmi5 } from "../../lib/interop/manifest.js";
+import { VERBS } from "../../domain/engine/xapi.js";
 
 export class InteropError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -177,6 +178,75 @@ export async function ingestStatement(token: string, statement: Record<string, a
  * and statement type (verb). Joins through the enrolment so analytics can pull
  * without manual export. Staff-gated at the route.
  */
+// --- standard xAPI Statement API (read side) ---------------------------------
+
+/** Map a verb IRI (spec query param) back to our stored short key; null = unknown. */
+export function verbKeyOfIri(iri: string): string | null {
+  for (const [key, v] of Object.entries(VERBS)) if (v.id === iri) return key;
+  return null;
+}
+
+/** Enrich a stored row into a spec-shaped statement (adds `id` + `stored`). */
+function toSpecStatement(row: { id: string; storedAt: Date; statement: unknown }): Record<string, unknown> {
+  const s = (row.statement ?? {}) as Record<string, unknown>;
+  return { id: s.id ?? row.id, stored: row.storedAt.toISOString(), ...s };
+}
+
+export type StandardQuery = {
+  /** userId taken from the spec `agent` param's account.name. */
+  agentAccountName?: string;
+  verbKey?: string;
+  activityIri?: string;
+  since?: Date;
+  until?: Date;
+  limit: number;
+  ascending: boolean;
+  cursor?: { storedAt: string; id: string };
+};
+
+/** Single-statement lookup (spec `statementId` param). */
+export async function standardStatementById(id: string) {
+  const row = await prisma.xapiStatement.findUnique({ where: { id } });
+  return row ? toSpecStatement(row) : null;
+}
+
+/**
+ * Spec-shaped statement query with stable keyset pagination (`more` cursor).
+ * Filters map onto the indexed columns; `since` is exclusive and `until`
+ * inclusive per the xAPI 1.0.3 Statement API.
+ */
+export async function standardStatements(q: StandardQuery) {
+  const where: Prisma.XapiStatementWhereInput = {};
+  if (q.verbKey) where.verb = q.verbKey;
+  if (q.activityIri) where.objectId = q.activityIri;
+  if (q.agentAccountName) where.enrollment = { userId: q.agentAccountName };
+  if (q.since || q.until) {
+    where.storedAt = { ...(q.since ? { gt: q.since } : {}), ...(q.until ? { lte: q.until } : {}) };
+  }
+  const order: Prisma.SortOrder = q.ascending ? "asc" : "desc";
+  const cursorFilter: Prisma.XapiStatementWhereInput[] = [];
+  if (q.cursor) {
+    const at = new Date(q.cursor.storedAt);
+    cursorFilter.push({
+      OR: [
+        { storedAt: q.ascending ? { gt: at } : { lt: at } },
+        { storedAt: at, id: q.ascending ? { gt: q.cursor.id } : { lt: q.cursor.id } },
+      ],
+    });
+  }
+  const rows = await prisma.xapiStatement.findMany({
+    where: { AND: [where, ...cursorFilter] },
+    orderBy: [{ storedAt: order }, { id: order }],
+    take: q.limit + 1,
+  });
+  const page = rows.slice(0, q.limit);
+  const last = page[page.length - 1];
+  return {
+    statements: page.map(toSpecStatement),
+    nextCursor: rows.length > q.limit && last ? { storedAt: last.storedAt.toISOString(), id: last.id } : null,
+  };
+}
+
 /** Flatten a stored statement into an analyst-friendly export row (CSV). */
 export function statementExportRow(row: {
   storedAt: Date; verb: string; objectId: string; statement: unknown;

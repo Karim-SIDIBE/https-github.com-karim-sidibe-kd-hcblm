@@ -20,7 +20,7 @@
  */
 import { env } from "../config/env.js";
 import { dispatchPending } from "../modules/notifications/notifications.service.js";
-import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "../modules/jobs/jobs.service.js";
+import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts } from "../modules/jobs/jobs.service.js";
 import { runDueReports } from "../modules/reports/reports.service.js";
 import { runRetentionPurge } from "../modules/rgpd/rgpd.service.js";
 import { forwardPending } from "./lrs/forwarder.js";
@@ -63,6 +63,8 @@ export function startJobsScheduler(log: Logger = { info: console.log, error: con
       const j = await runJournalTriggers(now);
       if (j.created.length > 0) log.info(`[jobs] journal : ${j.created.length} déclencheur(s)`);
       await runProjectSlaAlerts(now);
+      const ia = await runInsightsAlerts(now);
+      if (!ia.skipped && ia.alerts > 0) log.info(`[jobs] pilotage pédagogique : ${ia.alerts} signal(aux) notifié(s)`);
       await runDueReports(now);
       await runRetentionPurge(now);
       const x = await archiveGranularStatements(now);

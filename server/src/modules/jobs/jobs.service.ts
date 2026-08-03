@@ -11,6 +11,8 @@ import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } fr
 import { generateNudge } from "../../lib/ai/nudge.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
+import { courseInsights } from "../analytics/analytics.service.js";
+import { DEFAULT_ALERT_THRESHOLDS, detectInsightAlerts, type AlertThresholds } from "../../domain/engine/insights.js";
 
 const MS_PER_DAY = 86_400_000;
 const ADMIN_EMAIL = "admin@kompetences.net";
@@ -197,4 +199,54 @@ export async function nudgeOne(enrollmentId: string) {
     subject: "Reprenez votre parcours", body, aiGenerated, provider,
   });
   return { sent: true as const, stage, channel, email: e.user.email };
+}
+
+/**
+ * Pedagogical alerting (local-LRS level 2) — turn the steering indicators into
+ * a weekly admin digest: questions failed below threshold, funnel break points,
+ * deserted videos. Small cohorts stay silent by design (minimum samples).
+ * Weekly + idempotent via the notification `provider` marker; a manual run
+ * (jobs route) passes `force` to bypass the calendar gate.
+ */
+export async function runInsightsAlerts(
+  now: Date = new Date(),
+  opts: { force?: boolean; thresholds?: Partial<AlertThresholds> } = {},
+) {
+  if (!opts.force) {
+    // Weekly gate: Monday, and nothing already sent in the last 6 days.
+    if (now.getUTCDay() !== 1) return { skipped: true as const, courses: 0, alerts: 0 };
+    const recent = await prisma.notification.findFirst({
+      where: { provider: "insights-alert", createdAt: { gte: new Date(now.getTime() - 6 * MS_PER_DAY) } },
+      select: { id: true },
+    });
+    if (recent) return { skipped: true as const, courses: 0, alerts: 0 };
+  }
+  const thresholds = { ...DEFAULT_ALERT_THRESHOLDS, ...(opts.thresholds ?? {}) };
+  const courses = await prisma.course.findMany({ select: { id: true, slug: true } });
+  let totalAlerts = 0;
+  const perCourse: { courseId: string; slug: string; alerts: number }[] = [];
+  for (const course of courses) {
+    let insights;
+    try { insights = await courseInsights(course.id); }
+    catch { continue; } // no published version → nothing to steer
+    const alerts = detectInsightAlerts(insights, thresholds);
+    perCourse.push({ courseId: course.id, slug: course.slug, alerts: alerts.length });
+    if (alerts.length === 0) continue;
+    totalAlerts += alerts.length;
+    const lines = alerts.slice(0, 12).map((a) => {
+      const tag = a.kind === "question" ? "Question" : a.kind === "funnel" ? "Abandon" : "Vidéo";
+      return `• [${tag}] ${a.label.slice(0, 90)}\n  ${a.detail}`;
+    });
+    if (alerts.length > 12) lines.push(`… et ${alerts.length - 12} autre(s) signal(aux).`);
+    await enqueueNotification({
+      recipientKind: "ADMIN", recipient: ADMIN_EMAIL, channel: "EMAIL",
+      subject: `Pilotage pédagogique — ${alerts.length} signal(aux) sur « ${course.slug} »`,
+      body:
+        `Le pilotage hebdomadaire du parcours « ${course.slug} » relève ${alerts.length} point(s) d'attention ` +
+        `(${insights.enrolled} inscrit(s)) :\n\n${lines.join("\n")}\n\n` +
+        `Détails et exports : écran « Pilotage pédagogique » de l'administration.`,
+      provider: "insights-alert",
+    });
+  }
+  return { skipped: false as const, courses: perCourse.length, alerts: totalAlerts, perCourse };
 }
