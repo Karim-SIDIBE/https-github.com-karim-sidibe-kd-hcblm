@@ -107,8 +107,11 @@ export async function interopRoutes(app: FastifyInstance) {
 
   // xAPI retention archives (two-tier local LRS): list + download. Platform-ops
   // data (cross-organisation) → job:run (SUPER_ADMIN / COURSE_ADMIN only).
+  // Explicit per-route rate limit on top of the global one: these handlers touch
+  // the filesystem, so cap them tightly (admin usage is a few calls per session).
+  const archiveLimit = { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } };
   const ARCHIVE_NAME = /^xapi-granulaire-\d{14}\.ndjson\.gz$/;
-  app.get("/lrs/archives", { preHandler: guard("job:run") }, async () => {
+  app.get("/lrs/archives", { preHandler: guard("job:run"), ...archiveLimit }, async () => {
     let names: string[] = [];
     try { names = readdirSync(archiveDir()).filter((n) => ARCHIVE_NAME.test(n)); } catch { /* dossier absent = aucune archive */ }
     const data = names.sort().reverse().map((name) => {
@@ -118,7 +121,7 @@ export async function interopRoutes(app: FastifyInstance) {
     return { data };
   });
 
-  app.get("/lrs/archives/:name", { preHandler: guard("job:run") }, async (req, reply) => {
+  app.get("/lrs/archives/:name", { preHandler: guard("job:run"), ...archiveLimit }, async (req, reply) => {
     const { name } = z.object({ name: z.string().regex(ARCHIVE_NAME) }).parse(req.params);
     const path = join(archiveDir(), name);
     try { statSync(path); } catch { return reply.status(404).send({ error: "not_found", message: "Archive introuvable" }); }
