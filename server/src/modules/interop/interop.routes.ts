@@ -9,9 +9,7 @@ import { scanUpload } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { TenantScopeError, assertCourseAccess } from "../../lib/security/tenant-scope.js";
-import { archiveDir } from "../../lib/lrs/retention.js";
-import { createReadStream, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { isArchiveName, listArchives, openArchive } from "../../lib/lrs/retention.js";
 
 const MIME: Record<string, string> = {
   html: "text/html", htm: "text/html", js: "text/javascript", css: "text/css", json: "application/json",
@@ -107,27 +105,20 @@ export async function interopRoutes(app: FastifyInstance) {
 
   // xAPI retention archives (two-tier local LRS): list + download. Platform-ops
   // data (cross-organisation) → job:run (SUPER_ADMIN / COURSE_ADMIN only).
-  // Explicit per-route rate limit on top of the global one: these handlers touch
-  // the filesystem, so cap them tightly (admin usage is a few calls per session).
+  // Filesystem work lives in lib/lrs/retention (service layer); on top of the
+  // global limiter these routes carry an explicit tight per-route rate limit.
   const archiveLimit = { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } };
-  const ARCHIVE_NAME = /^xapi-granulaire-\d{14}\.ndjson\.gz$/;
   app.get("/lrs/archives", { preHandler: guard("job:run"), ...archiveLimit }, async () => {
-    let names: string[] = [];
-    try { names = readdirSync(archiveDir()).filter((n) => ARCHIVE_NAME.test(n)); } catch { /* dossier absent = aucune archive */ }
-    const data = names.sort().reverse().map((name) => {
-      const s = statSync(join(archiveDir(), name));
-      return { name, sizeBytes: s.size, createdAt: s.mtime.toISOString() };
-    });
-    return { data };
+    return { data: listArchives() };
   });
 
   app.get("/lrs/archives/:name", { preHandler: guard("job:run"), ...archiveLimit }, async (req, reply) => {
-    const { name } = z.object({ name: z.string().regex(ARCHIVE_NAME) }).parse(req.params);
-    const path = join(archiveDir(), name);
-    try { statSync(path); } catch { return reply.status(404).send({ error: "not_found", message: "Archive introuvable" }); }
+    const { name } = z.object({ name: z.string().refine(isArchiveName) }).parse(req.params);
+    const stream = openArchive(name);
+    if (!stream) return reply.status(404).send({ error: "not_found", message: "Archive introuvable" });
     reply.header("content-type", "application/gzip");
     reply.header("content-disposition", `attachment; filename="${name}"`);
-    return reply.send(createReadStream(path));
+    return reply.send(stream);
   });
 
   // LRS query (§8.1) — read stored statements by learner, course, date range

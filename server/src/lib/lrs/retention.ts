@@ -9,9 +9,9 @@
  * (standard xAPI JSON — re-importable into any LRS later) and then purged, so
  * the XapiStatement table stays bounded whatever the platform's growth.
  */
-import { createHash } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { createReadStream, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import type { Readable } from "node:stream";
 import { gzipSync } from "node:zlib";
 import { env } from "../../config/env.js";
 import { prisma } from "../../db/prisma.js";
@@ -116,7 +116,30 @@ export async function archiveGranularStatements(now: Date = new Date(), batchSiz
   return { cutoff: cutoff.toISOString(), archived: ids.length, file: name };
 }
 
-/** Stable ETag-ish fingerprint for an archive listing entry. */
-export function archiveFingerprint(name: string, size: number): string {
-  return createHash("sha256").update(`${name}:${size}`).digest("hex").slice(0, 16);
+// --- archive access (used by the staff routes) -------------------------------
+
+const ARCHIVE_NAME = /^xapi-granulaire-\d{14}\.ndjson\.gz$/;
+
+export function isArchiveName(name: string): boolean {
+  return ARCHIVE_NAME.test(name);
+}
+
+export type ArchiveInfo = { name: string; sizeBytes: number; createdAt: string };
+
+/** Newest-first listing of retention archives (empty when none were written). */
+export function listArchives(): ArchiveInfo[] {
+  let names: string[] = [];
+  try { names = readdirSync(archiveDir()).filter((n) => ARCHIVE_NAME.test(n)); } catch { /* dossier absent = aucune archive */ }
+  return names.sort().reverse().map((name) => {
+    const s = statSync(join(archiveDir(), name));
+    return { name, sizeBytes: s.size, createdAt: s.mtime.toISOString() };
+  });
+}
+
+/** Open a validated archive for download; null when absent or name invalid. */
+export function openArchive(name: string): Readable | null {
+  if (!ARCHIVE_NAME.test(name)) return null;
+  const path = join(archiveDir(), name);
+  try { statSync(path); } catch { return null; }
+  return createReadStream(path);
 }
