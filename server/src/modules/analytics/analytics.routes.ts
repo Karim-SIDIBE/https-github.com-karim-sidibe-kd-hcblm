@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, learnerDiagnostic, overview, pamExport, toCsv, transcript,
+  AnalyticsError, atRiskLearners, cohortReport, compareInsights, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, exploreStatements, learnerDiagnostic, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
@@ -85,6 +85,45 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get("/analytics/courses/:courseId/insights", { preHandler: courseScoped }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     try { return { data: await courseInsights(courseId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Trace explorer — free-form one-dimension aggregation over the course's
+  // xAPI statements (grouping × filters × metrics), "Series API" style.
+  app.get("/analytics/courses/:courseId/explore", { preHandler: courseScoped }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    const q = z.object({
+      groupBy: z.enum(["verb", "activity", "item", "block", "learner", "day"]).default("verb"),
+      verb: z.string().optional(),
+      blockIndex: z.coerce.number().int().min(0).optional(),
+      itemKey: z.string().optional(),
+      since: z.string().datetime().optional(),
+      until: z.string().datetime().optional(),
+    }).parse(req.query ?? {});
+    try {
+      return {
+        data: await exploreStatements(courseId, q.groupBy, {
+          verb: q.verb, blockIndex: q.blockIndex, itemKey: q.itemKey,
+          since: q.since ? new Date(q.since) : undefined,
+          until: q.until ? new Date(q.until) : undefined,
+        }),
+      };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Segment comparison — two inscription windows, or two cohorts, side by side.
+  app.get("/analytics/courses/:courseId/insights/compare", { preHandler: courseScoped }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    const seg = z.union([
+      z.object({ mode: z.literal("period"), sinceA: z.string().datetime(), untilA: z.string().datetime(), sinceB: z.string().datetime(), untilB: z.string().datetime() }),
+      z.object({ mode: z.literal("cohort"), cohortA: z.string(), cohortB: z.string() }),
+    ]).parse(req.query ?? {});
+    const [a, b] = seg.mode === "period"
+      ? [
+          { kind: "period" as const, since: new Date(seg.sinceA), until: new Date(seg.untilA) },
+          { kind: "period" as const, since: new Date(seg.sinceB), until: new Date(seg.untilB) },
+        ]
+      : [{ kind: "cohort" as const, cohortId: seg.cohortA }, { kind: "cohort" as const, cohortId: seg.cohortB }];
+    try { return { data: await compareInsights(courseId, a, b) }; } catch (err) { return handle(reply, err); }
   });
 
   // One learner's diagnostic competency profile (admin view).
