@@ -5,6 +5,7 @@ import { runDueReports } from "../reports/reports.service.js";
 import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
+import { archiveGranularStatements } from "../../lib/lrs/retention.js";
 import { flushPendingWebhooks } from "../../lib/webhooks/webhooks.js";
 import { guard } from "../../lib/auth.js";
 
@@ -49,6 +50,12 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/lrs/forward", { preHandler: guard("job:run") }, async (req) => {
     const { batchSize } = z.object({ batchSize: z.number().int().positive().max(500).optional() }).parse(req.body ?? {});
     return { data: await forwardPending(batchSize ?? 100) };
+  });
+
+  // xAPI two-tier retention: archive granular statements older than the window.
+  app.post("/jobs/lrs/retention", { preHandler: guard("job:run") }, async (req) => {
+    const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
+    return { data: await archiveGranularStatements(now ? new Date(now) : new Date()) };
   });
 
   // Deliver pending outbound webhooks (§8.2).

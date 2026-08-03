@@ -1,13 +1,15 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken,
+  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken, statementExportRow,
 } from "./interop.service.js";
+import { toCsv } from "../analytics/analytics.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { scanUpload } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { TenantScopeError, assertCourseAccess } from "../../lib/security/tenant-scope.js";
+import { isArchiveName, listArchives, openArchive } from "../../lib/lrs/retention.js";
 
 const MIME: Record<string, string> = {
   html: "text/html", htm: "text/html", js: "text/javascript", css: "text/css", json: "application/json",
@@ -101,6 +103,24 @@ export async function interopRoutes(app: FastifyInstance) {
     } catch (err) { return handle(reply, err); }
   });
 
+  // xAPI retention archives (two-tier local LRS): list + download. Platform-ops
+  // data (cross-organisation) → job:run (SUPER_ADMIN / COURSE_ADMIN only).
+  // Filesystem work lives in lib/lrs/retention (service layer); on top of the
+  // global limiter these routes carry an explicit tight per-route rate limit.
+  const archiveLimit = { config: { rateLimit: { max: 30, timeWindow: "1 minute" } } };
+  app.get("/lrs/archives", { preHandler: guard("job:run"), ...archiveLimit }, async () => {
+    return { data: listArchives() };
+  });
+
+  app.get("/lrs/archives/:name", { preHandler: guard("job:run"), ...archiveLimit }, async (req, reply) => {
+    const { name } = z.object({ name: z.string().refine(isArchiveName) }).parse(req.params);
+    const stream = openArchive(name);
+    if (!stream) return reply.status(404).send({ error: "not_found", message: "Archive introuvable" });
+    reply.header("content-type", "application/gzip");
+    reply.header("content-disposition", `attachment; filename="${name}"`);
+    return reply.send(stream);
+  });
+
   // LRS query (§8.1) — read stored statements by learner, course, date range
   // and statement type (verb). For KOMPETENCES DECLICK analytics infrastructure.
   app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req, reply) => {
@@ -111,6 +131,8 @@ export async function interopRoutes(app: FastifyInstance) {
       since: z.string().datetime().optional(),
       until: z.string().datetime().optional(),
       limit: z.coerce.number().int().positive().max(1000).optional(),
+      /// json (défaut) = API ; csv = analyse tableur ; ndjson = xAPI brut ré-importable.
+      format: z.enum(["json", "csv", "ndjson"]).default("json"),
     }).parse(req.query ?? {});
     // Tenant isolation: a non-staff customer role must pin the query to one of its
     // own courses (the courseId filter then confines statements to that course).
@@ -122,13 +144,24 @@ export async function interopRoutes(app: FastifyInstance) {
         throw err;
       }
     }
-    return {
-      data: await queryStatements({
-        learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,
-        since: q.since ? new Date(q.since) : undefined,
-        until: q.until ? new Date(q.until) : undefined,
-        limit: q.limit,
-      }),
-    };
+    const result = await queryStatements({
+      learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,
+      since: q.since ? new Date(q.since) : undefined,
+      until: q.until ? new Date(q.until) : undefined,
+      limit: q.limit,
+    });
+    if (q.format === "csv") {
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="xapi-statements.csv"`);
+      return reply.send(toCsv(result.statements.map(statementExportRow)));
+    }
+    if (q.format === "ndjson") {
+      reply.header("content-type", "application/x-ndjson");
+      reply.header("content-disposition", `attachment; filename="xapi-statements.ndjson"`);
+      return reply.send(result.statements
+        .map(({ enrollment: _e, ...row }) => JSON.stringify({ ...row, storedAt: row.storedAt.toISOString() }))
+        .join("\n"));
+    }
+    return { data: result };
   });
 }

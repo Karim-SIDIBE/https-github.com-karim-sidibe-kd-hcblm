@@ -30,6 +30,9 @@ jobs:
         with:
           languages: ${{ matrix.language }}
           queries: security-extended
+          # Exclut js/missing-rate-limiting (faux positif systémique : la règle
+          # ne modélise pas @fastify/rate-limit) — voir le fichier de config.
+          config-file: ./.github/codeql/codeql-config.yml
       - name: Autobuild
         uses: github/codeql-action/autobuild@v3
       - name: Perform CodeQL Analysis

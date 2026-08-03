@@ -6,7 +6,9 @@
  */
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
-import { computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
+import { blockRequirements, computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
+import { courseFunnel, questionDifficulty, timeByItem, videoCompletion } from "../../domain/engine/insights.js";
+import { XAPI_EXT } from "../../domain/engine/xapi.js";
 import { forecastCompletion, type ForecastRow } from "../../domain/engine/forecast.js";
 import { dropoutRisk } from "../../domain/engine/risk.js";
 import { shuffleQuestionOptions } from "../../domain/engine/shuffle.js";
@@ -414,6 +416,92 @@ export async function courseWorkbook(courseId: string): Promise<Sheet[]> {
     { name: "À risque", rows: aRisque },
     { name: "Compétences", rows: competences },
   ];
+}
+
+// --- pedagogical insights (local xAPI mini-LRS) ------------------------------
+
+/**
+ * The four steering indicators computed from granular xAPI traces + completions:
+ * question difficulty, real time-on-task per item, video completion, and the
+ * course funnel (drop-off along the canonical item sequence). SQL aggregates
+ * here; shaping is pure (domain/engine/insights).
+ */
+export async function courseInsights(courseId: string) {
+  const version = await prisma.courseVersion.findFirst({
+    where: { courseId, status: "PUBLISHED" },
+    orderBy: { version: "desc" },
+  });
+  if (!version) throw new AnalyticsError(404, "no_published_version", "Aucune version publiée pour ce parcours");
+  const content = CourseContent.parse(version.content);
+
+  const [enrolled, answeredRows, timeRows, videoRows, completionRows] = await Promise.all([
+    prisma.enrollment.count({ where: { courseId } }),
+    prisma.$queryRaw<{ objectId: string; total: number; correct: number }[]>`
+      SELECT s."objectId" AS "objectId", COUNT(*)::int AS total,
+             (COUNT(*) FILTER (WHERE s.statement->'result'->>'success' = 'true'))::int AS correct
+      FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
+      WHERE e."courseId" = ${courseId} AND s.verb = ${"answered"}
+        AND s."objectId" LIKE '%/questions/%'
+      GROUP BY 1`,
+    prisma.$queryRaw<{ objectId: string; enrollmentId: string; seconds: number }[]>`
+      SELECT s."objectId" AS "objectId", s."enrollmentId" AS "enrollmentId",
+             SUM((s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds})::numeric)::float AS seconds
+      FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
+      WHERE e."courseId" = ${courseId}
+        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds}) IS NOT NULL
+      GROUP BY 1, 2`,
+    prisma.$queryRaw<{ objectId: string; enrollmentId: string; maxProgress: number }[]>`
+      SELECT s."objectId" AS "objectId", s."enrollmentId" AS "enrollmentId",
+             MAX((s.statement->'result'->'extensions'->>${XAPI_EXT.videoProgress})::numeric)::float AS "maxProgress"
+      FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
+      WHERE e."courseId" = ${courseId} AND s.verb = ${"progressed"}
+        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.videoProgress}) IS NOT NULL
+      GROUP BY 1, 2`,
+    prisma.$queryRaw<{ blockIndex: number; itemKey: string; completions: number }[]>`
+      SELECT ic."blockIndex" AS "blockIndex", ic."itemKey" AS "itemKey",
+             COUNT(DISTINCT ic."enrollmentId")::int AS completions
+      FROM "ItemCompletion" ic JOIN "Enrollment" e ON e.id = ic."enrollmentId"
+      WHERE e."courseId" = ${courseId}
+      GROUP BY 1, 2`,
+  ]);
+
+  const difficulty = questionDifficulty(answeredRows);
+
+  // Resolve question labels: fixed course questions first, then the bank.
+  const labelById = new Map<string, string>();
+  for (const b of content.blocks) {
+    // Scored quizzes carry `scenarioText`; the (non-scored) trigger quiz `text`.
+    const quizzes: { questions?: { id: string; scenarioText?: string; text?: string }[] }[] = [];
+    if (b.type === "ONBOARDING") quizzes.push(b.payload.triggerQuiz);
+    if (b.type === "COMPREHENSION") quizzes.push(b.payload.diagnosticQuiz);
+    if (b.type === "PRACTICE" && b.payload.interBlockQuiz) quizzes.push(b.payload.interBlockQuiz);
+    if (b.type === "ANCHORING") quizzes.push(b.payload.finalQuiz);
+    for (const q of quizzes) for (const question of q.questions ?? []) {
+      const label = question.scenarioText ?? question.text;
+      if (label) labelById.set(question.id, label);
+    }
+  }
+  const unknown = difficulty.map((d) => d.questionId).filter((id) => !labelById.has(id));
+  if (unknown.length > 0) {
+    const bank = await prisma.bankQuestion.findMany({ where: { id: { in: unknown } }, select: { id: true, question: true } });
+    for (const b of bank) {
+      const text = (b.question as { scenarioText?: string } | null)?.scenarioText;
+      if (text) labelById.set(b.id, text);
+    }
+  }
+  const questions = difficulty.slice(0, 25).map((d) => ({ ...d, label: labelById.get(d.questionId) ?? d.questionId }));
+
+  const required = content.blocks.flatMap((b) =>
+    blockRequirements(b).map((r) => ({ blockIndex: b.index, key: r.key, label: r.label })),
+  );
+
+  return {
+    enrolled,
+    questions,
+    time: timeByItem(timeRows),
+    videos: videoCompletion(videoRows),
+    funnel: courseFunnel(required, completionRows, enrolled),
+  };
 }
 
 /** Minimal CSV serializer for report rows. */

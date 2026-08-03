@@ -1011,7 +1011,7 @@ model XapiStatement {
   id           String     @id @default(cuid())
   enrollmentId String
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
-  verb         String // verb IRI
+  verb         String // short verb key (e.g. "answered") — the IRI lives in the statement JSON
   objectId     String // activity IRI
   statement    Json // the full xAPI statement
   forwarded    Boolean    @default(false)
@@ -1020,7 +1020,11 @@ model XapiStatement {
   storedAt     DateTime   @default(now())
 
   @@index([enrollmentId])
-  @@index([forwarded])
+  // Forwarder scan: WHERE forwarded = false ORDER BY storedAt ASC.
+  @@index([forwarded, storedAt])
+  // Staff LRS query + insights: filter by verb and/or date range, newest first.
+  @@index([verb, storedAt])
+  @@index([storedAt])
 }
 
 enum NotificationChannel {

@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseLearners, courseReport, courseWorkbook, learnerDiagnostic, overview, pamExport, toCsv, transcript,
+  AnalyticsError, atRiskLearners, cohortReport, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, learnerDiagnostic, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
@@ -78,6 +78,13 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get("/analytics/courses/:courseId/competencies", { preHandler: courseScoped }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     try { return { data: await courseCompetencies(courseId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Pedagogical insights from the local xAPI mini-LRS: question difficulty,
+  // time-on-task per item, video completion, and the course funnel.
+  app.get("/analytics/courses/:courseId/insights", { preHandler: courseScoped }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    try { return { data: await courseInsights(courseId) }; } catch (err) { return handle(reply, err); }
   });
 
   // One learner's diagnostic competency profile (admin view).

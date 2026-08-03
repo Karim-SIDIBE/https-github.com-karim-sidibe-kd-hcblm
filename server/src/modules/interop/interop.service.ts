@@ -177,6 +177,29 @@ export async function ingestStatement(token: string, statement: Record<string, a
  * and statement type (verb). Joins through the enrolment so analytics can pull
  * without manual export. Staff-gated at the route.
  */
+/** Flatten a stored statement into an analyst-friendly export row (CSV). */
+export function statementExportRow(row: {
+  storedAt: Date; verb: string; objectId: string; statement: unknown;
+  enrollment: { user: { name: string; email: string } } | null;
+}): Record<string, unknown> {
+  const s = row.statement as {
+    result?: { success?: boolean; response?: string; score?: { scaled?: number }; extensions?: Record<string, unknown> };
+  } | null;
+  const ext = s?.result?.extensions ?? {};
+  const timeKey = Object.keys(ext).find((k) => k.endsWith("/time-on-task-seconds"));
+  return {
+    date: row.storedAt.toISOString(),
+    apprenant: row.enrollment?.user.name ?? "",
+    email: row.enrollment?.user.email ?? "",
+    verbe: row.verb.split("/").pop() ?? row.verb,
+    activite: row.objectId.replace(/^.*\/courses\//, ""),
+    succes: s?.result?.success ?? "",
+    scorePct: typeof s?.result?.score?.scaled === "number" ? Math.round(s.result.score.scaled * 100) : "",
+    reponse: s?.result?.response ?? "",
+    dureeSec: timeKey ? ext[timeKey] : "",
+  };
+}
+
 export async function queryStatements(filters: {
   learnerId?: string; courseId?: string; verb?: string; since?: Date; until?: Date; limit?: number;
 }) {
@@ -195,7 +218,11 @@ export async function queryStatements(filters: {
   }
   const rows = await prisma.xapiStatement.findMany({
     where, orderBy: { storedAt: "desc" }, take: Math.min(filters.limit ?? 200, 1000),
-    select: { id: true, verb: true, objectId: true, statement: true, storedAt: true, enrollmentId: true },
+    select: {
+      id: true, verb: true, objectId: true, statement: true, storedAt: true, enrollmentId: true,
+      // Learner identity for staff exports (CSV) — staff-gated at the route.
+      enrollment: { select: { courseId: true, user: { select: { name: true, email: true } } } },
+    },
   });
   return { count: rows.length, statements: rows };
 }

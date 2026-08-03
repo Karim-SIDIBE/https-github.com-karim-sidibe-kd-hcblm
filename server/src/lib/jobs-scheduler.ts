@@ -24,6 +24,7 @@ import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "../mod
 import { runDueReports } from "../modules/reports/reports.service.js";
 import { runRetentionPurge } from "../modules/rgpd/rgpd.service.js";
 import { forwardPending } from "./lrs/forwarder.js";
+import { archiveGranularStatements } from "./lrs/retention.js";
 import { flushPendingWebhooks } from "./webhooks/webhooks.js";
 
 const FAST_MS = 60_000;      // delivery queues
@@ -64,6 +65,8 @@ export function startJobsScheduler(log: Logger = { info: console.log, error: con
       await runProjectSlaAlerts(now);
       await runDueReports(now);
       await runRetentionPurge(now);
+      const x = await archiveGranularStatements(now);
+      if (x.archived > 0) log.info(`[jobs] rétention xAPI : ${x.archived} statement(s) archivé(s) → ${x.file}`);
     } catch (e) {
       log.error(`[jobs] tick quotidien en erreur : ${e instanceof Error ? e.message : e}`);
     } finally {

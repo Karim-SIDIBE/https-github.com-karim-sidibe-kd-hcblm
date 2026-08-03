@@ -47,6 +47,10 @@ const EnvSchema = z.object({
   LRS_ENDPOINT: z.string().url().optional(),
   LRS_KEY: z.string().optional(),
   LRS_SECRET: z.string().optional(),
+  /// Two-tier retention: GRANULAR statements (answered/progressed/experienced)
+  /// older than this are archived to NDJSON.gz then purged; milestone
+  /// statements (completed/passed/earned/…) are kept forever. 0 = disabled.
+  XAPI_RETENTION_MONTHS: z.coerce.number().int().min(0).default(12),
 
   // --- media pipeline (storage + transcoding). Local FS by default. ---
   MEDIA_DIR: z.string().default(".media"),

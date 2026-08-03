@@ -6,6 +6,7 @@ import { auth, api, logoutEverywhere, type CourseSummary, type Principal } from 
 import { initials } from "./lib/ui";
 import { Login } from "./screens/Login";
 import { Dashboard } from "./screens/Dashboard";
+import { Insights } from "./screens/Insights";
 import { Learners } from "./screens/Learners";
 import { Enrol } from "./screens/Enrol";
 import { Relances } from "./screens/Relances";
@@ -29,6 +30,8 @@ const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", 
 const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Pilotage", items: [
     { id: "dashboard", label: "Tableau de bord", Icon: IDash, roles: [A, C, I, E, EC, EM] },
+    // LEARNING_DESIGNER exclu : pas de permission analytics:read côté serveur.
+    { id: "insights", label: "Pilotage pédagogique", Icon: IDash, roles: [A, C, I] },
     { id: "learners", label: "Apprenants", Icon: ILearners, roles: [A, C, I, E] },
     { id: "users", label: "Utilisateurs", Icon: ILearners, roles: [A, C] },
     { id: "enrol", label: "Inscriptions", Icon: IEnrol, roles: [A, C] },
@@ -140,6 +143,7 @@ export function App() {
         {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" && view !== "uitexts" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
+          : view === "insights" ? <Insights ctx={ctx} />
           : view === "users" ? <Utilisateurs />
           : view === "learners" ? <Learners ctx={ctx} />
           : view === "enrol" ? <Enrol ctx={ctx} />
