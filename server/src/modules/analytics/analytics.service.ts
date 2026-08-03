@@ -4,6 +4,7 @@
  * Aggregations are computed on the fly with Prisma + the engine's progress
  * computation. (At scale these become materialized views / a warehouse.)
  */
+import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { blockRequirements, computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";
@@ -420,13 +421,29 @@ export async function courseWorkbook(courseId: string): Promise<Sheet[]> {
 
 // --- pedagogical insights (local xAPI mini-LRS) ------------------------------
 
+/** A comparable slice of a course's enrollments: an inscription window or a cohort. */
+export type SegmentFilter =
+  | { kind: "period"; since: Date; until: Date }
+  | { kind: "cohort"; cohortId: string };
+
+async function segmentEnrollmentIds(courseId: string, segment: SegmentFilter): Promise<string[]> {
+  const where: Prisma.EnrollmentWhereInput = { courseId };
+  if (segment.kind === "period") {
+    where.startedAt = { gte: segment.since, lte: segment.until };
+  } else {
+    where.user = { cohortMemberships: { some: { cohortId: segment.cohortId } } };
+  }
+  const rows = await prisma.enrollment.findMany({ where, select: { id: true } });
+  return rows.map((r) => r.id);
+}
+
 /**
  * The four steering indicators computed from granular xAPI traces + completions:
  * question difficulty, real time-on-task per item, video completion, and the
  * course funnel (drop-off along the canonical item sequence). SQL aggregates
  * here; shaping is pure (domain/engine/insights).
  */
-export async function courseInsights(courseId: string) {
+export async function courseInsights(courseId: string, segment?: SegmentFilter) {
   const version = await prisma.courseVersion.findFirst({
     where: { courseId, status: "PUBLISHED" },
     orderBy: { version: "desc" },
@@ -434,34 +451,38 @@ export async function courseInsights(courseId: string) {
   if (!version) throw new AnalyticsError(404, "no_published_version", "Aucune version publiée pour ce parcours");
   const content = CourseContent.parse(version.content);
 
+  // Segment restriction (comparison feature): NULL id list = whole course.
+  const ids = segment ? await segmentEnrollmentIds(courseId, segment) : null;
+  const idsSql = ids === null ? Prisma.sql`` : Prisma.sql` AND e.id IN (${ids.length ? Prisma.join(ids) : Prisma.sql`NULL`})`;
+
   const [enrolled, answeredRows, timeRows, videoRows, completionRows] = await Promise.all([
-    prisma.enrollment.count({ where: { courseId } }),
+    ids === null ? prisma.enrollment.count({ where: { courseId } }) : Promise.resolve(ids.length),
     prisma.$queryRaw<{ objectId: string; total: number; correct: number }[]>`
       SELECT s."objectId" AS "objectId", COUNT(*)::int AS total,
              (COUNT(*) FILTER (WHERE s.statement->'result'->>'success' = 'true'))::int AS correct
       FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
       WHERE e."courseId" = ${courseId} AND s.verb = ${"answered"}
-        AND s."objectId" LIKE '%/questions/%'
+        AND s."objectId" LIKE '%/questions/%'${idsSql}
       GROUP BY 1`,
     prisma.$queryRaw<{ objectId: string; enrollmentId: string; seconds: number }[]>`
       SELECT s."objectId" AS "objectId", s."enrollmentId" AS "enrollmentId",
              SUM((s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds})::numeric)::float AS seconds
       FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
       WHERE e."courseId" = ${courseId}
-        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds}) IS NOT NULL
+        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds}) IS NOT NULL${idsSql}
       GROUP BY 1, 2`,
     prisma.$queryRaw<{ objectId: string; enrollmentId: string; maxProgress: number }[]>`
       SELECT s."objectId" AS "objectId", s."enrollmentId" AS "enrollmentId",
              MAX((s.statement->'result'->'extensions'->>${XAPI_EXT.videoProgress})::numeric)::float AS "maxProgress"
       FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
       WHERE e."courseId" = ${courseId} AND s.verb = ${"progressed"}
-        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.videoProgress}) IS NOT NULL
+        AND (s.statement->'result'->'extensions'->>${XAPI_EXT.videoProgress}) IS NOT NULL${idsSql}
       GROUP BY 1, 2`,
     prisma.$queryRaw<{ blockIndex: number; itemKey: string; completions: number }[]>`
       SELECT ic."blockIndex" AS "blockIndex", ic."itemKey" AS "itemKey",
              COUNT(DISTINCT ic."enrollmentId")::int AS completions
       FROM "ItemCompletion" ic JOIN "Enrollment" e ON e.id = ic."enrollmentId"
-      WHERE e."courseId" = ${courseId}
+      WHERE e."courseId" = ${courseId}${idsSql}
       GROUP BY 1, 2`,
   ]);
 
@@ -501,6 +522,94 @@ export async function courseInsights(courseId: string) {
     time: timeByItem(timeRows),
     videos: videoCompletion(videoRows),
     funnel: courseFunnel(required, completionRows, enrolled),
+  };
+}
+
+// --- trace explorer (free-form aggregation, "Series API" style) --------------
+
+export type ExploreGroupBy = "verb" | "activity" | "item" | "block" | "learner" | "day";
+export type ExploreFilters = {
+  verb?: string; blockIndex?: number; itemKey?: string; since?: Date; until?: Date;
+};
+
+/**
+ * One-dimension aggregation over the course's statements: pick a grouping, get
+ * per-bucket volume, distinct learners, success rate (scored traces only) and
+ * total time-on-task. The heavy lifting stays in SQL on the indexed columns.
+ */
+export async function exploreStatements(courseId: string, groupBy: ExploreGroupBy, f: ExploreFilters = {}) {
+  const dim = {
+    verb: Prisma.sql`s.verb`,
+    activity: Prisma.sql`s."objectId"`,
+    item: Prisma.sql`substring(s."objectId" from 'blocks/[0-9]+/items/([^/]+)')`,
+    block: Prisma.sql`substring(s."objectId" from 'blocks/([0-9]+)')`,
+    learner: Prisma.sql`e."userId"`,
+    day: Prisma.sql`to_char(s."storedAt", 'YYYY-MM-DD')`,
+  }[groupBy];
+  const cond: Prisma.Sql[] = [Prisma.sql`e."courseId" = ${courseId}`];
+  if (f.verb) cond.push(Prisma.sql`s.verb = ${f.verb}`);
+  if (f.blockIndex != null) cond.push(Prisma.sql`s."objectId" LIKE ${"%/blocks/" + f.blockIndex + "/%"} OR s."objectId" LIKE ${"%/blocks/" + f.blockIndex}`);
+  if (f.itemKey) cond.push(Prisma.sql`s."objectId" LIKE ${"%/items/" + f.itemKey} OR s."objectId" LIKE ${"%/items/" + f.itemKey + "/%"}`);
+  if (f.since) cond.push(Prisma.sql`s."storedAt" >= ${f.since}`);
+  if (f.until) cond.push(Prisma.sql`s."storedAt" <= ${f.until}`);
+  const where = Prisma.join(cond.map((c) => Prisma.sql`(${c})`), " AND ");
+
+  const rows = await prisma.$queryRaw<{
+    key: string | null; statements: number; learners: number;
+    scored: number; successes: number; seconds: number | null;
+  }[]>`
+    SELECT ${dim} AS key,
+           COUNT(*)::int AS statements,
+           COUNT(DISTINCT s."enrollmentId")::int AS learners,
+           (COUNT(*) FILTER (WHERE s.statement->'result'->>'success' IS NOT NULL))::int AS scored,
+           (COUNT(*) FILTER (WHERE s.statement->'result'->>'success' = 'true'))::int AS successes,
+           SUM((s.statement->'result'->'extensions'->>${XAPI_EXT.timeOnTaskSeconds})::numeric)::float AS seconds
+    FROM "XapiStatement" s JOIN "Enrollment" e ON e.id = s."enrollmentId"
+    WHERE ${where}
+    GROUP BY 1 ORDER BY 2 DESC LIMIT 100`;
+
+  // Learner buckets get human labels; other dimensions are self-describing.
+  const labels = new Map<string, string>();
+  if (groupBy === "learner") {
+    const users = await prisma.user.findMany({
+      where: { id: { in: rows.map((r) => r.key).filter((k): k is string => k != null) } },
+      select: { id: true, name: true, email: true },
+    });
+    for (const u of users) labels.set(u.id, `${u.name} (${u.email})`);
+  }
+  return rows
+    .filter((r) => r.key != null)
+    .map((r) => ({
+      key: r.key!,
+      label: labels.get(r.key!) ?? r.key!,
+      statements: r.statements,
+      learners: r.learners,
+      successPct: r.scored > 0 ? Math.round((r.successes / r.scored) * 100) : null,
+      minutes: r.seconds != null ? Math.round(r.seconds / 60) : null,
+    }));
+}
+
+// --- segment comparison (periods or cohorts) ---------------------------------
+
+/** Compress one segment's insights into comparable headline numbers. */
+export function summarizeInsights(ins: Awaited<ReturnType<typeof courseInsights>>) {
+  const qTotals = ins.questions.reduce((a, q) => a + q.total, 0);
+  const qCorrect = ins.questions.reduce((a, q) => a + q.correct, 0);
+  const funnelEnd = ins.funnel[ins.funnel.length - 1];
+  const vids = ins.videos.filter((v) => v.learners > 0);
+  return {
+    enrolled: ins.enrolled,
+    avgQuestionPct: qTotals > 0 ? Math.round((qCorrect / qTotals) * 100) : null,
+    funnelEndPct: funnelEnd?.pctOfEnrolled ?? 0,
+    avgVideoFinishedPct: vids.length ? Math.round(vids.reduce((a, v) => a + v.finishedPct, 0) / vids.length) : null,
+  };
+}
+
+export async function compareInsights(courseId: string, a: SegmentFilter, b: SegmentFilter) {
+  const [insA, insB] = await Promise.all([courseInsights(courseId, a), courseInsights(courseId, b)]);
+  return {
+    a: { insights: insA, summary: summarizeInsights(insA) },
+    b: { insights: insB, summary: summarizeInsights(insB) },
   };
 }
 

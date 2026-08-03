@@ -148,6 +148,9 @@ export type LearnerRow = {
 };
 export type AtRiskLearner = { id: string; enrollmentId: string; name: string; email: string; progressPercent: number; lastActivity: string | null; status: string; riskScore: number; riskLevel: "low" | "medium" | "high"; factors: string[] };
 export type CourseCompetencies = { learnersAssessed: number; competencies: { subArea: string; avgPct: number; learners: number }[] };
+export type ExploreBucket = { key: string; label: string; statements: number; learners: number; successPct: number | null; minutes: number | null };
+export type InsightsSummary = { enrolled: number; avgQuestionPct: number | null; funnelEndPct: number; avgVideoFinishedPct: number | null };
+export type InsightsCompare = { a: { insights: CourseInsights; summary: InsightsSummary }; b: { insights: CourseInsights; summary: InsightsSummary } };
 export type CourseInsights = {
   enrolled: number;
   questions: { questionId: string; label: string; blockIndex: number | null; itemKey: string | null; total: number; correct: number; pctCorrect: number }[];
@@ -229,6 +232,14 @@ export const api = {
   },
   competencies: (courseId: string) => req<CourseCompetencies>("GET", `/analytics/courses/${courseId}/competencies`),
   insights: (courseId: string) => req<CourseInsights>("GET", `/analytics/courses/${courseId}/insights`),
+  explore: (courseId: string, groupBy: string, filters: Record<string, string>) => {
+    const p = new URLSearchParams({ groupBy, ...filters });
+    return req<ExploreBucket[]>("GET", `/analytics/courses/${courseId}/explore?${p.toString()}`);
+  },
+  compareInsights: (courseId: string, params: Record<string, string>) => {
+    const p = new URLSearchParams(params);
+    return req<InsightsCompare>("GET", `/analytics/courses/${courseId}/insights/compare?${p.toString()}`);
+  },
   async exportStatements(courseId: string, format: "csv" | "ndjson"): Promise<Blob> {
     const t = auth.token();
     const res = await fetch(`${BASE}/lrs/statements?courseId=${encodeURIComponent(courseId)}&limit=1000&format=${format}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
