@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken, statementExportRow,
+  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken, standardStatementById, standardStatements, statementExportRow, verbKeyOfIri,
 } from "./interop.service.js";
 import { toCsv } from "../analytics/analytics.service.js";
 import * as storage from "../../lib/storage/storage.js";
@@ -101,6 +101,81 @@ export async function interopRoutes(app: FastifyInstance) {
       for (const s of statements) results.push(await ingestStatement(token, s as Record<string, any>));
       return reply.send(results);
     } catch (err) { return handle(reply, err); }
+  });
+
+  // Standard xAPI Statement API — READ side (1.0.3 essentials), so external
+  // xAPI tooling (BI connectors, ADL utilities) can read the local LRS with a
+  // first-party Bearer token. Staff only. Supported: statementId, agent
+  // (account.name = userId), verb (IRI), activity, since/until, limit,
+  // ascending, `more` keyset pagination. Not stored: voided statements.
+  app.get("/xapi/statements", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    if (!isStaff(req.principal!.role)) {
+      return reply.status(403).send({ error: "forbidden", message: "Réservé au personnel" });
+    }
+    const q = z.object({
+      statementId: z.string().optional(),
+      voidedStatementId: z.string().optional(),
+      agent: z.string().optional(),
+      verb: z.string().url().optional(),
+      activity: z.string().url().optional(),
+      since: z.string().datetime({ offset: true }).optional(),
+      until: z.string().datetime({ offset: true }).optional(),
+      limit: z.coerce.number().int().min(0).max(500).default(50),
+      ascending: z.coerce.boolean().default(false),
+      format: z.enum(["exact", "ids", "canonical"]).default("exact"),
+      attachments: z.coerce.boolean().default(false),
+      cursor: z.string().optional(),
+    }).parse(req.query ?? {});
+
+    reply.header("X-Experience-API-Version", "1.0.3");
+    reply.header("X-Experience-API-Consistent-Through", new Date().toISOString());
+
+    // Spec: statementId excludes every other filter (format/attachments aside).
+    if (q.statementId || q.voidedStatementId) {
+      if (q.agent || q.verb || q.activity || q.since || q.until || q.cursor) {
+        return reply.status(400).send({ error: "bad_request", message: "statementId est exclusif des autres filtres" });
+      }
+      if (q.voidedStatementId) return reply.status(404).send({ error: "not_found", message: "Aucun statement annulé (voiding non utilisé)" });
+      const s = await standardStatementById(q.statementId!);
+      return s ?? reply.status(404).send({ error: "not_found", message: "Statement introuvable" });
+    }
+
+    // Verb IRIs map onto our stored short keys; an unknown IRI matches nothing.
+    let verbKey: string | undefined;
+    if (q.verb) {
+      const k = verbKeyOfIri(q.verb);
+      if (!k) return { statements: [], more: "" };
+      verbKey = k;
+    }
+    // agent = spec JSON object; we match our actors' account.name (= userId).
+    let agentAccountName: string | undefined;
+    if (q.agent) {
+      try {
+        const a = JSON.parse(q.agent) as { account?: { name?: string }; mbox?: string };
+        if (a.account?.name) agentAccountName = a.account.name;
+        else return { statements: [], more: "" }; // mbox/sha1: not how our actors are keyed
+      } catch { return reply.status(400).send({ error: "bad_request", message: "agent doit être un objet JSON xAPI" }); }
+    }
+    let cursor: { storedAt: string; id: string } | undefined;
+    if (q.cursor) {
+      try { cursor = JSON.parse(Buffer.from(q.cursor, "base64url").toString("utf8")); }
+      catch { return reply.status(400).send({ error: "bad_request", message: "curseur invalide" }); }
+    }
+
+    const { statements, nextCursor } = await standardStatements({
+      agentAccountName, verbKey, activityIri: q.activity,
+      since: q.since ? new Date(q.since) : undefined,
+      until: q.until ? new Date(q.until) : undefined,
+      limit: q.limit, ascending: q.ascending, cursor,
+    });
+    let more = "";
+    if (nextCursor) {
+      const [path, search] = req.url.split("?", 2);
+      const params = new URLSearchParams(search ?? "");
+      params.set("cursor", Buffer.from(JSON.stringify(nextCursor), "utf8").toString("base64url"));
+      more = `${path}?${params.toString()}`;
+    }
+    return { statements, more };
   });
 
   // xAPI retention archives (two-tier local LRS): list + download. Platform-ops

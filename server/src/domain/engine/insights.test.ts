@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { courseFunnel, parseActivityPath, questionDifficulty, timeByItem, videoCompletion } from "./insights.js";
+import { courseFunnel, detectInsightAlerts, parseActivityPath, questionDifficulty, timeByItem, videoCompletion } from "./insights.js";
 
 const BASE = "https://declick.kompetences.net/xapi/courses/gestion-du-temps-n1";
 
@@ -71,4 +71,45 @@ test("courseFunnel follows the canonical order and fills gaps with zero", () => 
   const out = courseFunnel(required, counts, 10);
   assert.deepEqual(out.map((s) => s.pctOfEnrolled), [100, 0, 40]);
   assert.equal(out[1]!.label, "Quiz déclencheur");
+});
+
+test("detectInsightAlerts flags weak questions, funnel breaks and deserted videos — but not small samples", () => {
+  const q = (id: string, total: number, pct: number) => ({
+    questionId: id, label: `Question ${id}`, blockIndex: 1, itemKey: "diagnostic",
+    total, correct: Math.round((total * pct) / 100), pctCorrect: pct,
+  });
+  const ins = {
+    enrolled: 20,
+    questions: [q("d1", 12, 25), q("d2", 3, 0), q("d3", 12, 80)],
+    videos: [
+      { blockIndex: 1, itemKey: "1.1", learners: 10, avgPct: 45, finishedPct: 30 },
+      { blockIndex: 1, itemKey: "1.2", learners: 2, avgPct: 10, finishedPct: 0 },
+    ],
+    funnel: [
+      { blockIndex: 0, itemKey: "profile", label: "Profil", completions: 20, pctOfEnrolled: 100 },
+      { blockIndex: 0, itemKey: "trigger", label: "Quiz déclencheur", completions: 8, pctOfEnrolled: 40 },
+      { blockIndex: 1, itemKey: "diagnostic", label: "Diagnostic", completions: 7, pctOfEnrolled: 35 },
+    ],
+  };
+  const alerts = detectInsightAlerts(ins);
+  const kinds = alerts.map((a) => a.kind).sort();
+  assert.deepEqual(kinds, ["funnel", "question", "video"]);
+  assert.ok(alerts.find((a) => a.kind === "question")!.label.includes("d1")); // d2 = 3 réponses → ignorée
+  assert.ok(alerts.find((a) => a.kind === "video")!.label.includes("1.1")); // 1.2 = 2 spectateurs → ignorée
+  assert.ok(alerts.find((a) => a.kind === "funnel")!.detail.includes("100 % à 40 %"));
+});
+
+test("detectInsightAlerts stays silent on a healthy course and a tiny cohort", () => {
+  const healthy = {
+    enrolled: 30,
+    questions: [{ questionId: "d1", label: "Q", blockIndex: 1, itemKey: "diagnostic", total: 30, correct: 27, pctCorrect: 90 }],
+    videos: [{ blockIndex: 1, itemKey: "1.1", learners: 30, avgPct: 95, finishedPct: 92 }],
+    funnel: [
+      { blockIndex: 0, itemKey: "profile", label: "Profil", completions: 30, pctOfEnrolled: 100 },
+      { blockIndex: 1, itemKey: "diagnostic", label: "Diagnostic", completions: 26, pctOfEnrolled: 87 },
+    ],
+  };
+  assert.equal(detectInsightAlerts(healthy).length, 0);
+  const tiny = { ...healthy, enrolled: 3, funnel: healthy.funnel.map((f, i) => ({ ...f, pctOfEnrolled: i === 0 ? 100 : 0 })) };
+  assert.equal(detectInsightAlerts(tiny).length, 0); // 3 inscrits < minLearners → pas de bruit
 });

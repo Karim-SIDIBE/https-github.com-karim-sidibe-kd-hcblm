@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { runReEngagement, runJournalTriggers, runProjectSlaAlerts } from "./jobs.service.js";
+import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts } from "./jobs.service.js";
 import { runDueReports } from "../reports/reports.service.js";
 import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
@@ -50,6 +50,21 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/lrs/forward", { preHandler: guard("job:run") }, async (req) => {
     const { batchSize } = z.object({ batchSize: z.number().int().positive().max(500).optional() }).parse(req.body ?? {});
     return { data: await forwardPending(batchSize ?? 100) };
+  });
+
+  // Pedagogical alerting digest (manual trigger; bypasses the weekly gate).
+  app.post("/jobs/insights-alerts/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now, minAnswers, minLearners } = z.object({
+      now: z.string().datetime().optional(),
+      minAnswers: z.number().int().positive().optional(),
+      minLearners: z.number().int().positive().optional(),
+    }).parse(req.body ?? {});
+    return {
+      data: await runInsightsAlerts(now ? new Date(now) : new Date(), {
+        force: true,
+        thresholds: { ...(minAnswers ? { minAnswers } : {}), ...(minLearners ? { minLearners } : {}) },
+      }),
+    };
   });
 
   // xAPI two-tier retention: archive granular statements older than the window.
