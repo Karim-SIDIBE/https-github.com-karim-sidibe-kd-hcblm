@@ -1,13 +1,17 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken,
+  InteropError, commitScorm, getPackage, getRegistration, importPackage, ingestStatement, launch, queryStatements, registrationByToken, statementExportRow,
 } from "./interop.service.js";
+import { toCsv } from "../analytics/analytics.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { scanUpload } from "../../lib/av/scan.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { TenantScopeError, assertCourseAccess } from "../../lib/security/tenant-scope.js";
+import { archiveDir } from "../../lib/lrs/retention.js";
+import { createReadStream, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
 
 const MIME: Record<string, string> = {
   html: "text/html", htm: "text/html", js: "text/javascript", css: "text/css", json: "application/json",
@@ -101,6 +105,28 @@ export async function interopRoutes(app: FastifyInstance) {
     } catch (err) { return handle(reply, err); }
   });
 
+  // xAPI retention archives (two-tier local LRS): list + download. Platform-ops
+  // data (cross-organisation) → job:run (SUPER_ADMIN / COURSE_ADMIN only).
+  const ARCHIVE_NAME = /^xapi-granulaire-\d{14}\.ndjson\.gz$/;
+  app.get("/lrs/archives", { preHandler: guard("job:run") }, async () => {
+    let names: string[] = [];
+    try { names = readdirSync(archiveDir()).filter((n) => ARCHIVE_NAME.test(n)); } catch { /* dossier absent = aucune archive */ }
+    const data = names.sort().reverse().map((name) => {
+      const s = statSync(join(archiveDir(), name));
+      return { name, sizeBytes: s.size, createdAt: s.mtime.toISOString() };
+    });
+    return { data };
+  });
+
+  app.get("/lrs/archives/:name", { preHandler: guard("job:run") }, async (req, reply) => {
+    const { name } = z.object({ name: z.string().regex(ARCHIVE_NAME) }).parse(req.params);
+    const path = join(archiveDir(), name);
+    try { statSync(path); } catch { return reply.status(404).send({ error: "not_found", message: "Archive introuvable" }); }
+    reply.header("content-type", "application/gzip");
+    reply.header("content-disposition", `attachment; filename="${name}"`);
+    return reply.send(createReadStream(path));
+  });
+
   // LRS query (§8.1) — read stored statements by learner, course, date range
   // and statement type (verb). For KOMPETENCES DECLICK analytics infrastructure.
   app.get("/lrs/statements", { preHandler: guard("analytics:read") }, async (req, reply) => {
@@ -111,6 +137,8 @@ export async function interopRoutes(app: FastifyInstance) {
       since: z.string().datetime().optional(),
       until: z.string().datetime().optional(),
       limit: z.coerce.number().int().positive().max(1000).optional(),
+      /// json (défaut) = API ; csv = analyse tableur ; ndjson = xAPI brut ré-importable.
+      format: z.enum(["json", "csv", "ndjson"]).default("json"),
     }).parse(req.query ?? {});
     // Tenant isolation: a non-staff customer role must pin the query to one of its
     // own courses (the courseId filter then confines statements to that course).
@@ -122,13 +150,24 @@ export async function interopRoutes(app: FastifyInstance) {
         throw err;
       }
     }
-    return {
-      data: await queryStatements({
-        learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,
-        since: q.since ? new Date(q.since) : undefined,
-        until: q.until ? new Date(q.until) : undefined,
-        limit: q.limit,
-      }),
-    };
+    const result = await queryStatements({
+      learnerId: q.learnerId, courseId: q.courseId, verb: q.verb,
+      since: q.since ? new Date(q.since) : undefined,
+      until: q.until ? new Date(q.until) : undefined,
+      limit: q.limit,
+    });
+    if (q.format === "csv") {
+      reply.header("content-type", "text/csv; charset=utf-8");
+      reply.header("content-disposition", `attachment; filename="xapi-statements.csv"`);
+      return reply.send(toCsv(result.statements.map(statementExportRow)));
+    }
+    if (q.format === "ndjson") {
+      reply.header("content-type", "application/x-ndjson");
+      reply.header("content-disposition", `attachment; filename="xapi-statements.ndjson"`);
+      return reply.send(result.statements
+        .map(({ enrollment: _e, ...row }) => JSON.stringify({ ...row, storedAt: row.storedAt.toISOString() }))
+        .join("\n"));
+    }
+    return { data: result };
   });
 }

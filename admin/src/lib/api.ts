@@ -148,6 +148,13 @@ export type LearnerRow = {
 };
 export type AtRiskLearner = { id: string; enrollmentId: string; name: string; email: string; progressPercent: number; lastActivity: string | null; status: string; riskScore: number; riskLevel: "low" | "medium" | "high"; factors: string[] };
 export type CourseCompetencies = { learnersAssessed: number; competencies: { subArea: string; avgPct: number; learners: number }[] };
+export type CourseInsights = {
+  enrolled: number;
+  questions: { questionId: string; label: string; blockIndex: number | null; itemKey: string | null; total: number; correct: number; pctCorrect: number }[];
+  time: { blockIndex: number; itemKey: string; learners: number; avgSeconds: number }[];
+  videos: { blockIndex: number | null; itemKey: string | null; learners: number; avgPct: number; finishedPct: number }[];
+  funnel: { blockIndex: number; itemKey: string; label: string; completions: number; pctOfEnrolled: number }[];
+};
 type SubScore = { subArea: string; pct: number };
 export type LearnerDiagnostic = { taken: boolean; scorePct?: number | null; profile?: string | null; completedAt?: string; subAreaScores?: SubScore[]; strengths?: SubScore[]; weaknesses?: SubScore[] };
 export type InviteResult = { tempPassword: string; delivered: boolean; channels: { provider: string; ok: boolean }[] };
@@ -221,6 +228,20 @@ export const api = {
     return res.blob();
   },
   competencies: (courseId: string) => req<CourseCompetencies>("GET", `/analytics/courses/${courseId}/competencies`),
+  insights: (courseId: string) => req<CourseInsights>("GET", `/analytics/courses/${courseId}/insights`),
+  async exportStatements(courseId: string, format: "csv" | "ndjson"): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/lrs/statements?courseId=${encodeURIComponent(courseId)}&limit=1000&format=${format}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Export xAPI échoué");
+    return res.blob();
+  },
+  lrsArchives: () => req<{ name: string; sizeBytes: number; createdAt: string }[]>("GET", "/lrs/archives"),
+  async downloadArchive(name: string): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/lrs/archives/${encodeURIComponent(name)}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Téléchargement d'archive échoué");
+    return res.blob();
+  },
   learnerDiagnostic: (enrollmentId: string) => req<LearnerDiagnostic>("GET", `/analytics/enrollments/${enrollmentId}/diagnostic`),
   createUser: (b: { name: string; email: string; password?: string; role?: string }) => req<{ id: string; email: string; name: string; role: string }>("POST", "/users", b),
   enroll: (userId: string, courseId: string) => req<{ id: string }>("POST", "/enrollments", { userId, courseId }),
