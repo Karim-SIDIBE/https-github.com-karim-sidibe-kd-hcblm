@@ -1,0 +1,12 @@
+# Configuration CodeQL du dépôt.
+#
+# js/missing-rate-limiting est exclue : la règle ne modélise que les
+# middlewares Express (express-rate-limit & co) et ne reconnaît ni le limiteur
+# GLOBAL @fastify/rate-limit enregistré dans server/src/app.ts (lot de
+# durcissement : RATE_LIMIT_MAX/min par IP, partagé via Redis en multi-worker,
+# cap renforcé sur les routes d'auth), ni les limites par route posées via
+# `config.rateLimit`. Chaque route Fastify touchant au disque serait donc
+# signalée à tort. Le reste de la suite security-extended reste actif.
+query-filters:
+  - exclude:
+      id: js/missing-rate-limiting
