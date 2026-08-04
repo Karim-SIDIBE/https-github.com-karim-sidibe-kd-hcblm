@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, type BankQuestion, type CourseSummary } from "../lib/api";
+import { modal } from "../lib/modal";
 
 const TYPE_LABEL: Record<string, string> = { single: "QCM", multiple: "Choix multiples", truefalse: "Vrai/Faux", numeric: "Numérique", short: "Réponse courte" };
 const KEYS = ["A", "B", "C", "D"] as const;
@@ -243,7 +244,7 @@ export function QuestionBank() {
   }, [rows, q]);
 
   async function remove(id: string) {
-    if (!window.confirm("Supprimer cette question de la banque ?")) return;
+    if (!(await modal.confirm({ title: "Supprimer cette question de la banque ?", danger: true, okLabel: "Supprimer" }))) return;
     try { await api.deleteBankQuestion(id); setNote("🗑️ Question supprimée."); load(); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
   }

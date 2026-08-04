@@ -152,18 +152,30 @@ export async function registerExternal(params: { url: string; mime: string; dura
   });
 }
 
-/** Media library listing (authoring). Newest first, with available renditions. */
-export async function listMedia(limit = 500) {
-  const assets = await prisma.mediaAsset.findMany({
-    orderBy: { createdAt: "desc" }, take: limit,
-    include: { renditions: { select: { label: true, available: true } } },
-  });
-  return assets.map((a) => ({
+/** Media library listing (authoring). Newest first, with available renditions.
+ *  Paged + searchable (filename) + filterable by folder ("root" = unfiled). */
+export async function listMedia(opts: { q?: string; folder?: string; page?: number; pageSize?: number } = {}) {
+  const term = opts.q?.trim();
+  const where = {
+    ...(term ? { originalFilename: { contains: term, mode: "insensitive" as const } } : {}),
+    ...(opts.folder ? { folderId: opts.folder === "root" ? null : opts.folder } : {}),
+  };
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 500;
+  const [total, assets] = await Promise.all([
+    prisma.mediaAsset.count({ where }),
+    prisma.mediaAsset.findMany({
+      where, orderBy: { createdAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize,
+      include: { renditions: { select: { label: true, available: true } } },
+    }),
+  ]);
+  const rows = assets.map((a) => ({
     id: a.id, kind: a.kind, filename: a.originalFilename, mime: a.mime,
     sizeBytes: a.sizeBytes, durationSec: a.durationSec, status: a.status, error: a.error, createdAt: a.createdAt,
     folderId: a.folderId,
     renditions: a.renditions.filter((r) => r.available).map((r) => r.label),
   }));
+  return { rows, total };
 }
 
 // --- library folders (one folder ≈ one course) --------------------------------

@@ -6,7 +6,8 @@ import { authenticate, guard } from "../../lib/auth.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
-import { UserError, inviteUser, deleteUser, listUsers } from "./users.service.js";
+import { UserError, USER_SORTS, inviteUser, deleteUser, listUsers, updateUser } from "./users.service.js";
+import { envelope, pageQuery, sortSpec } from "../../lib/paging.js";
 
 const RoleEnum = z.enum([
   "LEARNER", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR",
@@ -18,9 +19,14 @@ const publicUser = { id: true, email: true, name: true, role: true, createdAt: t
 
 export async function userRoutes(app: FastifyInstance) {
   // List all accounts (staff) — incl. self-registered users not yet enrolled.
+  // Paged: ?q=&page=&pageSize=&sort=name:asc → { data, total, page, pageSize }.
   app.get("/users", { preHandler: guard("user:manage") }, async (req) => {
-    const { q } = z.object({ q: z.string().optional() }).parse(req.query ?? {});
-    return { data: await listUsers(q) };
+    const query = pageQuery.parse(req.query ?? {});
+    // Legacy callers (people pickers) send no page → serve a large first page.
+    const pageSize = "page" in ((req.query ?? {}) as object) || "pageSize" in ((req.query ?? {}) as object) ? query.pageSize : 500;
+    const sort = sortSpec(query.sort, USER_SORTS, { field: "createdAt", dir: "desc" });
+    const { rows, total } = await listUsers({ q: query.q, page: query.page, pageSize, sort });
+    return envelope(rows, total, query.page, pageSize);
   });
 
   app.post("/users", { preHandler: guard("user:manage") }, async (req, reply) => {
@@ -58,6 +64,31 @@ export async function userRoutes(app: FastifyInstance) {
       return { data: r };
     } catch (e) {
       if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  // Edit an account (staff): name, e-mail, role, activation, password reset.
+  app.patch("/users/:id", { preHandler: guard("user:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const body = z.object({
+      name: z.string().trim().min(1).optional(),
+      email: z.string().email().optional(),
+      role: RoleEnum.optional(),
+      disabled: z.boolean().optional(),
+      password: z.string().min(10, "10 caractères minimum").optional(),
+    }).parse(req.body ?? {});
+    try {
+      const user = await updateUser(req.principal?.id, id, body);
+      await audit({
+        actorId: req.principal?.id, action: "user.update", targetType: "User", targetId: id, ip: req.ip,
+        meta: { fields: Object.keys(body).map((k) => (k === "password" ? "password(reset)" : k)) },
+      });
+      return { data: user };
+    } catch (e) {
+      if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
+      if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002")
+        return reply.conflict("Un utilisateur avec cet email existe déjà");
       throw e;
     }
   });

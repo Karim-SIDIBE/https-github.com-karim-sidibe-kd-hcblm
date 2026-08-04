@@ -1,40 +1,53 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type CredentialRow } from "../lib/api";
 import { downloadBlob } from "../lib/csv";
-import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import { avatarColor, initials, ago } from "../lib/ui";
+import { Pager, ViewsBar } from "../lib/widgets";
+import { modal } from "../lib/modal";
+
+const PAGE_SIZE = 25;
 
 export function Certificats() {
-  const { data, loading, error, reload } = useAsync<CredentialRow[]>(() => api.credentials(), []);
+  const [rows, setRows] = useState<CredentialRow[] | null>(null);
+  const [counts, setCounts] = useState({ total: 0, valid: 0, revoked: 0 });
+  const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
+  const [status, setStatus] = useState(""); // "" | "valid" | "revoked"
+  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const rows = useMemo(() => (data ?? []).filter((c) => q === "" || (c.learner.name + c.learner.email + c.badgeLabel + c.courseTitle).toLowerCase().includes(q.toLowerCase())), [data, q]);
-  const valid = (data ?? []).filter((c) => !c.revoked).length;
-  const revoked = (data ?? []).filter((c) => c.revoked).length;
+  async function load() {
+    try {
+      const r = await api.credentialsPaged({ q, status: status || undefined, page, pageSize: PAGE_SIZE });
+      setRows(r.data); setCounts({ total: r.total, valid: r.valid, revoked: r.revoked }); setError(null);
+    } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); setRows([]); }
+  }
+  useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q, status, page]);
+  useEffect(() => { setPage(1); }, [q, status]);
 
   async function download(c: CredentialRow, kind: "pdf" | "vc") {
     setBusy(`${kind}:${c.id}`);
     try {
       const slug = c.learner.name.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
       downloadBlob(kind === "pdf" ? `certificat-${slug}.pdf` : `credential-${slug}.jwt`, await api.credentialFile(c.id, kind));
-    } catch (e: any) { alert(e?.message || "Erreur de téléchargement"); }
+    } catch (e: any) { await modal.alert({ title: "Téléchargement impossible", body: e?.message || "Erreur de téléchargement" }); }
     finally { setBusy(null); }
   }
 
   async function unrevoke(c: CredentialRow) {
-    if (!window.confirm(`Rétablir le certificat de ${c.learner.name} ? Il redeviendra vérifiable publiquement.`)) return;
+    if (!(await modal.confirm({ title: `Rétablir le certificat de ${c.learner.name} ?`, body: "Il redeviendra vérifiable publiquement.", okLabel: "Rétablir" }))) return;
     setBusy(`un:${c.id}`);
-    try { await api.unrevokeCredential(c.id); reload(); }
-    catch (e: any) { alert(e?.message || "Erreur"); }
+    try { await api.unrevokeCredential(c.id); load(); }
+    catch (e: any) { await modal.alert({ title: "Erreur", body: e?.message || "Erreur" }); }
     finally { setBusy(null); }
   }
 
   async function revoke(c: CredentialRow) {
-    const reason = window.prompt(`Révoquer le certificat de ${c.learner.name} ?\nMotif (optionnel) :`, "");
+    const reason = await modal.prompt({ title: `Révoquer le certificat de ${c.learner.name} ?`, label: "Motif (optionnel)", placeholder: "ex. erreur d'attribution", okLabel: "Révoquer" });
     if (reason === null) return;
     setBusy(c.id);
-    try { await api.revokeCredential(c.id, reason || "Révoqué par l'administrateur"); reload(); }
-    catch (e: any) { alert(e?.message || "Erreur"); }
+    try { await api.revokeCredential(c.id, reason || "Révoqué par l'administrateur"); load(); }
+    catch (e: any) { await modal.alert({ title: "Erreur", body: e?.message || "Erreur" }); }
     finally { setBusy(null); }
   }
 
@@ -46,15 +59,23 @@ export function Certificats() {
           <h1>Certificats</h1>
           <div className="sub">Attestations vérifiables délivrées aux apprenants certifiés.</div>
         </div>
-        <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg)", border: "1px solid var(--line-strong)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 260 }}>
-          <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
+        <span className="row" style={{ gap: 8, alignItems: "center" }}>
+          <ViewsBar screen="certs" config={{ q, status }} onApply={(c) => { setQ((c.q as string) ?? ""); setStatus((c.status as string) ?? ""); }} />
+          <select className="select" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">Tous</option>
+            <option value="valid">Valides</option>
+            <option value="revoked">Révoqués</option>
+          </select>
+          <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg)", border: "1px solid var(--line-strong)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 240 }}>
+            <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
+        </span>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 16 }}>
-        <div className="kpi"><div className="val num">{data?.length ?? "…"}</div><div className="lbl">Certificats délivrés</div></div>
-        <div className="kpi"><div className="val num" style={{ color: "var(--success)" }}>{data ? valid : "…"}</div><div className="lbl">Valides</div></div>
-        <div className="kpi"><div className="val num" style={{ color: "var(--danger)" }}>{data ? revoked : "…"}</div><div className="lbl">Révoqués</div></div>
+        <div className="kpi"><div className="val num">{rows ? counts.valid + counts.revoked : "…"}</div><div className="lbl">Certificats délivrés</div></div>
+        <div className="kpi"><div className="val num" style={{ color: "var(--success)" }}>{rows ? counts.valid : "…"}</div><div className="lbl">Valides</div></div>
+        <div className="kpi"><div className="val num" style={{ color: "var(--danger)" }}>{rows ? counts.revoked : "…"}</div><div className="lbl">Révoqués</div></div>
       </div>
 
       <div className="card">
@@ -62,7 +83,7 @@ export function Certificats() {
           <table className="table">
             <thead><tr><th>Apprenant</th><th>Parcours</th><th>Attestation</th><th>Délivré le</th><th>Statut</th><th></th></tr></thead>
             <tbody>
-              {rows.map((c) => (
+              {(rows ?? []).map((c) => (
                 <tr key={c.id} style={{ cursor: "default" }}>
                   <td><div className="uitem"><span className="av" style={{ background: avatarColor(c.learner.name) }}>{initials(c.learner.name)}</span><div className="who"><b>{c.learner.name}</b><span>{c.learner.email}</span></div></div></td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{c.courseTitle}</span></td>
@@ -80,9 +101,10 @@ export function Certificats() {
               ))}
             </tbody>
           </table>
-          {loading && <div className="empty">Chargement des certificats…</div>}
+          {rows == null && <div className="empty">Chargement des certificats…</div>}
           {error && <div className="empty" style={{ color: "var(--danger)" }}>Erreur : {error}</div>}
-          {!loading && !error && rows.length === 0 && <div className="empty"><div className="big">🏅</div>Aucun certificat délivré pour l'instant.</div>}
+          {rows != null && !error && rows.length === 0 && <div className="empty"><div className="big">🏅</div>Aucun certificat pour ce filtre.</div>}
+          {rows != null && <Pager page={page} pageSize={PAGE_SIZE} total={counts.total} onPage={setPage} />}
         </div>
       </div>
     </div>

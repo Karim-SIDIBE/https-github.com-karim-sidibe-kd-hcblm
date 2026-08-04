@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { api, type MediaAsset, type MediaFolder, ApiError } from "../lib/api";
 import { ago } from "../lib/ui";
+import { Pager } from "../lib/widgets";
+import { modal } from "../lib/modal";
 
 const STATUS: Record<string, { cls: string; label: string }> = {
   READY: { cls: "pill--green", label: "Prêt" },
@@ -16,8 +18,13 @@ type Rend = { label: string; kind: string; url: string | null; bitrateKbps?: num
 function size(n: number | null) { if (!n) return "—"; const u = ["o", "Ko", "Mo", "Go"]; let i = 0, v = n; while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; } return `${v.toFixed(v < 10 && i > 0 ? 1 : 0)} ${u[i]}`; }
 function dur(s: number | null) { if (!s) return "—"; const m = Math.floor(s / 60), x = Math.round(s % 60); return `${m}:${String(x).padStart(2, "0")}`; }
 
+const PAGE_SIZE = 30;
+
 export function Medias() {
   const [rows, setRows] = useState<MediaAsset[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [q, setQ] = useState("");
   const [folders, setFolders] = useState<MediaFolder[]>([]);
   // Library filter: "all" | "root" (sans dossier) | a folder id.
   const [sel, setSel] = useState<string>("all");
@@ -27,11 +34,15 @@ export function Medias() {
 
   async function load() {
     try {
-      const [assets, fold] = await Promise.all([api.media(), api.mediaFolders()]);
-      setRows(assets); setFolders(fold);
+      const [assets, fold] = await Promise.all([
+        api.mediaPaged({ q, folder: sel === "all" ? undefined : sel, page, pageSize: PAGE_SIZE }),
+        api.mediaFolders(),
+      ]);
+      setRows(assets.data); setTotal(assets.total); setFolders(fold);
     } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); setRows([]); }
   }
-  useEffect(() => { void load(); }, []);
+  useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q, sel, page]);
+  useEffect(() => { setPage(1); }, [q, sel]);
 
   async function upload(files: FileList | null) {
     if (!files || files.length === 0) return;
@@ -54,26 +65,26 @@ export function Medias() {
 
   // --- dossiers ---
   async function createFolder() {
-    const name = window.prompt("Nom du nouveau dossier (ex. le nom du parcours) :");
+    const name = await modal.prompt({ title: "Nouveau dossier", label: "Nom (ex. le nom du parcours)", placeholder: "Gestion du temps — Niveau 1" });
     if (!name?.trim()) return;
     try { const f = await api.createMediaFolder(name); setNote(`📁 Dossier « ${f.name} » créé.`); setSel(f.id); load(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Création impossible"); }
   }
   async function renameFolder(f: MediaFolder) {
-    const name = window.prompt("Nouveau nom du dossier :", f.name);
+    const name = await modal.prompt({ title: "Renommer le dossier", label: "Nouveau nom", initial: f.name });
     if (!name?.trim() || name.trim() === f.name) return;
     try { const r = await api.renameMediaFolder(f.id, name); setNote(`📁 Dossier renommé en « ${r.name} ».`); load(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Renommage impossible"); }
   }
   async function removeFolder(f: MediaFolder) {
-    if (!window.confirm(`Supprimer le dossier vide « ${f.name} » ?`)) return;
+    if (!(await modal.confirm({ title: `Supprimer le dossier vide « ${f.name} » ?`, danger: true, okLabel: "Supprimer" }))) return;
     try { await api.deleteMediaFolder(f.id); setNote(`🗑️ Dossier « ${f.name} » supprimé.`); if (sel === f.id) setSel("all"); load(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
   }
 
   // --- médias : renommer / déplacer ---
   async function renameAsset(m: MediaAsset) {
-    const name = window.prompt("Nouveau nom du média :", m.filename ?? "");
+    const name = await modal.prompt({ title: "Renommer le média", label: "Nouveau nom", initial: m.filename ?? "" });
     if (!name?.trim() || name.trim() === m.filename) return;
     try { const a = await api.updateMedia(m.id, { filename: name }); setNote(`✏️ Renommé en « ${a.filename} ».`); load(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Renommage impossible"); }
@@ -89,7 +100,7 @@ export function Medias() {
   function copyId(id: string) { navigator.clipboard?.writeText(id).then(() => setNote(`Identifiant copié : ${id}`)).catch(() => {}); }
 
   async function remove(m: MediaAsset) {
-    if (!window.confirm(`Supprimer définitivement « ${m.filename ?? m.id} » ?\nLes fichiers vidéo (source + tous les débits) seront effacés. Action irréversible.`)) return;
+    if (!(await modal.confirm({ title: `Supprimer définitivement « ${m.filename ?? m.id} » ?`, body: "Les fichiers vidéo (source + tous les débits) seront effacés. Action irréversible.", danger: true, okLabel: "Supprimer" }))) return;
     try { const r = await api.deleteMedia(m.id); setNote(`🗑️ « ${m.filename ?? m.id} » supprimé (${r.removedObjects} fichier(s) effacé(s)).`); load(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
   }
@@ -107,9 +118,7 @@ export function Medias() {
     } catch (e) { setPreview({ asset: m, renditions: [], sel: "" }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
   }
 
-  const all = rows ?? [];
-  const rootCount = all.filter((m) => !m.folderId).length;
-  const visible = sel === "all" ? all : sel === "root" ? all.filter((m) => !m.folderId) : all.filter((m) => m.folderId === sel);
+  const visible = rows ?? []; // server-filtered (folder + search) and paged
   const selFolder = folders.find((f) => f.id === sel) ?? null;
   const chip = (active: boolean): CSSProperties => ({
     padding: "5px 12px", borderRadius: 999, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap",
@@ -122,19 +131,22 @@ export function Medias() {
     <div className="content">
       <div className="pagehead">
         <div>
-          <div className="eyebrow">{rows ? `${visible.length} média${visible.length > 1 ? "s" : ""}${sel !== "all" ? ` · ${selFolder ? selFolder.name : "racine"}` : ""}` : "…"}</div>
+          <div className="eyebrow">{rows ? `${total} média${total > 1 ? "s" : ""}${sel !== "all" ? ` · ${selFolder ? selFolder.name : "racine"}` : ""}${q ? " · recherche" : ""}` : "…"}</div>
           <h1>Médiathèque</h1>
           <div className="sub">Téléversez vos vidéos et ressources, organisées en dossiers (un dossier ≈ un parcours). Le téléversement va dans le dossier ouvert.</div>
         </div>
-        <div>
+        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+          <label className="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg)", border: "1px solid var(--line-strong)", borderRadius: "var(--r-pill)", padding: "8px 14px", width: 220 }}>
+            <input style={{ border: 0, background: "none", outline: "none", fontFamily: "inherit", fontSize: 13, width: "100%" }} placeholder="Rechercher un fichier…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </label>
           <input ref={fileRef} type="file" accept="video/*,audio/*,image/*,text/vtt" multiple style={{ display: "none" }} onChange={(e) => upload(e.target.files)} />
           <button className="btn btn--primary" disabled={busy} onClick={() => fileRef.current?.click()}>{busy ? "Téléversement…" : "⤴ Téléverser un média"}</button>
         </div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
-        <span style={chip(sel === "all")} onClick={() => setSel("all")}>Tous ({all.length})</span>
-        <span style={chip(sel === "root")} onClick={() => setSel("root")}>Racine ({rootCount})</span>
+        <span style={chip(sel === "all")} onClick={() => setSel("all")}>Tous</span>
+        <span style={chip(sel === "root")} onClick={() => setSel("root")}>Racine</span>
         {folders.map((f) => (
           <span key={f.id} style={chip(sel === f.id)} onClick={() => setSel(f.id)}>📁 {f.name} ({f.assetCount})</span>
         ))}
@@ -186,7 +198,8 @@ export function Medias() {
             </tbody>
           </table>
           {!rows && <div className="empty">Chargement…</div>}
-          {rows && visible.length === 0 && <div className="empty"><div className="big">🎬</div>{sel === "all" ? "Aucun média. Téléversez votre première vidéo." : "Dossier vide. Téléversez ici ou déplacez des médias via la colonne Dossier."}</div>}
+          {rows && visible.length === 0 && <div className="empty"><div className="big">🎬</div>{q ? "Aucun média ne correspond à cette recherche." : sel === "all" ? "Aucun média. Téléversez votre première vidéo." : "Dossier vide. Téléversez ici ou déplacez des médias via la colonne Dossier."}</div>}
+          {rows && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
         </div>
       </div>
 

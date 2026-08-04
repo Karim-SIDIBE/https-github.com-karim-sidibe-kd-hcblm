@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { blockItems } from "@kd/shared/block-items";
 import { api, type MediaAsset } from "../lib/api";
+import { modal } from "../lib/modal";
 
 type Opt = { key: string; label: string };
 type Ex = { type: string; prompt: string; feedbackText: string; options?: Opt[]; correctKey?: string; minChars?: number; fields?: { label: string; placeholder?: string }[] };
@@ -145,7 +146,7 @@ function ScoredQuestions({ questions, path, set }: { questions: SQ[]; path: (c: 
           <div className="row between" style={{ marginBottom: 8 }}>
             <span className="row" style={{ gap: 6, alignItems: "center" }}><Grip {...dnd.handleProps(qi)} /><b style={{ fontSize: 12.5 }}>Question {qi + 1}</b></span>
             <span className="row" style={{ gap: 6 }}>
-              <button type="button" className="btn btn--sm" title="Enregistrer cette question dans la banque réutilisable" onClick={async () => { try { await api.addBankQuestion({ question: q, subArea: q.subArea }); alert("✓ Question ajoutée à la banque."); } catch (e) { alert(e instanceof Error ? e.message : "Échec"); } }}>➕ Banque</button>
+              <button type="button" className="btn btn--sm" title="Enregistrer cette question dans la banque réutilisable" onClick={async () => { try { await api.addBankQuestion({ question: q, subArea: q.subArea }); await modal.alert({ title: "✓ Question ajoutée à la banque." }); } catch (e) { await modal.alert({ title: "Échec", body: e instanceof Error ? e.message : "Échec" }); } }}>➕ Banque</button>
               <button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} disabled={questions.length <= 1} onClick={() => set((c) => { path(c).splice(qi, 1); })}>🗑️</button>
             </span>
           </div>
@@ -294,7 +295,7 @@ function SessionCard({ s, si, total, ri, media, set, handleProps }: { s: Session
         <div className="row" style={{ gap: 5 }}>
           <button className="btn btn--sm" disabled={si === 0} onClick={() => set((c) => { const a = arr(c); [a[si - 1], a[si]] = [a[si], a[si - 1]]; })}>↑</button>
           <button className="btn btn--sm" disabled={si === total - 1} onClick={() => set((c) => { const a = arr(c); [a[si + 1], a[si]] = [a[si], a[si + 1]]; })}>↓</button>
-          <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { if (confirm("Supprimer cette micro-session ?")) set((c) => { arr(c).splice(si, 1); }); }}>🗑️</button>
+          <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={async () => { if (await modal.confirm({ title: "Supprimer cette micro-session ?", danger: true, okLabel: "Supprimer" })) set((c) => { arr(c).splice(si, 1); }); }}>🗑️</button>
         </div>
       </div>
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 11 }}>
@@ -321,7 +322,7 @@ function SessionCard({ s, si, total, ri, media, set, handleProps }: { s: Session
         <div><label style={lbl}>3 points clés</label>{[0, 1, 2].map((k) => <input key={k} style={{ ...field, marginBottom: 5 }} value={s.summaryPoints?.[k] ?? ""} placeholder={`Point ${k + 1}`} onChange={(e) => onS((x) => { x.summaryPoints = x.summaryPoints ?? ["", "", ""]; x.summaryPoints[k] = e.target.value; })} />)}</div>
         {s.exercise
           ? <div>
-              <div className="row between"><label style={lbl}>Exercice</label><button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { if (confirm("Retirer l'exercice ? La micro-session devient « vidéo seule » et enchaîne sur l'élément suivant.")) set((c) => { delete arr(c)[si].exercise; }); }}>Retirer l'exercice</button></div>
+              <div className="row between"><label style={lbl}>Exercice</label><button type="button" className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={async () => { if (await modal.confirm({ title: "Retirer l'exercice ?", body: "La micro-session devient « vidéo seule » et enchaîne sur l'élément suivant.", okLabel: "Retirer" })) set((c) => { delete arr(c)[si].exercise; }); }}>Retirer l'exercice</button></div>
               <ExerciseEditor ex={s.exercise} path={(c) => arr(c)[si].exercise!} set={set} />
             </div>
           : <button type="button" className="btn btn--sm" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { arr(c)[si].exercise = { type: "written", prompt: "", feedbackText: "", minChars: 120 }; })}>+ Ajouter un exercice (sinon : vidéo seule)</button>}
@@ -458,7 +459,7 @@ function UnitsCard({ block, ri, set }: { block: any; ri: number; set: Set }) {
       ))}
       <div className="row" style={{ gap: 8, marginTop: 6 }}>
         <button type="button" className="btn btn--sm" onClick={() => set((c) => { arr(c).push({ label: "", type: "micro-session", durationMin: 20 }); })}>+ Unité</button>
-        <button type="button" className="btn btn--sm btn--primary" onClick={() => { if (units.length && !confirm("Remplacer les unités déclarées par celles générées depuis le contenu ?")) return; set((c) => { (c.blocks[ri] as any).units = genUnits(c.blocks[ri]); }); }}>⟳ Pré-remplir depuis le contenu</button>
+        <button type="button" className="btn btn--sm btn--primary" onClick={async () => { if (units.length && !(await modal.confirm({ title: "Remplacer les unités déclarées par celles générées depuis le contenu ?", okLabel: "Remplacer" }))) return; set((c) => { (c.blocks[ri] as any).units = genUnits(c.blocks[ri]); }); }}>⟳ Pré-remplir depuis le contenu</button>
       </div>
     </Card>
   );
@@ -748,7 +749,7 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
       {block.type === "ANCHORING" && (
         <>
           {p.transversalCase
-            ? <Card title="Cas transversal de synthèse (activité longue)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={() => { if (confirm("Retirer le cas transversal ?")) set((c) => { delete c.blocks[ri].payload.transversalCase; }); }}>Retirer</button>}>
+            ? <Card title="Cas transversal de synthèse (activité longue)" action={<button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={async () => { if (await modal.confirm({ title: "Retirer le cas transversal ?", danger: true, okLabel: "Retirer" })) set((c) => { delete c.blocks[ri].payload.transversalCase; }); }}>Retirer</button>}>
                 <CaseStudyEditor cs={p.transversalCase} path={(c) => c.blocks[ri].payload.transversalCase} set={set} />
               </Card>
             : <button className="btn" style={{ alignSelf: "flex-start" }} onClick={() => set((c) => { c.blocks[ri].payload.transversalCase = newCaseStudy("Activité Expérientielle Longue — Cas transversal de synthèse"); })}>+ Ajouter un cas transversal de synthèse</button>}

@@ -5,6 +5,7 @@ import {
 import { auth, api, logoutEverywhere, type CourseSummary, type Principal } from "./lib/api";
 import { initials } from "./lib/ui";
 import { Login } from "./screens/Login";
+import { ModalHost } from "./lib/modal";
 import { Dashboard } from "./screens/Dashboard";
 import { Insights } from "./screens/Insights";
 import { Learners } from "./screens/Learners";
@@ -112,6 +113,7 @@ export function App() {
 
   return (
     <div className="app">
+      <ModalHost />
       <aside className="sidebar">
         <Brand />
         <nav>

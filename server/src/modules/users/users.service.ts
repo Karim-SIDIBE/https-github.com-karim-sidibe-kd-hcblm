@@ -5,6 +5,7 @@ import { randomInt } from "node:crypto";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import { hashPassword } from "../../lib/auth/password.js";
+import type { SortSpec } from "../../lib/paging.js";
 import { daysUntilPurge } from "../../domain/rgpd.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { invitationMessage } from "../../lib/notify/templates.js";
@@ -13,18 +14,27 @@ export class UserError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
 }
 
-/** All accounts (for the admin support screen), with status + enrolment count. */
-export async function listUsers(q?: string) {
-  const term = q?.trim();
+export const USER_SORTS = ["name", "email", "role", "createdAt"] as const;
+
+/** All accounts (for the admin support screen), with status + enrolment count.
+ *  Paged + sorted server-side so the screen scales past a few hundred users. */
+export async function listUsers(opts: { q?: string; page?: number; pageSize?: number; sort?: SortSpec } = {}) {
+  const term = opts.q?.trim();
   const where = term
     ? { OR: [{ email: { contains: term, mode: "insensitive" as const } }, { name: { contains: term, mode: "insensitive" as const } }] }
     : {};
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 500;
+  const sort = opts.sort ?? { field: "createdAt", dir: "desc" as const };
   const now = new Date();
-  const users = await prisma.user.findMany({
-    where, orderBy: { createdAt: "desc" }, take: 500,
-    select: { id: true, name: true, email: true, role: true, emailVerifiedAt: true, disabledAt: true, lockedUntil: true, anonymizedAt: true, deletionRequestedAt: true, createdAt: true, _count: { select: { enrollments: true } } },
-  });
-  return users.map((u) => ({
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where, orderBy: { [sort.field]: sort.dir }, skip: (page - 1) * pageSize, take: pageSize,
+      select: { id: true, name: true, email: true, role: true, emailVerifiedAt: true, disabledAt: true, lockedUntil: true, anonymizedAt: true, deletionRequestedAt: true, createdAt: true, _count: { select: { enrollments: true } } },
+    }),
+  ]);
+  const rows = users.map((u) => ({
     id: u.id, name: u.name, email: u.email, role: u.role,
     verified: u.emailVerifiedAt != null, disabled: u.disabledAt != null,
     locked: u.lockedUntil != null && u.lockedUntil > now,
@@ -33,6 +43,44 @@ export async function listUsers(q?: string) {
     deletionDaysLeft: u.deletionRequestedAt ? daysUntilPurge(u.deletionRequestedAt, now, env.RGPD_GRACE_DAYS) : null,
     enrollments: u._count.enrollments, createdAt: u.createdAt,
   }));
+  return { rows, total };
+}
+
+/**
+ * Edit an account (staff): identity, role, activation, password reset.
+ * Guard-rails: you cannot change your own role or disable yourself, and the
+ * platform always keeps at least one active SUPER_ADMIN.
+ */
+export async function updateUser(
+  actorId: string | undefined,
+  userId: string,
+  patch: { name?: string; email?: string; role?: string; disabled?: boolean; password?: string },
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, role: true, disabledAt: true } });
+  if (!user) throw new UserError(404, "not_found", "Utilisateur introuvable");
+  if (actorId === userId) {
+    if (patch.role !== undefined && patch.role !== user.role) throw new UserError(400, "self_role", "Vous ne pouvez pas changer votre propre rôle");
+    if (patch.disabled === true) throw new UserError(400, "self_disable", "Vous ne pouvez pas désactiver votre propre compte");
+  }
+  const losesSuperAdmin =
+    user.role === "SUPER_ADMIN" &&
+    ((patch.role !== undefined && patch.role !== "SUPER_ADMIN") || patch.disabled === true);
+  if (losesSuperAdmin) {
+    const others = await prisma.user.count({ where: { role: "SUPER_ADMIN", disabledAt: null, id: { not: userId } } });
+    if (others === 0) throw new UserError(400, "last_super_admin", "Impossible : il doit rester au moins un super-administrateur actif");
+  }
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(patch.name !== undefined ? { name: patch.name } : {}),
+      ...(patch.email !== undefined ? { email: patch.email } : {}),
+      ...(patch.role !== undefined ? { role: patch.role as never } : {}),
+      ...(patch.disabled !== undefined ? { disabledAt: patch.disabled ? (user.disabledAt ?? new Date()) : null } : {}),
+      ...(patch.password !== undefined ? { passwordHash: await hashPassword(patch.password), failedLoginCount: 0, lockedUntil: null } : {}),
+    },
+    select: { id: true, name: true, email: true, role: true, disabledAt: true },
+  });
+  return { id: updated.id, name: updated.name, email: updated.email, role: updated.role, disabled: updated.disabledAt != null };
 }
 
 const SETS = { A: "ABCDEFGHJKLMNPQRSTUVWXYZ", a: "abcdefghijkmnpqrstuvwxyz", n: "23456789", s: "!@#$%&*" };

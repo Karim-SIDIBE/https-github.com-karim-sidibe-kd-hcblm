@@ -2,6 +2,8 @@ import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, auth, courseTitle, type LearnerRow, type AtRiskLearner, type LearnerDiagnostic } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 import { table, downloadCsv, today, type Col } from "../lib/csv";
+import { Pager, SortTh, ViewsBar } from "../lib/widgets";
+import { modal } from "../lib/modal";
 
 const RISK_PILL: Record<string, string> = { high: "pill--red", medium: "pill--warn", low: "pill--soft" };
 const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low: "Faible" };
@@ -9,14 +11,17 @@ const RISK_FR: Record<string, string> = { high: "Élevé", medium: "Moyen", low:
 const CAN_MANAGE = ["SUPER_ADMIN", "COURSE_ADMIN"];
 import type { CourseCtx } from "../App";
 
-// Configurable views (per-browser). Columns + filters are saved locally.
+// The last active screen state stays per-browser; NAMED views are stored
+// server-side (SavedView) and follow the account — see <ViewsBar/>.
 const DEFAULT_COLS = ["progress", "finalQuiz", "rubric", "lastActivity", "status", "risk"];
 const ACTIVE_KEY = "klms_learners_active";
-const VIEWS_KEY = "klms_learners_views";
-type ViewConfig = { cols: string[]; filter: string; q: string };
+type ViewConfig = { cols: string[]; filter: string; q: string; sort?: string };
 function loadJSON<T>(key: string, fallback: T): T {
   try { const v = localStorage.getItem(key); return v ? (JSON.parse(v) as T) : fallback; } catch { return fallback; }
 }
+// Map the UI filter label to the server's status param.
+const FILTER_TO_STATUS: Record<string, string | undefined> = { Tous: undefined, Certifiés: "certified", "En cours": "active", Inactifs: "inactive" };
+const PAGE_SIZE = 25;
 
 function statusPill(l: LearnerRow) {
   if (l.status === "CERTIFIED") return <span className="pill pill--green"><span className="dot" />Certifié</span>;
@@ -53,17 +58,20 @@ function DiagPanel({ d }: { d: LearnerDiagnostic | "loading" | undefined }) {
 export function Learners({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
   const [reloadKey, setReloadKey] = useState(0);
-  const { data, loading, error } = useAsync<LearnerRow[]>(() => api.courseLearners(courseId), [courseId, reloadKey]);
   const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId, reloadKey]);
   const riskMap = useMemo(() => new Map((risk.data ?? []).map((r) => [r.enrollmentId, r])), [risk.data]);
 
   const active0 = loadJSON<Partial<ViewConfig>>(ACTIVE_KEY, {});
   const [q, setQ] = useState(active0.q ?? "");
   const [filter, setFilter] = useState(active0.filter ?? "Tous");
+  const [sort, setSort] = useState(active0.sort ?? "startedAt:desc");
   const [visible, setVisible] = useState<string[]>(active0.cols ?? DEFAULT_COLS);
-  const [views, setViews] = useState<Record<string, ViewConfig>>(() => loadJSON(VIEWS_KEY, {}));
-  const [viewName, setViewName] = useState("");
   const [colMenu, setColMenu] = useState(false);
+  // Server-side pagination (M2): the API returns one page + the total.
+  const [rows, setRows] = useState<LearnerRow[] | null>(null);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [error, setError] = useState<string | null>(null);
   // Global header search: « Entrée » from the topbar lands here with its query.
   useEffect(() => {
     const on = (e: Event) => setQ((e as CustomEvent<string>).detail ?? "");
@@ -76,19 +84,30 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [detailId, setDetailId] = useState<string | null>(null);
   const [details, setDetails] = useState<Record<string, LearnerDiagnostic | "loading">>({});
 
-  // Persist the active view + the saved-views library locally.
-  useEffect(() => { localStorage.setItem(ACTIVE_KEY, JSON.stringify({ cols: visible, filter, q } satisfies ViewConfig)); }, [visible, filter, q]);
-  useEffect(() => { localStorage.setItem(VIEWS_KEY, JSON.stringify(views)); }, [views]);
+  useEffect(() => {
+    if (!courseId) return;
+    const t = setTimeout(() => {
+      api.learnersPaged(courseId, { q, status: FILTER_TO_STATUS[filter], sort, page, pageSize: PAGE_SIZE })
+        .then((r) => { setRows(r.data); setTotal(r.total); setError(null); })
+        .catch((e) => { setError(e instanceof Error ? e.message : "Erreur"); setRows([]); });
+    }, q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [courseId, q, filter, sort, page, reloadKey]);
+  useEffect(() => { setPage(1); }, [q, filter, sort, courseId]);
+
+  // Persist the active screen state locally (named views live server-side).
+  useEffect(() => { localStorage.setItem(ACTIVE_KEY, JSON.stringify({ cols: visible, filter, q, sort } satisfies ViewConfig)); }, [visible, filter, q, sort]);
 
   // Column registry — single source of truth for the table cells AND the export.
-  type ColDef = { key: string; label: string; cell: (l: LearnerRow) => ReactNode; csv: Col<LearnerRow>[] };
+  // `sortField` marks the columns the server knows how to sort.
+  type ColDef = { key: string; label: string; sortField?: string; cell: (l: LearnerRow) => ReactNode; csv: Col<LearnerRow>[] };
   const ALL_COLS: ColDef[] = [
-    { key: "progress", label: "Progression", csv: [{ label: "Progression (%)", value: (l) => l.progressPercent }],
+    { key: "progress", label: "Progression", sortField: "progressPercent", csv: [{ label: "Progression (%)", value: (l) => l.progressPercent }],
       cell: (l) => <div className="progress"><div className="track"><i style={{ width: `${l.progressPercent}%`, background: l.progressPercent === 100 ? "var(--green)" : "var(--orange-500)" }} /></div><span className="pct">{l.progressPercent}%</span></div> },
     { key: "finalQuiz", label: "Quiz final", csv: [{ label: "Quiz final (%)", value: (l) => l.finalQuiz ?? "" }],
       cell: (l) => l.finalQuiz != null ? <span className="pill pill--soft">{l.finalQuiz}%</span> : <span className="muted">—</span> },
     { key: "rubric", label: "Projet B4", csv: [{ label: "Projet B4 (%)", value: (l) => l.rubric ?? "" }], cell: (l) => b4Pill(l) },
-    { key: "lastActivity", label: "Dernière activité", csv: [{ label: "Dernière activité", value: (l) => l.lastActivity ?? "" }],
+    { key: "lastActivity", label: "Dernière activité", sortField: "lastActivity", csv: [{ label: "Dernière activité", value: (l) => l.lastActivity ?? "" }],
       cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.lastActivity)}</span> },
     { key: "status", label: "Statut", csv: [{ label: "Statut", value: (l) => l.status }], cell: (l) => statusPill(l) },
     { key: "risk", label: "Risque",
@@ -98,7 +117,7 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
         { label: "Facteurs de risque", value: (l) => riskMap.get(l.enrollmentId)?.factors.join(" · ") ?? "" },
       ],
       cell: (l) => { const rk = riskMap.get(l.enrollmentId); return rk ? <span className={`pill ${RISK_PILL[rk.riskLevel]}`} title={rk.factors.join(" · ")}>{rk.riskScore} · {RISK_FR[rk.riskLevel]}</span> : <span className="muted">—</span>; } },
-    { key: "startedAt", label: "Démarré le", csv: [{ label: "Démarré le", value: (l) => l.startedAt ?? "" }],
+    { key: "startedAt", label: "Démarré le", sortField: "startedAt", csv: [{ label: "Démarré le", value: (l) => l.startedAt ?? "" }],
       cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.startedAt)}</span> },
     { key: "completedAt", label: "Certifié le", csv: [{ label: "Certifié le", value: (l) => l.completedAt ?? "" }],
       cell: (l) => <span className="muted" style={{ fontSize: 12.5 }}>{ago(l.completedAt)}</span> },
@@ -119,10 +138,10 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   // Re-point the enrolment to the latest published version (so new videos/edits
   // show up). "full" wipes progress, "version" keeps it. Never deletes the account.
   async function resetCourse(l: LearnerRow, mode: "full" | "version") {
-    const msg = mode === "full"
-      ? `Réinitialiser le parcours de ${l.email} ?\nLa progression est remise à zéro ET l'inscription repasse à la dernière version publiée (nouvelles vidéos/modifs). Le compte n'est pas supprimé.`
-      : `Mettre à jour ${l.email} vers la dernière version publiée ?\nLa progression est conservée ; seules les nouvelles vidéos/modifications apparaissent.`;
-    if (!window.confirm(msg)) return;
+    const ok = await modal.confirm(mode === "full"
+      ? { title: `Réinitialiser le parcours de ${l.email} ?`, body: "La progression est remise à zéro ET l'inscription repasse à la dernière version publiée (nouvelles vidéos/modifs). Le compte n'est pas supprimé.", danger: true, okLabel: "Réinitialiser" }
+      : { title: `Mettre à jour ${l.email} vers la dernière version publiée ?`, body: "La progression est conservée ; seules les nouvelles vidéos/modifications apparaissent.", okLabel: "Mettre à jour" });
+    if (!ok) return;
     setBusyId(l.id); setNote(null);
     try { const r = await api.resetEnrollment(l.enrollmentId, mode); setNote(`✅ ${l.email} — ${mode === "full" ? "parcours réinitialisé" : "mis à jour"} (version ${r.version}).`); setReloadKey((k) => k + 1); }
     catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
@@ -133,9 +152,9 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   async function editPeer(l: LearnerRow) {
     try {
       const cur = await api.enrollmentPeer(l.enrollmentId).catch(() => ({ name: null as string | null, notified: false }));
-      const name = window.prompt(`Pair de progression de ${l.name}${cur.name ? ` (actuel : ${cur.name})` : " (aucun défini)"} — nom :`, cur.name ?? "");
+      const name = await modal.prompt({ title: `Pair de progression de ${l.name}`, body: cur.name ? `Actuel : ${cur.name}` : "Aucun pair défini pour l'instant.", label: "Nom du pair", initial: cur.name ?? "" });
       if (!name?.trim()) return;
-      const email = window.prompt("E-mail du pair :", "");
+      const email = await modal.prompt({ title: `Pair de progression de ${l.name}`, label: "E-mail du pair", placeholder: "pair@exemple.com" });
       if (!email?.trim() || !/.+@.+\..+/.test(email)) { setNote("E-mail du pair invalide."); return; }
       await api.setPeer(l.enrollmentId, name.trim(), email.trim());
       setNote(`✅ Pair de progression de ${l.name} : ${name.trim()} <${email.trim()}>.`);
@@ -161,47 +180,30 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
     finally { setBusyId(null); }
   }
 
-  // Export the visible columns of the filtered list as Excel-ready CSV.
-  function exportCsv() {
-    const cols: Col<LearnerRow>[] = [
-      { label: "Nom", value: (l) => l.name },
-      { label: "E-mail", value: (l) => l.email },
-      ...shownCols.flatMap((c) => c.csv),
-    ];
-    downloadCsv(`apprenants-${today()}.csv`, table(cols, rows));
+  // Export the visible columns of the FULL filtered list (not just this page).
+  async function exportCsv() {
+    try {
+      const all = await api.courseLearners(courseId);
+      const term = q.trim().toLowerCase();
+      const filtered = all.filter((l) =>
+        (filter === "Tous" || (filter === "Certifiés" && l.status === "CERTIFIED") || (filter === "En cours" && l.active && l.status !== "CERTIFIED") || (filter === "Inactifs" && !l.active && l.status !== "CERTIFIED")) &&
+        (term === "" || (l.name + l.email).toLowerCase().includes(term)));
+      const cols: Col<LearnerRow>[] = [
+        { label: "Nom", value: (l) => l.name },
+        { label: "E-mail", value: (l) => l.email },
+        ...shownCols.flatMap((c) => c.csv),
+      ];
+      downloadCsv(`apprenants-${today()}.csv`, table(cols, filtered));
+    } catch (e) { setNote(e instanceof Error ? e.message : "Export impossible"); }
   }
 
-  // --- saved views ---
-  // shownCols filters ALL_COLS, so render order is fixed regardless of insertion order.
   const toggleCol = (k: string) => setVisible((v) => (v.includes(k) ? v.filter((x) => x !== k) : [...v, k]));
-  function saveView() {
-    const name = window.prompt("Nom de la vue :")?.trim();
-    if (!name) return;
-    setViews((vs) => ({ ...vs, [name]: { cols: visible, filter, q } }));
-    setViewName(name); setNote(`✅ Vue « ${name} » enregistrée.`);
-  }
-  function applyView(name: string) {
-    setViewName(name);
-    const v = views[name]; if (!v) return;
-    setVisible(v.cols); setFilter(v.filter); setQ(v.q ?? "");
-  }
-  function deleteView() {
-    if (!viewName || !views[viewName]) return;
-    if (!window.confirm(`Supprimer la vue « ${viewName} » ?`)) return;
-    setViews((vs) => { const c = { ...vs }; delete c[viewName]; return c; });
-    setViewName("");
-  }
-
-  const rows = useMemo(() => (data ?? []).filter((l) =>
-    (filter === "Tous" || (filter === "Certifiés" && l.status === "CERTIFIED") || (filter === "En cours" && l.active && l.status !== "CERTIFIED") || (filter === "Inactifs" && !l.active && l.status !== "CERTIFIED")) &&
-    (q === "" || (l.name + l.email).toLowerCase().includes(q.toLowerCase()))
-  ), [data, q, filter]);
 
   return (
     <div className="content">
       <div className="pagehead">
         <div>
-          <div className="eyebrow">{loading ? "…" : `${rows.length} apprenant${rows.length > 1 ? "s" : ""}`}</div>
+          <div className="eyebrow">{rows == null ? "…" : `${total} apprenant${total > 1 ? "s" : ""}`}</div>
           <h1>Apprenants</h1>
           <div className="sub">{courses.find((c) => c.id === courseId) ? courseTitle(courses.find((c) => c.id === courseId)!) : ""}</div>
         </div>
@@ -235,21 +237,28 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
             )}
           </div>
 
-          {/* Saved views */}
-          <select className="select" value={viewName} onChange={(e) => applyView(e.target.value)} title="Vues enregistrées">
-            <option value="">Vue courante</option>
-            {Object.keys(views).map((n) => <option key={n} value={n}>{n}</option>)}
-          </select>
-          <button className="btn" onClick={saveView} title="Enregistrer la configuration actuelle (colonnes + filtres)">💾 Enregistrer</button>
-          {viewName && <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)" }} onClick={deleteView} title="Supprimer la vue sélectionnée">🗑️</button>}
+          {/* Saved views — stored server-side, they follow the account. */}
+          <ViewsBar screen="learners" config={{ cols: visible, filter, q, sort }}
+            onApply={(c) => {
+              setVisible((c.cols as string[]) ?? DEFAULT_COLS);
+              setFilter((c.filter as string) ?? "Tous");
+              setQ((c.q as string) ?? "");
+              setSort((c.sort as string) ?? "startedAt:desc");
+            }} />
 
-          <button className="btn" style={{ marginLeft: "auto" }} onClick={exportCsv} disabled={!rows.length} title="Exporter les colonnes visibles de la liste filtrée (CSV Excel/Sheets)">⤓ Exporter CSV</button>
+          <button className="btn" style={{ marginLeft: "auto" }} onClick={() => void exportCsv()} disabled={total === 0} title="Exporter les colonnes visibles de la liste filtrée complète (CSV Excel/Sheets)">⤓ Exporter CSV</button>
         </div>
         <div style={{ overflowX: "auto" }}>
           <table className="table">
-            <thead><tr><th>Apprenant</th>{shownCols.map((c) => <th key={c.key}>{c.label}</th>)}{canManage && <th>Actions</th>}</tr></thead>
+            <thead><tr>
+              <SortTh label="Apprenant" field="name" sort={sort} onSort={setSort} />
+              {shownCols.map((c) => c.sortField
+                ? <SortTh key={c.key} label={c.label} field={c.sortField} sort={sort} onSort={setSort} />
+                : <th key={c.key}>{c.label}</th>)}
+              {canManage && <th>Actions</th>}
+            </tr></thead>
             <tbody>
-              {rows.map((l) => (
+              {(rows ?? []).map((l) => (
                 <Fragment key={l.email}>
                 <tr>
                   <td onClick={() => toggleDetail(l)} style={{ cursor: "pointer" }} title="Voir le profil de compétences"><div className="uitem"><span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span><div className="who"><b>{detailId === l.enrollmentId ? "▾ " : "▸ "}{l.name}</b><span>{l.email}</span></div></div></td>
@@ -273,9 +282,10 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
               ))}
             </tbody>
           </table>
-          {loading && <div className="empty">Chargement des apprenants…</div>}
+          {rows == null && <div className="empty">Chargement des apprenants…</div>}
           {error && <div className="empty" style={{ color: "var(--danger)" }}>Erreur : {error}</div>}
-          {!loading && !error && rows.length === 0 && <div className="empty"><div className="big">👤</div>Aucun apprenant inscrit à ce parcours. Utilisez « Inscrire un apprenant ».</div>}
+          {rows != null && !error && rows.length === 0 && <div className="empty"><div className="big">👤</div>Aucun apprenant pour ce filtre. Utilisez « Inscrire un apprenant ».</div>}
+          {rows != null && <Pager page={page} pageSize={PAGE_SIZE} total={total} onPage={setPage} />}
         </div>
       </div>
     </div>

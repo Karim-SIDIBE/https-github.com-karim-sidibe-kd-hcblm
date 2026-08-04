@@ -2,6 +2,7 @@ import { useState } from "react";
 import { api, type Session, type SessionRegistrant, type UserRow } from "../lib/api";
 import { useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
+import { modal } from "../lib/modal";
 
 const STATUS: Record<string, { cls: string; label: string }> = {
   SCHEDULED: { cls: "pill--info", label: "Planifiée" },
@@ -147,7 +148,7 @@ function Detail({ session, onChanged }: { session: Session; onChanged: () => voi
         <b>{session.title} — inscrits & émargement</b>
         {editable && (
           <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger-tint)" }} disabled={busy === "cancel"}
-            onClick={() => { if (window.confirm("Annuler cette session ?")) void act("cancel", () => api.cancelSession(session.id)); }}>
+            onClick={async () => { if (await modal.confirm({ title: "Annuler cette session ?", danger: true, okLabel: "Annuler la session" })) void act("cancel", () => api.cancelSession(session.id)); }}>
             {busy === "cancel" ? "…" : "Annuler la session"}
           </button>
         )}

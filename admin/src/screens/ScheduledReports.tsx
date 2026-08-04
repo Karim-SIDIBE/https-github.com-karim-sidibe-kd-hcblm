@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, type ReportSchedule } from "../lib/api";
 import { ago } from "../lib/ui";
+import { modal } from "../lib/modal";
 
 const FREQ_FR: Record<string, string> = { WEEKLY: "Hebdomadaire", MONTHLY: "Mensuel" };
 
@@ -26,7 +27,7 @@ export function ScheduledReports({ courseId }: { courseId: string }) {
   }
 
   async function remove(id: string) {
-    if (!window.confirm("Supprimer cette programmation ?")) return;
+    if (!(await modal.confirm({ title: "Supprimer cette programmation ?", danger: true, okLabel: "Supprimer" }))) return;
     try { await api.deleteReportSchedule(id); load(); } catch (e) { setNote(e instanceof Error ? e.message : "Erreur"); }
   }
 

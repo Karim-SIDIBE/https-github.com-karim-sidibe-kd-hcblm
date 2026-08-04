@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import { twofa, sessions, type SessionInfo } from "../lib/api";
+import { modal } from "../lib/modal";
 
 type Phase = "loading" | "off" | "setup" | "backup" | "on";
 
@@ -113,7 +114,7 @@ function SessionsCard() {
   useEffect(() => { load(); }, []);
 
   async function revokeAll() {
-    if (!confirm("Déconnecter TOUS les appareils, y compris celui-ci ? Vous devrez vous reconnecter.")) return;
+    if (!(await modal.confirm({ title: "Déconnecter TOUS les appareils, y compris celui-ci ?", body: "Vous devrez vous reconnecter.", danger: true, okLabel: "Tout déconnecter" }))) return;
     setBusy(true); setErr(null);
     try { await sessions.revokeAll(); location.reload(); }
     catch (e: any) { setErr(e?.message || "Erreur"); setBusy(false); }

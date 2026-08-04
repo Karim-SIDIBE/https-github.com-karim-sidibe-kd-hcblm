@@ -3,6 +3,7 @@ import { api, auth, courseTitle, type CourseFull } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
 import { CourseEditor } from "./CourseEditor";
+import { modal } from "../lib/modal";
 
 const CAN_REVIEW = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
 
@@ -51,7 +52,7 @@ function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onE
     if (!v) return;
     let notes: string | undefined;
     if (decision === "request_changes") {
-      const n = window.prompt("Modifications demandées (note pour le concepteur) :", "");
+      const n = await modal.prompt({ title: "Demander des modifications", label: "Note pour le concepteur", placeholder: "Ce qui doit être revu…" });
       if (n === null) return; notes = n;
     }
     setBusy(decision); setMsg(null);

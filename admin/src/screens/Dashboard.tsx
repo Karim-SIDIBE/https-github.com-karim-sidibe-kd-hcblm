@@ -4,6 +4,7 @@ import { avatarColor, initials, useAsync } from "../lib/ui";
 import { table, downloadCsv, downloadBlob, today } from "../lib/csv";
 import { ScheduledReports } from "./ScheduledReports";
 import type { CourseCtx } from "../App";
+import { modal } from "../lib/modal";
 
 const BLOCK_FR: Record<string, string> = {
   ONBOARDING: "Onboarding · Ancrage", COMPREHENSION: "Compréhension", PRACTICE: "Pratique terrain", ANCHORING: "Ancrage", CERTIFICATION: "Certification",
@@ -81,7 +82,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   // Server-side full report as a formatted, multi-sheet Excel workbook.
   async function exportExcel() {
     try { downloadBlob(`rapport-${today()}.xlsx`, await api.exportCourseXlsx(courseId)); }
-    catch { window.alert("Export Excel indisponible pour le moment."); }
+    catch { await modal.alert({ title: "Export Excel indisponible pour le moment." }); }
   }
 
   return (
