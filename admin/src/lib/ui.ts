@@ -14,14 +14,26 @@ export function ago(iso: string | null): string {
   return new Date(iso).toLocaleDateString("fr-FR");
 }
 
-/** A strong, human-typable random password (no ambiguous chars). */
+/** A strong, human-typable random password (no ambiguous chars).
+ *  Crypto-grade randomness (getRandomValues) — Math.random is not suitable
+ *  for credentials. Rejection sampling keeps the picks unbiased. */
 export function genPassword(): string {
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ", a = "abcdefghijkmnpqrstuvwxyz", n = "23456789", s = "!@#$%&*";
   const all = A + a + n + s;
-  const pick = (set: string) => set[Math.floor(Math.random() * set.length)];
-  let p = pick(A) + pick(a) + pick(n) + pick(s);
-  for (let i = 0; i < 8; i++) p += pick(all);
-  return p.split("").sort(() => Math.random() - 0.5).join("");
+  const rand = (max: number): number => {
+    const limit = Math.floor(0x100000000 / max) * max; // reject to avoid modulo bias
+    const buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % max;
+  };
+  const pick = (set: string) => set[rand(set.length)];
+  const chars = [pick(A), pick(a), pick(n), pick(s)];
+  for (let i = 0; i < 8; i++) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) { // Fisher–Yates, crypto-seeded
+    const j = rand(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }
 
 /** Minimal async-data hook with loading/error. */
