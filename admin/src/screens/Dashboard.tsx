@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
 import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
@@ -20,9 +21,20 @@ function Kpi({ icon, ic, val, lbl }: { icon: JSX.Element; ic: string; val: strin
   );
 }
 
+const PERIODS = [
+  { key: "", label: "Toute la durée", days: 0 },
+  { key: "90", label: "Démarrés < 90 j", days: 90 },
+  { key: "30", label: "Démarrés < 30 j", days: 30 },
+  { key: "7", label: "Démarrés < 7 j", days: 7 },
+] as const;
+
 export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   const { courseId, courses, setCourseId } = ctx;
-  const rep = useAsync<CourseReport>(() => api.courseReport(courseId), [courseId]);
+  // Period filter (M4): restricts the KPIs to enrolments STARTED in the window
+  // (badges/certificats counters stay all-time — they come from other tables).
+  const [period, setPeriod] = useState("");
+  const since = period ? new Date(Date.now() - Number(period) * 86_400_000).toISOString() : undefined;
+  const rep = useAsync<CourseReport>(() => api.courseReport(courseId, since ? { since } : {}), [courseId, period]);
   const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId]);
   const comp = useAsync<CourseCompetencies>(() => api.competencies(courseId), [courseId]);
 
@@ -94,6 +106,9 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
           <div className="sub">Vue d'ensemble de la progression certifiante.</div>
         </div>
         <div className="filters">
+          <select className="select" value={period} onChange={(e) => setPeriod(e.target.value)} title="Filtre de période : inscriptions démarrées dans la fenêtre">
+            {PERIODS.map((p) => <option key={p.key} value={p.key}>{p.label}</option>)}
+          </select>
           <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
             {courses.map((c) => <option key={c.id} value={c.id}>{courseTitle(c)}</option>)}
           </select>

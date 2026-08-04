@@ -26,6 +26,7 @@ import { UiTexts } from "./screens/UiTexts";
 import { Security } from "./screens/Security";
 import { Jobs } from "./screens/Jobs";
 import { Webhooks } from "./screens/Webhooks";
+import { Integrations } from "./screens/Integrations";
 import { twofa } from "./lib/api";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
@@ -57,6 +58,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
     { id: "jobs", label: "Jobs & planification", Icon: ISettings, roles: [A, C] },
     { id: "webhooks", label: "Webhooks", Icon: ISettings, roles: [A, C] },
+    { id: "integrations", label: "Intégrations SSO & LTI", Icon: ISettings, roles: [A, C] },
     { id: "security", label: "Sécurité (2FA)", Icon: ISettings, roles: [A, C, I, E, D, R, EC, EM] },
     { id: "settings", label: "Réglages", Icon: ISettings, roles: [A, C] },
   ]},
@@ -179,7 +181,7 @@ export function App() {
             }} />
           </label>
         </header>
-        {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" && view !== "uitexts" ? (
+        {!courseId && !["settings", "security", "entreprises", "users", "courses", "medias", "uitexts", "jobs", "webhooks", "integrations", "audit"].includes(view) ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
           : view === "insights" ? <Insights ctx={ctx} />
@@ -199,6 +201,7 @@ export function App() {
           : view === "uitexts" ? <UiTexts />
           : view === "jobs" ? <Jobs />
           : view === "webhooks" ? <Webhooks />
+          : view === "integrations" ? <Integrations />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Dashboard ctx={ctx} />}

@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { api, type CohortDetail, type Cohort, type Org, type UserRow } from "../lib/api";
+import { Fragment, useState } from "react";
+import { api, type CohortDetail, type Cohort, type ForumThreadRow, type Org, type ThreadDetail, type UserRow } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
+import { modal } from "../lib/modal";
 import type { CourseCtx } from "../App";
 
 const sel = { padding: "7px 10px", border: "1px solid var(--line-strong)", borderRadius: 8, background: "var(--bg)", fontFamily: "inherit", fontSize: 13 } as const;
@@ -169,6 +170,99 @@ function CohortPanel({ id, onChanged }: { id: string; onChanged: () => void }) {
           </tbody>
         </table>
       </div>
+
+      <ForumPanel cohortId={id} />
     </div>
+  );
+}
+
+/** Forum moderation (M4): threads of a cohort, pin/lock, read + delete posts. */
+function ForumPanel({ cohortId }: { cohortId: string }) {
+  const threads = useAsync<ForumThreadRow[]>(() => api.threads(cohortId), [cohortId]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [thread, setThread] = useState<ThreadDetail | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function open(t: ForumThreadRow) {
+    if (openId === t.id) { setOpenId(null); setThread(null); return; }
+    setOpenId(t.id); setThread(null);
+    try { setThread(await api.thread(t.id)); } catch (e: any) { setError(e?.message || "Erreur"); }
+  }
+  async function flag(t: ForumThreadRow, patch: { locked?: boolean; pinned?: boolean }) {
+    setBusy(t.id); setError(null);
+    try { await api.setThreadFlags(t.id, patch); threads.reload(); if (openId === t.id) setThread(await api.thread(t.id)); }
+    catch (e: any) { setError(e?.message || "Erreur"); }
+    finally { setBusy(null); }
+  }
+  async function removePost(postId: string) {
+    if (!(await modal.confirm({ title: "Supprimer ce message ?", body: "Le contenu est remplacé par « [message supprimé] » pour tous les membres. Action irréversible.", danger: true, okLabel: "Supprimer" }))) return;
+    setBusy(postId); setError(null);
+    try { await api.deleteForumPost(postId); if (openId) setThread(await api.thread(openId)); threads.reload(); }
+    catch (e: any) { setError(e?.message || "Erreur"); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <>
+      <div className="card-h" style={{ borderTop: "1px solid var(--line)", marginTop: 4 }}>
+        <b style={{ fontSize: 13.5 }}>Forum de la cohorte</b>
+        <span className="muted" style={{ fontSize: 12 }}>{threads.data?.length ?? 0} fil(s) · épinglez, verrouillez, modérez</span>
+      </div>
+      {error && <div className="card-b" style={{ color: "var(--danger)", fontSize: 13 }}>{error}</div>}
+      <div style={{ overflowX: "auto" }}>
+        <table className="table">
+          <thead><tr><th>Fil</th><th>Auteur</th><th>Messages</th><th>Activité</th><th></th></tr></thead>
+          <tbody>
+            {(threads.data ?? []).map((t) => (
+              <Fragment key={t.id}>
+              <tr>
+                <td onClick={() => void open(t)} style={{ cursor: "pointer" }} title="Lire les messages">
+                  <b style={{ fontSize: 13 }}>{openId === t.id ? "▾ " : "▸ "}{t.title}</b>
+                  <span style={{ marginLeft: 6, display: "inline-flex", gap: 4 }}>
+                    {t.pinned && <span className="pill pill--info" style={{ fontSize: 10 }}>📌 épinglé</span>}
+                    {t.locked && <span className="pill pill--warn" style={{ fontSize: 10 }}>🔒 verrouillé</span>}
+                  </span>
+                </td>
+                <td><span style={{ fontSize: 12.5 }}>{t.author?.name ?? "—"}</span></td>
+                <td><span className="num">{t._count?.posts ?? 0}</span></td>
+                <td><span className="muted" style={{ fontSize: 12.5 }}>{ago(t.updatedAt)}</span></td>
+                <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
+                  <button className="btn btn--sm btn--ghost" disabled={busy === t.id} title={t.pinned ? "Désépingler" : "Épingler en tête de liste"} onClick={() => void flag(t, { pinned: !t.pinned })}>{t.pinned ? "📌 Désépingler" : "📌 Épingler"}</button>
+                  <button className="btn btn--sm btn--ghost" style={{ marginLeft: 4 }} disabled={busy === t.id} title={t.locked ? "Rouvrir les réponses" : "Fermer les réponses (lecture seule)"} onClick={() => void flag(t, { locked: !t.locked })}>{t.locked ? "🔓 Rouvrir" : "🔒 Verrouiller"}</button>
+                </td>
+              </tr>
+              {openId === t.id && (
+                <tr><td colSpan={5} style={{ background: "var(--bg-soft)" }}>
+                  {!thread ? <span className="muted" style={{ fontSize: 12.5 }}>Chargement des messages…</span> : (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 2px" }}>
+                      {thread.posts.length === 0 && <span className="muted" style={{ fontSize: 12.5 }}>Aucun message dans ce fil.</span>}
+                      {thread.posts.map((p) => (
+                        <div key={p.id} className="row between" style={{ alignItems: "flex-start", gap: 10, borderBottom: "1px solid var(--line)", paddingBottom: 8 }}>
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ fontSize: 12, marginBottom: 2 }}>
+                              <b>{p.author?.name ?? "—"}</b>
+                              <span className="muted"> · {ago(p.createdAt)}{p.editedAt ? " · modifié" : ""}</span>
+                              {p.deletedAt && <span className="pill pill--red" style={{ fontSize: 10, marginLeft: 6 }}>supprimé</span>}
+                            </div>
+                            <div style={{ fontSize: 13, whiteSpace: "pre-wrap", color: p.deletedAt ? "var(--muted)" : undefined }}>{p.body}</div>
+                          </div>
+                          {!p.deletedAt && (
+                            <button className="btn btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)", flexShrink: 0 }} disabled={busy === p.id} onClick={() => void removePost(p.id)}>{busy === p.id ? "…" : "🗑️ Supprimer"}</button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </td></tr>
+              )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+        {threads.loading && <div className="empty">Chargement des fils…</div>}
+        {!threads.loading && (threads.data?.length ?? 0) === 0 && <div className="empty" style={{ padding: "22px 8px" }}>Aucun fil de discussion dans cette cohorte.</div>}
+      </div>
+    </>
   );
 }
