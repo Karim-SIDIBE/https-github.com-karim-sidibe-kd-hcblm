@@ -149,6 +149,13 @@ export async function revoke(id: string, reason: string | undefined, actorId: st
   return { id: updated.id, revoked: true, revokedAt: updated.revokedAt };
 }
 
+/** Reinstate a revoked credential (admin action, audited at the route). */
+export async function unrevoke(id: string) {
+  await getCredential(id);
+  const updated = await prisma.credential.update({ where: { id }, data: { revokedAt: null, revocationReason: null } });
+  return { id: updated.id, revoked: false };
+}
+
 export async function listForEnrollment(enrollmentId: string) {
   const creds = await prisma.credential.findMany({ where: { enrollmentId }, orderBy: { issuedAt: "asc" }, include: { badge: true } });
   return creds.map((c) => ({

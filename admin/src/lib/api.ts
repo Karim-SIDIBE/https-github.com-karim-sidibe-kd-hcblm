@@ -175,7 +175,10 @@ export type AuditRow = { id: string; actorId: string | null; action: string; tar
 export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
-export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; _count?: { registrations: number } };
+export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; joinUrl?: string | null; _count?: { registrations: number } };
+export type SessionRegistrant = { userId: string; attended: boolean; attendanceMinutes: number | null; registeredAt: string; user: { id: string; name: string; email: string } };
+export type CohortDetail = { id: string; name: string; courseId: string | null; courseSlug: string | null; createdAt: string; threads: number; members: { id: string; name: string; email: string; role: string; since: string }[] };
+export type RubricSuggestion = { perCriterion: { label: string; weightPoints: number; suggested: number; comment: string }[]; suggestedTotal: number; summary: string; aiGenerated: boolean; provider: string };
 export type CredentialRow = {
   id: string; achievementType: string; badgeLabel: string; issuedAt: string;
   revoked: boolean; revocationReason: string | null;
@@ -309,6 +312,27 @@ export const api = {
   organizations: () => req<Org[]>("GET", "/organizations"),
   cohorts: () => req<Cohort[]>("GET", "/cohorts"),
   sessions: () => req<Session[]>("GET", "/sessions"),
+  createSession: (b: { title: string; description?: string; provider: string; startsAt: string; durationMin: number; capacity?: number; courseId?: string; joinUrl?: string }) =>
+    req<Session>("POST", "/sessions", b),
+  sessionRoster: (id: string) => req<SessionRegistrant[]>("GET", `/sessions/${id}/registrations`),
+  registerToSession: (id: string, userId: string) => req<unknown>("POST", `/sessions/${id}/register`, { userId }),
+  markAttendance: (id: string, entries: { userId: string; minutes?: number }[]) =>
+    req<{ marked: number; xapiEmitted?: number }>("POST", `/sessions/${id}/attendance`, { entries }),
+  cancelSession: (id: string) => req<Session>("POST", `/sessions/${id}/cancel`, {}),
+  createCohort: (name: string, courseId?: string) => req<Cohort>("POST", "/cohorts", { name, ...(courseId ? { courseId } : {}) }),
+  cohortDetail: (id: string) => req<CohortDetail>("GET", `/cohorts/${id}`),
+  addCohortMember: (id: string, userId: string) => req<unknown>("POST", `/cohorts/${id}/members`, { userId }),
+  removeCohortMember: (id: string, userId: string) => req<unknown>("DELETE", `/cohorts/${id}/members/${userId}`),
+  unrevokeCredential: (id: string) => req<{ id: string; revoked: boolean }>("POST", `/credentials/${id}/unrevoke`, {}),
+  async credentialFile(id: string, kind: "pdf" | "vc"): Promise<Blob> {
+    const t = auth.token();
+    const path = kind === "pdf" ? `/credentials/${id}/certificate.pdf` : `/credentials/${id}/vc`;
+    const res = await fetch(`${BASE}${path}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Téléchargement échoué");
+    return res.blob();
+  },
+  rubricSuggestion: (enrollmentId: string) => req<RubricSuggestion>("POST", `/enrollments/${enrollmentId}/rubric-suggestion`, {}),
+  updateBankQuestion: (id: string, b: { question?: unknown; subArea?: string; level?: string }) => req<BankQuestion>("PATCH", `/bank/questions/${id}`, b),
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),

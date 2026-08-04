@@ -64,6 +64,12 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [views, setViews] = useState<Record<string, ViewConfig>>(() => loadJSON(VIEWS_KEY, {}));
   const [viewName, setViewName] = useState("");
   const [colMenu, setColMenu] = useState(false);
+  // Global header search: « Entrée » from the topbar lands here with its query.
+  useEffect(() => {
+    const on = (e: Event) => setQ((e as CustomEvent<string>).detail ?? "");
+    window.addEventListener("kd-admin-search", on);
+    return () => window.removeEventListener("kd-admin-search", on);
+  }, []);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const canManage = CAN_MANAGE.includes(auth.user()?.role ?? "");

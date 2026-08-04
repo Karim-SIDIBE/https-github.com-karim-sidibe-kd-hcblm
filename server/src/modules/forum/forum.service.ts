@@ -35,6 +35,24 @@ export async function createCohort(name: string, courseId: string | undefined, c
   return prisma.cohort.create({ data: { name, courseId: courseId ?? null, createdById } });
 }
 
+/** Cohort detail with named members (admin management view). */
+export async function cohortDetail(cohortId: string) {
+  const cohort = await prisma.cohort.findUnique({
+    where: { id: cohortId },
+    include: {
+      course: { select: { id: true, slug: true } },
+      memberships: { orderBy: { createdAt: "asc" }, include: { user: { select: { id: true, name: true, email: true, role: true } } } },
+      _count: { select: { threads: true } },
+    },
+  });
+  if (!cohort) throw new ForumError(404, "no_cohort", "Cohorte introuvable");
+  return {
+    id: cohort.id, name: cohort.name, courseId: cohort.courseId, courseSlug: cohort.course?.slug ?? null,
+    createdAt: cohort.createdAt, threads: cohort._count.threads,
+    members: cohort.memberships.map((m) => ({ ...m.user, since: m.createdAt })),
+  };
+}
+
 export async function addMember(cohortId: string, userId: string) {
   const cohort = await prisma.cohort.findUnique({ where: { id: cohortId } });
   if (!cohort) throw new ForumError(404, "no_cohort", "Cohorte introuvable");

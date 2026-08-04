@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, auth, type EvalQueueItem, type ProjectDetail } from "../lib/api";
+import { api, auth, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+
+/** Roles allowed to be picked as evaluator of a Bloc 4 project. */
+const EVALUATOR_ROLES = new Set(["EVALUATOR", "COURSE_ADMIN", "SUPER_ADMIN"]);
 
 const STATUS: Record<string, { cls: string; label: string }> = {
   SUBMITTED: { cls: "pill--warn", label: "À attribuer" },
@@ -14,10 +17,16 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [points, setPoints] = useState<number[]>(() => (item.rubric?.criteria ?? []).map(() => 0));
   const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState<"" | "assign" | "grade">("");
+  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai">("");
   const [msg, setMsg] = useState<string | null>(null);
+  const [evaluators, setEvaluators] = useState<UserRow[]>([]);
+  const [pick, setPick] = useState("");
+  const [ai, setAi] = useState<RubricSuggestion | null>(null);
 
   useEffect(() => { api.project(item.enrollmentId).then(setDetail).catch(() => setDetail(null)); }, [item.enrollmentId]);
+  useEffect(() => {
+    api.users().then((us) => setEvaluators(us.filter((u) => EVALUATOR_ROLES.has(u.role) && !u.disabled))).catch(() => {});
+  }, []);
 
   const crit = item.rubric?.criteria ?? [];
   const maxTotal = crit.reduce((s, c) => s + c.weightPoints, 0) || 100;
@@ -26,10 +35,22 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const threshold = item.rubric?.threshold ?? 70;
   const sections = detail?.content?.sections ?? {};
 
-  async function assignSelf() {
-    if (!me) return;
+  async function assign(evaluatorId: string) {
     setBusy("assign"); setMsg(null);
-    try { await api.assignEvaluator(item.enrollmentId, me.id); setMsg("Projet attribué."); onDone(); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
+    try { await api.assignEvaluator(item.enrollmentId, evaluatorId); setMsg("Projet attribué."); onDone(); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
+  }
+  async function suggest() {
+    setBusy("ai"); setMsg(null);
+    try {
+      const s = await api.rubricSuggestion(item.enrollmentId);
+      setAi(s);
+    } catch (e: any) { setMsg(e?.message || "Suggestion indisponible"); }
+    finally { setBusy(""); }
+  }
+  function applySuggestion() {
+    if (!ai) return;
+    // Align by label (the service returns the rubric's own labels, clamped).
+    setPoints(crit.map((c) => ai.perCriterion.find((s) => s.label === c.label)?.suggested ?? 0));
   }
   async function grade() {
     setBusy("grade"); setMsg(null);
@@ -55,8 +76,15 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
         <div className="db">
           <div className="row between" style={{ marginBottom: 14 }}>
             <span className={`pill ${(STATUS[item.revisionStatus] ?? { cls: "pill--soft" }).cls}`}>{(STATUS[item.revisionStatus] ?? { label: item.revisionStatus }).label}</span>
-            {item.evaluator ? <span className="muted" style={{ fontSize: 12.5 }}>Évaluateur : {item.evaluator.name}</span>
-              : <button className="btn btn--sm" disabled={busy === "assign"} onClick={assignSelf}>{busy === "assign" ? "…" : "M'attribuer ce projet"}</button>}
+            {item.evaluator ? <span className="muted" style={{ fontSize: 12.5 }}>Évaluateur : {item.evaluator.name}</span> : (
+              <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button className="btn btn--sm" disabled={busy === "assign"} onClick={() => me && void assign(me.id)}>{busy === "assign" ? "…" : "M'attribuer"}</button>
+                <select className="select" value={pick} onChange={(e) => { setPick(e.target.value); if (e.target.value) void assign(e.target.value); }}>
+                  <option value="">Attribuer à…</option>
+                  {evaluators.filter((u) => u.id !== me?.id).map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+              </span>
+            )}
           </div>
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>Copie de l'apprenant</div>
@@ -66,6 +94,23 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
             ))}
 
           <div className="eyebrow" style={{ margin: "20px 0 6px" }}>Grille d'évaluation</div>
+          {crit.length > 0 && !ai && (
+            <button className="btn btn--sm btn--ghost" disabled={busy === "ai"} onClick={suggest} style={{ marginBottom: 8 }}>
+              {busy === "ai" ? "Analyse du projet…" : "✨ Suggestion de note (IA, indicative)"}
+            </button>
+          )}
+          {ai && (
+            <div className="card" style={{ marginBottom: 10, background: "var(--bg)" }}>
+              <div className="card-b" style={{ fontSize: 12.5 }}>
+                <b>✨ Suggestion {ai.aiGenerated ? "IA" : "automatique"} : {ai.suggestedTotal}/100</b> — {ai.summary}
+                <ul style={{ margin: "6px 0 8px", paddingLeft: 18 }}>
+                  {ai.perCriterion.map((s) => <li key={s.label}>{s.label} : <b>{s.suggested}/{s.weightPoints}</b> — {s.comment}</li>)}
+                </ul>
+                <button className="btn btn--sm" onClick={applySuggestion}>Préremplir la grille avec ces notes</button>
+                <span className="muted" style={{ marginLeft: 8 }}>La décision reste humaine : ajustez avant d'enregistrer.</span>
+              </div>
+            </div>
+          )}
           {crit.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>Grille indisponible.</p> : (<>
             {crit.map((c, i) => (
               <div className="crit" key={c.label}>
