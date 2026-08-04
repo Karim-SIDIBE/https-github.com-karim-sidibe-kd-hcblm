@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
-  OrgError, addMember, createOrganization, createOrgLearner, enrollOrgLearner, getOrganization,
-  listMembers, listOrganizations, orgProgress, removeMember, seatUsage, setSeats, setLearnerDisabled,
+  OrgError, addMember, addMemberByEmail, createOrganization, createOrgLearner, enrollOrgLearner, getOrganization,
+  importOrgLearners, listMembers, listOrganizations, orgProgress, removeMember, seatUsage, setSeats, setLearnerDisabled,
 } from "./organizations.service.js";
 import { inviteUser } from "../users/users.service.js";
 import { toCsv } from "../analytics/analytics.service.js";
@@ -53,11 +53,22 @@ export async function organizationRoutes(app: FastifyInstance) {
     try { return { data: await listMembers(id) }; } catch (err) { return handle(reply, err); }
   });
 
+  // Attach a member by id OR e-mail (the portal's team form uses e-mail).
   app.post("/organizations/:id/members", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
-    const { userId, orgRole } = z.object({ userId: z.string(), orgRole: OrgRole.default("MEMBER") }).parse(req.body);
-    try { return reply.status(201).send({ data: await addMember(id, userId, orgRole) }); } catch (err) { return handle(reply, err); }
+    const body = z.object({
+      userId: z.string().optional(),
+      email: z.string().email().optional(),
+      orgRole: OrgRole.default("MEMBER"),
+    }).refine((b) => b.userId || b.email, { message: "userId ou email requis" }).parse(req.body);
+    try {
+      const data = body.userId
+        ? await addMember(id, body.userId, body.orgRole)
+        : (await addMemberByEmail(id, body.email!, body.orgRole)).membership;
+      await audit({ actorId: req.principal?.id, action: "org.member.add", targetType: "User", targetId: data.userId, ip: req.ip, meta: { organizationId: id, orgRole: body.orgRole } });
+      return reply.status(201).send({ data });
+    } catch (err) { return handle(reply, err); }
   });
 
   app.delete("/organizations/:id/members/:userId", { preHandler: authenticate }, async (req, reply) => {
@@ -132,6 +143,25 @@ export async function organizationRoutes(app: FastifyInstance) {
       const e = await enrollOrgLearner(id, userId, courseId);
       await audit({ actorId: req.principal?.id, action: "org.enroll", targetType: "Enrollment", targetId: (e as { id: string }).id, ip: req.ip, meta: { organizationId: id, courseId } });
       return reply.status(201).send({ data: e });
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Bulk learner import (portal CSV) — seat-aware, row-independent report.
+  app.post("/organizations/:id/learners/import", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    const body = z.object({
+      rows: z.array(z.object({ name: z.string().optional(), email: z.string().optional() })).min(1).max(200),
+      courseId: z.string().optional(),
+      invite: z.boolean().optional(),
+    }).parse(req.body);
+    try {
+      const report = await importOrgLearners(id, body.rows, { courseId: body.courseId, invite: body.invite });
+      await audit({
+        actorId: req.principal?.id, action: "org.learner.import", targetType: "Organization", targetId: id, ip: req.ip,
+        meta: { total: report.total, created: report.created, enrolled: report.enrolled, errors: report.errors.length },
+      });
+      return { data: report };
     } catch (err) { return handle(reply, err); }
   });
 

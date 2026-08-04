@@ -42,10 +42,21 @@ export async function getOrganization(id: string) {
   return org;
 }
 
+/** True when this membership is the organization's LAST owner — protected. */
+async function isLastOwner(organizationId: string, userId: string): Promise<boolean> {
+  const m = await prisma.organizationMembership.findUnique({ where: { organizationId_userId: { organizationId, userId } } });
+  if (!m || m.orgRole !== "OWNER") return false;
+  const owners = await prisma.organizationMembership.count({ where: { organizationId, orgRole: "OWNER" } });
+  return owners <= 1;
+}
+
 export async function addMember(organizationId: string, userId: string, orgRole: OrgRole) {
   await getOrganization(organizationId);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) throw new OrgError(404, "no_user", "Utilisateur introuvable");
+  if (orgRole !== "OWNER" && (await isLastOwner(organizationId, userId))) {
+    throw new OrgError(400, "last_owner", "Impossible : cette personne est le dernier propriétaire de l'organisation");
+  }
   return prisma.organizationMembership.upsert({
     where: { organizationId_userId: { organizationId, userId } },
     update: { orgRole },
@@ -53,7 +64,17 @@ export async function addMember(organizationId: string, userId: string, orgRole:
   });
 }
 
+/** Same as addMember, but resolved from an e-mail (the portal's team form). */
+export async function addMemberByEmail(organizationId: string, email: string, orgRole: OrgRole) {
+  const user = await prisma.user.findUnique({ where: { email: email.trim().toLowerCase() } });
+  if (!user) throw new OrgError(404, "no_user", "Aucun compte avec cet e-mail — créez d'abord le compte (ou vérifiez l'adresse)");
+  return { membership: await addMember(organizationId, user.id, orgRole), user: { id: user.id, name: user.name, email: user.email } };
+}
+
 export async function removeMember(organizationId: string, userId: string) {
+  if (await isLastOwner(organizationId, userId)) {
+    throw new OrgError(400, "last_owner", "Impossible : il doit rester au moins un propriétaire de l'organisation");
+  }
   await prisma.organizationMembership.deleteMany({ where: { organizationId, userId } });
   return { ok: true };
 }
@@ -206,4 +227,78 @@ export async function orgProgress(organizationId: string) {
     active7d: (byUser.get(m.userId) ?? []).some((r) => r.lastActivity && now - r.lastActivity.getTime() <= 7 * 86_400_000),
     enrollments: byUser.get(m.userId) ?? [],
   }));
+}
+
+// --- bulk learner import (ENT lot 2) -----------------------------------------
+
+export type OrgImportReport = {
+  total: number;
+  created: number;
+  enrolled: number;
+  invited: number;
+  errors: { line: number; email: string; error: string }[];
+  credentials: { email: string; password: string }[];
+};
+
+/**
+ * Bulk import of learners into the organization (portal CSV upload).
+ * Seat-aware: refused up-front when the valid rows exceed the remaining seats
+ * (no half-imported batch); each row is still quota-re-checked in its own
+ * transaction. Existing e-mails are reported as errors (an org cannot absorb
+ * an account it does not own). Row-independent otherwise.
+ */
+export async function importOrgLearners(
+  organizationId: string,
+  rows: { name?: string; email?: string }[],
+  opts: { courseId?: string; invite?: boolean } = {},
+): Promise<OrgImportReport> {
+  const { generateTempPassword } = await import("../users/users.service.js");
+  const { invitationMessage } = await import("../../lib/notify/templates.js");
+  const { sendMultichannel } = await import("../../lib/notify/send.js");
+  const org = await getOrganization(organizationId);
+
+  const report: OrgImportReport = { total: rows.length, created: 0, enrolled: 0, invited: 0, errors: [], credentials: [] };
+  const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const valid: { line: number; name: string; email: string }[] = [];
+  const seen = new Set<string>();
+  rows.forEach((r, i) => {
+    const line = i + 1;
+    const email = r.email?.trim().toLowerCase() ?? "";
+    const name = r.name?.trim() ?? "";
+    if (!EMAIL_RX.test(email)) { report.errors.push({ line, email, error: "E-mail invalide" }); return; }
+    if (!name) { report.errors.push({ line, email, error: "Nom manquant" }); return; }
+    if (seen.has(email)) { report.errors.push({ line, email, error: "Doublon dans le fichier" }); return; }
+    seen.add(email);
+    valid.push({ line, name, email });
+  });
+
+  // Fail fast on the quota: no half-imported batch.
+  const used = await countSeatsUsed(organizationId);
+  const available = remainingSeats(org.seats ?? 0, used);
+  if (valid.length > available) {
+    throw new OrgError(403, "quota_exceeded", `Licences insuffisantes : ${valid.length} apprenant(s) à créer pour ${available} siège(s) disponible(s) (${used}/${org.seats ?? 0} utilisés).`);
+  }
+
+  for (const row of valid) {
+    try {
+      const password = generateTempPassword();
+      const user = await createOrgLearner(organizationId, { name: row.name, email: row.email, password });
+      report.created++;
+      report.credentials.push({ email: row.email, password });
+      if (opts.courseId) {
+        try { await enrollOrgLearner(organizationId, user.id, opts.courseId); report.enrolled++; }
+        catch (e) { report.errors.push({ line: row.line, email: row.email, error: `Compte créé mais inscription échouée : ${e instanceof Error ? e.message : "erreur"}` }); }
+      }
+      if (opts.invite) {
+        try {
+          const msg = invitationMessage({ name: row.name, orgName: org.name, email: row.email, tempPassword: password });
+          const results = await sendMultichannel({ email: row.email, phone: null, subject: msg.subject, body: msg.body, mobileBody: msg.mobileBody });
+          if (results.some((r) => r.ok && r.provider !== "console")) report.invited++;
+        } catch { /* delivery best-effort */ }
+      }
+    } catch (e) {
+      report.errors.push({ line: row.line, email: row.email, error: e instanceof OrgError ? e.message : e instanceof Error ? e.message : "Erreur" });
+    }
+  }
+  return report;
 }

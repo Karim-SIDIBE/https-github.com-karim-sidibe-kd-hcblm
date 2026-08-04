@@ -1,8 +1,22 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, auth, login as apiLogin, verify2fa, genPassword, publishedCourse, ApiError,
-  type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow,
+  type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow, type OrgImportReport,
 } from "./api";
+
+/** `Nom, Email` per line; separators , ; tab; a header row is skipped. */
+function parseRows(text: string): { name: string; email: string }[] {
+  const unquote = (x: string) => x.trim().replace(/^"(.*)"$/s, "$1").trim();
+  const rows: { name: string; email: string }[] = [];
+  for (const line of text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean)) {
+    const parts = line.split(/[;,\t]/).map(unquote);
+    if (parts.length < 2 || !parts[1]) continue;
+    const [name, email] = parts;
+    if (/^(nom|name)$/i.test(name) || /^(e-?mail|courriel)$/i.test(email)) continue;
+    rows.push({ name: name || email, email });
+  }
+  return rows;
+}
 
 /* ------------------------------------------------------------------ Login - */
 function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
@@ -132,6 +146,132 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
         {result && <div className="card" style={{ background: result.ok ? "var(--success-tint)" : "var(--danger-tint)", border: "none", padding: "10px 12px", fontSize: 13 }}>{result.msg}</div>}
       </div>
     </form>
+  );
+}
+
+/* ------------------------------------------------------------- Import CSV - */
+function ImportCard({ orgId, selectedCourse, available, onDone }: {
+  orgId: string; selectedCourse: string; available: number; onDone: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [csv, setCsv] = useState("");
+  const [invite, setInvite] = useState(true);
+  const [enrol, setEnrol] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [report, setReport] = useState<OrgImportReport | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const rows = parseRows(csv);
+
+  function loadFile(files: FileList | null) {
+    const f = files?.[0];
+    if (!f) return;
+    void f.text().then((t) => setCsv(t));
+    if (fileRef.current) fileRef.current.value = "";
+  }
+  async function run() {
+    setBusy(true); setErr(null); setReport(null);
+    try { setReport(await api.importLearners(orgId, rows, { courseId: enrol && selectedCourse ? selectedCourse : undefined, invite })); onDone(); }
+    catch (e) { setErr(e instanceof ApiError ? e.message : "Import impossible"); }
+    finally { setBusy(false); }
+  }
+  function downloadCreds() {
+    const lines = ["Email,Mot de passe", ...(report?.credentials ?? []).map((c) => `"${c.email}","${c.password}"`)];
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv" }));
+    a.download = "identifiants-apprenants.csv"; a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  return (
+    <div className="card">
+      <div className="card-h">
+        <h3>Import CSV</h3>
+        <button className="btn btn--sm" onClick={() => setOpen((v) => !v)}>{open ? "Fermer" : "Ouvrir"}</button>
+      </div>
+      {open && (
+        <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+            <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files)} />
+            <button className="btn btn--sm" onClick={() => fileRef.current?.click()}>📄 Charger un fichier…</button>
+            <span className="muted" style={{ fontSize: 12 }}>ou collez <code>Nom, Email</code> (une ligne par apprenant)</span>
+          </div>
+          <textarea className="field" style={{ minHeight: 100, fontFamily: "monospace", fontSize: 12.5, resize: "vertical" }} value={csv}
+            onChange={(e) => { setCsv(e.target.value); setReport(null); }} placeholder={"Aminata Diallo, aminata.d@exemple.com\nKouamé N'Guessan, kouame.n@exemple.com"} />
+          <label className="check"><input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} /> Envoyer les invitations par e-mail</label>
+          {selectedCourse && <label className="check"><input type="checkbox" checked={enrol} onChange={(e) => setEnrol(e.target.checked)} /> Inscrire au parcours sélectionné</label>}
+          <div className="row between">
+            <span className="muted" style={{ fontSize: 12 }}>{rows.length} apprenant(s) détecté(s) · {available} siège(s) disponible(s)</span>
+            <button className="btn btn--primary btn--sm" disabled={busy || rows.length === 0 || rows.length > available} onClick={() => void run()}>
+              {busy ? "Import…" : rows.length > available ? "Licences insuffisantes" : "Importer"}
+            </button>
+          </div>
+          {err && <p className="ko">{err}</p>}
+          {report && (
+            <div className="card" style={{ border: "1px solid var(--line)", padding: "10px 12px", fontSize: 12.5 }}>
+              <div className="row" style={{ gap: 6, flexWrap: "wrap", marginBottom: report.errors.length ? 8 : 0 }}>
+                <span className="pill pill--green">{report.created} créé(s)</span>
+                {report.enrolled > 0 && <span className="pill pill--soft">{report.enrolled} inscrit(s)</span>}
+                {invite && <span className="pill pill--soft">{report.invited} invitation(s)</span>}
+                {report.errors.length > 0 && <span className="pill pill--red">{report.errors.length} erreur(s)</span>}
+                {report.credentials.length > 0 && <button className="btn btn--sm" onClick={downloadCreds}>⤓ Identifiants</button>}
+              </div>
+              {report.errors.map((e, i) => <div key={i} className="ko" style={{ margin: 0 }}>Ligne {e.line} · {e.email || "—"} : {e.error}</div>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ Team -- */
+function TeamCard({ orgId, members, me, onChange }: {
+  orgId: string; members: Member[]; me: Principal; onChange: () => void;
+}) {
+  const team = members.filter((m) => m.orgRole !== "MEMBER");
+  const [email, setEmail] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("add"); setNote(null);
+    try { await api.addTeamMember(orgId, email.trim(), "ADMIN"); setNote(`✅ ${email.trim()} est maintenant administrateur.`); setEmail(""); onChange(); }
+    catch (err) { setNote(err instanceof ApiError ? err.message : "Erreur"); }
+    finally { setBusy(null); }
+  }
+  async function remove(m: Member) {
+    setBusy(m.user.id); setNote(null);
+    try { await api.removeTeamMember(orgId, m.user.id); onChange(); }
+    catch (err) { setNote(err instanceof ApiError ? err.message : "Erreur"); }
+    finally { setBusy(null); }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-h"><h3>Équipe <span className="muted">({team.length})</span></h3></div>
+      <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {team.map((m) => (
+          <div key={m.user.id} className="row between">
+            <div className="who" style={{ minWidth: 0 }}>
+              <b style={{ fontSize: 13 }}>{m.user.name}{m.user.id === me.id ? " (vous)" : ""}</b>
+              <span style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{m.user.email}</span>
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              <span className={`pill ${m.orgRole === "OWNER" ? "pill--green" : "pill--soft"}`}>{m.orgRole === "OWNER" ? "Propriétaire" : "Administrateur"}</span>
+              {m.user.id !== me.id && <button className="btn btn--sm" disabled={busy === m.user.id} onClick={() => void remove(m)} title="Retirer de l'équipe d'administration">✕</button>}
+            </div>
+          </div>
+        ))}
+        <form className="row" style={{ gap: 8 }} onSubmit={add}>
+          <input className="field" type="email" style={{ flex: 1, padding: "8px 10px", fontSize: 12.5 }} placeholder="E-mail d'un compte existant…" value={email} onChange={(e) => setEmail(e.target.value)} required />
+          <button className="btn btn--sm" disabled={busy === "add" || !email.trim()}>{busy === "add" ? "…" : "+ Admin"}</button>
+        </form>
+        <p className="muted" style={{ fontSize: 11.5, margin: 0 }}>Les administrateurs gèrent apprenants et licences. Ils ne consomment pas de siège.</p>
+        {note && <p style={{ fontSize: 12.5, fontWeight: 600, margin: 0 }}>{note}</p>}
+      </div>
+    </div>
   );
 }
 
@@ -319,6 +459,8 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <SeatsCard seats={seats} />
               <AddLearner orgId={orgId} selectedCourse={selectedCourse} full={seats.available <= 0} onDone={() => loadOrg(orgId)} />
+              <ImportCard orgId={orgId} selectedCourse={selectedCourse} available={seats.available} onDone={() => loadOrg(orgId)} />
+              <TeamCard orgId={orgId} members={members} me={user} onChange={() => loadOrg(orgId)} />
             </div>
             <div style={{ opacity: loading ? 0.6 : 1, transition: "opacity .15s" }}>
               <Learners orgId={orgId} members={members} progress={progress} selectedCourse={selectedCourse} onChange={() => loadOrg(orgId)} />
