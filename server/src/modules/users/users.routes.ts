@@ -6,7 +6,7 @@ import { authenticate, guard } from "../../lib/auth.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { audit } from "../../lib/audit.js";
-import { UserError, USER_SORTS, inviteUser, deleteUser, listUsers, updateUser } from "./users.service.js";
+import { UserError, USER_SORTS, importUsers, inviteUser, deleteUser, listUsers, updateUser } from "./users.service.js";
 import { envelope, pageQuery, sortSpec } from "../../lib/paging.js";
 
 const RoleEnum = z.enum([
@@ -62,6 +62,28 @@ export async function userRoutes(app: FastifyInstance) {
       const r = await inviteUser(id, password);
       await audit({ actorId: req.principal?.id, action: "user.invite", targetType: "User", targetId: id, ip: req.ip, meta: { delivered: r.delivered } });
       return { data: r };
+    } catch (e) {
+      if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
+      throw e;
+    }
+  });
+
+  // Bulk import (staff): rows parsed from a CSV by the admin. Row-independent —
+  // per-line errors are reported, the rest goes through. Optional course
+  // enrolment + invitation e-mail. Max 500 rows per call.
+  app.post("/users/import", { preHandler: guard("user:manage") }, async (req, reply) => {
+    const body = z.object({
+      rows: z.array(z.object({ name: z.string().optional(), email: z.string().optional(), role: z.string().optional() })).min(1).max(500),
+      courseId: z.string().optional(),
+      invite: z.boolean().optional(),
+    }).parse(req.body);
+    try {
+      const report = await importUsers(body.rows, { courseId: body.courseId, invite: body.invite });
+      await audit({
+        actorId: req.principal?.id, action: "user.import", targetType: "User", ip: req.ip,
+        meta: { total: report.total, created: report.created, existing: report.existing, enrolled: report.enrolled, errors: report.errors.length },
+      });
+      return { data: report };
     } catch (e) {
       if (e instanceof UserError) return reply.status(e.statusCode).send({ error: e.code, message: e.message });
       throw e;

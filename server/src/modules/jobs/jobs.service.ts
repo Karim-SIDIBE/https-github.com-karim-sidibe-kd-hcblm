@@ -250,3 +250,79 @@ export async function runInsightsAlerts(
   }
   return { skipped: false as const, courses: perCourse.length, alerts: totalAlerts, perCourse };
 }
+
+// --- jobs monitor (M3) -------------------------------------------------------
+
+/** Everything the admin monitor shows about the platform's background jobs. */
+export const JOB_CATALOG = [
+  { key: "notifications", label: "Notifications", description: "Livraison des e-mails / SMS / WhatsApp en attente.", cadence: "chaque minute" },
+  { key: "webhooks-flush", label: "Webhooks sortants", description: "Livraison des webhooks en attente vers les intégrations.", cadence: "chaque minute" },
+  { key: "lrs-forward", label: "Transfert LRS", description: "Transfert des traces xAPI vers un LRS externe (inactif sans LRS configuré).", cadence: "chaque minute" },
+  { key: "re-engagement", label: "Relances J+3/7/14", description: "Détection des apprenants inactifs et envoi des relances personnalisées.", cadence: "toutes les heures" },
+  { key: "journal-triggers", label: "Déclencheurs du journal", description: "Invitations au journal de bord (J+1 à J+14 après le début d'un bloc).", cadence: "toutes les heures" },
+  { key: "project-sla", label: "SLA projets Bloc 4", description: "Alerte l'admin quand un projet soumis attend une évaluation depuis 5 jours ouvrés.", cadence: "toutes les heures" },
+  { key: "insights-alerts", label: "Alertes pédagogiques", description: "Digest hebdomadaire : questions sous seuil, ruptures d'entonnoir, vidéos désertées.", cadence: "hebdomadaire (lundi)" },
+  { key: "scheduled-reports", label: "Rapports programmés", description: "Envoi des rapports de parcours programmés (hebdo/mensuel).", cadence: "toutes les heures" },
+  { key: "retention", label: "Purge RGPD", description: "Exécute les effacements arrivés à échéance, purge tokens/journaux/codes expirés.", cadence: "toutes les heures" },
+  { key: "lrs-retention", label: "Rétention xAPI", description: "Archive (NDJSON.gz) puis purge les traces granulaires au-delà de la fenêtre de rétention.", cadence: "toutes les heures" },
+] as const;
+export type JobKey = (typeof JOB_CATALOG)[number]["key"];
+
+const JOB_RUNS_KEPT_DAYS = 60;
+
+/**
+ * Run a job and record the execution for the admin monitor. `skipIf` lets the
+ * scheduler's minute-tick queues stay silent when there was nothing to do
+ * (otherwise the table would grow by thousands of no-op rows a day).
+ * Errors are recorded then rethrown — callers keep their own handling.
+ */
+export async function recordRun<T>(
+  name: JobKey,
+  trigger: "manual" | "scheduler",
+  actorId: string | null | undefined,
+  fn: () => Promise<T>,
+  opts: { skipIf?: (result: T) => boolean } = {},
+): Promise<T> {
+  const startedAt = new Date();
+  try {
+    const result = await fn();
+    if (!opts.skipIf?.(result)) {
+      await prisma.jobRun.create({ data: { name, trigger, actorId: actorId ?? null, startedAt, finishedAt: new Date(), ok: true, result: (result ?? {}) as object } }).catch(() => {});
+      await prisma.jobRun.deleteMany({ where: { startedAt: { lt: new Date(Date.now() - JOB_RUNS_KEPT_DAYS * MS_PER_DAY) } } }).catch(() => {});
+    }
+    return result;
+  } catch (e) {
+    const error = e instanceof Error ? e.message : String(e);
+    await prisma.jobRun.create({ data: { name, trigger, actorId: actorId ?? null, startedAt, finishedAt: new Date(), ok: false, error } }).catch(() => {});
+    throw e;
+  }
+}
+
+/** The monitor's main view: every known job + its last recorded run. */
+export async function jobsOverview() {
+  const lastRuns = await Promise.all(JOB_CATALOG.map((j) =>
+    prisma.jobRun.findFirst({ where: { name: j.key }, orderBy: { startedAt: "desc" } })));
+  return JOB_CATALOG.map((j, i) => {
+    const r = lastRuns[i];
+    return {
+      ...j,
+      lastRun: r ? {
+        id: r.id, trigger: r.trigger, startedAt: r.startedAt, finishedAt: r.finishedAt, ok: r.ok,
+        durationMs: r.finishedAt ? r.finishedAt.getTime() - r.startedAt.getTime() : null,
+        result: r.result, error: r.error,
+      } : null,
+    };
+  });
+}
+
+/** Paged execution history (optionally for one job). */
+export async function listJobRuns(opts: { name?: string; page?: number; pageSize?: number } = {}) {
+  const where = opts.name ? { name: opts.name } : {};
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 30;
+  const [total, rows] = await Promise.all([
+    prisma.jobRun.count({ where }),
+    prisma.jobRun.findMany({ where, orderBy: { startedAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize }),
+  ]);
+  return { rows, total };
+}

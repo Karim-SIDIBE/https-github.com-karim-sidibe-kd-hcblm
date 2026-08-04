@@ -181,7 +181,7 @@ export type BankQuestion = { id: string; question: any; subArea: string; level: 
 export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
-export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string };
+export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string; meta?: Record<string, unknown> | null; actor?: { name: string; email: string } | null };
 export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
@@ -195,6 +195,17 @@ export type CredentialRow = {
   learner: { name: string; email: string }; courseTitle: string; verifyUrl: string;
 };
 export type SavedViewRow = { id: string; name: string; config: Record<string, unknown>; updatedAt: string };
+export type JobRunRow = { id: string; name: string; trigger: string; actorId: string | null; startedAt: string; finishedAt: string | null; ok: boolean | null; result: Record<string, unknown> | null; error: string | null };
+export type JobInfo = {
+  key: string; label: string; description: string; cadence: string;
+  lastRun: { id: string; trigger: string; startedAt: string; finishedAt: string | null; ok: boolean | null; durationMs: number | null; result: Record<string, unknown> | null; error: string | null } | null;
+};
+export type WebhookDelivery = { id: string; event: string; status: string; attempts: number; responseCode: number | null; error: string | null; createdAt: string; sentAt: string | null };
+export type ImportReport = {
+  total: number; created: number; existing: number; enrolled: number; invited: number;
+  errors: { line: number; email: string; error: string }[];
+  credentials: { email: string; password: string }[];
+};
 export type RubricCriterion = { label: string; weightPoints: number };
 export type EvalQueueItem = {
   enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
@@ -355,6 +366,34 @@ export const api = {
   views: (screen: string) => req<SavedViewRow[]>("GET", `/views?screen=${encodeURIComponent(screen)}`),
   saveView: (screen: string, name: string, config: Record<string, unknown>) => req<SavedViewRow>("PUT", "/views", { screen, name, config }),
   deleteView: (id: string) => req<{ id: string }>("DELETE", `/views/${id}`),
+  // --- jobs monitor (M3) ---
+  jobs: () => req<JobInfo[]>("GET", "/jobs"),
+  jobRuns: (p: { name?: string; page?: number; pageSize?: number }) => reqPaged<Paged<JobRunRow>>("/jobs/runs", p),
+  runJobPath: (path: string, body: Record<string, unknown> = {}) => req<Record<string, unknown>>("POST", path, body),
+  // --- webhooks (M3) ---
+  createWebhook: (b: { url: string; events: string[]; secret?: string }) => req<Webhook>("POST", "/webhooks", b),
+  updateWebhook: (id: string, b: { url?: string; events?: string[]; active?: boolean }) => req<Webhook>("PATCH", `/webhooks/${id}`, b),
+  deleteWebhook: (id: string) => req<{ deleted: boolean }>("DELETE", `/webhooks/${id}`),
+  webhookDeliveries: (id: string) => req<WebhookDelivery[]>("GET", `/webhooks/${id}/deliveries`),
+  testWebhook: (id: string) => req<{ ok: boolean; responseCode: number | null; error: string | null }>("POST", `/webhooks/${id}/test`, {}),
+  retryWebhookDelivery: (id: string, did: string) => req<{ requeued: boolean }>("POST", `/webhooks/${id}/deliveries/${did}/retry`, {}),
+  // --- audit enrichment (M3) ---
+  auditActions: () => req<string[]>("GET", "/audit/actions"),
+  async auditCsv(p: { q?: string; action?: string }): Promise<Blob> {
+    const t = auth.token();
+    const qs = new URLSearchParams({ format: "csv" });
+    if (p.q) qs.set("q", p.q);
+    if (p.action) qs.set("action", p.action);
+    const res = await fetch(`${BASE}/audit?${qs}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Export échoué");
+    return res.blob();
+  },
+  // --- platform settings (M3) ---
+  settings: () => req<Record<string, unknown>>("GET", "/settings"),
+  setSetting: (key: string, value: unknown) => req<{ key: string; value: unknown }>("PUT", `/settings/${key}`, { value }),
+  // --- bulk user import (M3) ---
+  importUsers: (rows: { name?: string; email?: string; role?: string }[], opts: { courseId?: string; invite?: boolean } = {}) =>
+    req<ImportReport>("POST", "/users/import", { rows, ...opts }),
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
@@ -373,7 +412,7 @@ export const api = {
 };
 
 export type Issuer = { name: string; url: string; id: string };
-export type Webhook = { id: string; url: string; events?: string[]; organizationId?: string | null };
+export type Webhook = { id: string; url: string; events?: string[]; organizationId?: string | null; active?: boolean; secret?: string; createdAt?: string };
 
 export type ValidationIssue = { level: "error" | "warning"; rule: string; path: string; message: string };
 export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { ok: boolean; issues: ValidationIssue[] } };

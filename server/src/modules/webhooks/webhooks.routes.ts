@@ -5,6 +5,7 @@ import {
 } from "./webhooks.service.js";
 import { guard } from "../../lib/auth.js";
 import { audit } from "../../lib/audit.js";
+import { retryDelivery, sendTestEvent } from "../../lib/webhooks/webhooks.js";
 
 const eventEnum = z.enum(WEBHOOK_EVENTS as [string, ...string[]]);
 
@@ -36,7 +37,23 @@ export async function webhookRoutes(app: FastifyInstance) {
       events: z.array(eventEnum).min(1).optional(),
       active: z.boolean().optional(),
     }).parse(req.body);
-    return { data: await updateWebhook(id, patch as never) };
+    const data = await updateWebhook(id, patch as never);
+    await audit({ actorId: req.principal!.id, action: "webhook.update", targetType: "Webhook", targetId: id, ip: req.ip, meta: { fields: Object.keys(patch) } });
+    return { data };
+  });
+
+  // Fire a signed TEST event at the endpoint (integration smoke test).
+  app.post("/webhooks/:id/test", { preHandler: guard("org:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const r = await sendTestEvent(id);
+    if (r.error === "not_found") return reply.notFound("Webhook introuvable");
+    return { data: r };
+  });
+
+  // Re-queue a FAILED delivery (retried by the minute tick).
+  app.post("/webhooks/:id/deliveries/:did/retry", { preHandler: guard("org:manage") }, async (req) => {
+    const { id, did } = z.object({ id: z.string(), did: z.string() }).parse(req.params);
+    return { data: await retryDelivery(id, did) };
   });
 
   app.delete("/webhooks/:id", { preHandler: guard("org:manage") }, async (req) => {

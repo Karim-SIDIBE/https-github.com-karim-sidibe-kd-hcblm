@@ -96,3 +96,46 @@ export async function flushPendingWebhooks(batchSize = 100) {
   }
   return { scanned: pending.length, sent, failed };
 }
+
+/**
+ * Fire a signed test event at one subscription (admin "Tester" button).
+ * Recorded as a WebhookDelivery (event "TEST") so it shows in the log.
+ */
+export async function sendTestEvent(webhookId: string): Promise<{ ok: boolean; responseCode: number | null; error: string | null }> {
+  const hook = await prisma.webhook.findUnique({ where: { id: webhookId } });
+  if (!hook) return { ok: false, responseCode: null, error: "not_found" };
+  const envelope = { event: "TEST", occurredAt: new Date().toISOString(), data: { message: "Événement de test KOMPETENCES DECLICK — votre intégration reçoit bien les webhooks." } };
+  const body = JSON.stringify(envelope);
+  const signature = signPayload(hook.secret, body);
+  let responseCode: number | null = null;
+  let error: string | null = null;
+  let ok = false;
+  try {
+    await assertPublicUrl(hook.url);
+    const res = await fetch(hook.url, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-kd-event": "TEST", "x-kd-signature": signature },
+      body,
+    });
+    responseCode = res.status;
+    ok = res.ok;
+    if (!res.ok) error = `HTTP ${res.status}`;
+  } catch (e) {
+    error = e instanceof Error ? e.message : "fetch error";
+  }
+  // WebhookDelivery.event is the Prisma enum — log the test under the hook's
+  // first subscribed event; the payload/header still say "TEST".
+  await prisma.webhookDelivery.create({
+    data: { webhookId: hook.id, event: hook.events[0] ?? "BADGE_ISSUED", payload: envelope as object, status: ok ? "SENT" : "FAILED", attempts: 1, responseCode, error, sentAt: ok ? new Date() : null },
+  }).catch(() => {});
+  return { ok, responseCode, error };
+}
+
+/** Re-queue a FAILED delivery — the minute tick (or a manual flush) retries it. */
+export async function retryDelivery(webhookId: string, deliveryId: string): Promise<{ requeued: boolean }> {
+  const { count } = await prisma.webhookDelivery.updateMany({
+    where: { id: deliveryId, webhookId, status: "FAILED" },
+    data: { status: "PENDING", error: null },
+  });
+  return { requeued: count > 0 };
+}

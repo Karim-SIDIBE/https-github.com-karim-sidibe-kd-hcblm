@@ -18,6 +18,7 @@ import { isStaff } from "../../domain/auth/permissions.js";
 import { audit } from "../../lib/audit.js";
 import { summarizeSessions } from "../../domain/rgpd.js";
 import { recordRegistrationConsents } from "../consent/consent.service.js";
+import { getSetting, POLICY_2FA_ROLES } from "../settings/settings.routes.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { otpMessage } from "../../lib/notify/templates.js";
 
@@ -99,8 +100,21 @@ export async function login(email: string, password: string, ip?: string, userAg
     return { twoFactorRequired: true as const, challenge: await signTwoFactorChallenge(user.id) };
   }
 
+  // Staff-2FA policy: when enabled, privileged roles without TOTP still log in
+  // (they need a session to reach /auth/2fa/setup) but the response carries a
+  // flag the admin SPA uses to force enrolment — and the grace login is audited.
+  let twoFactorSetupRequired = false;
+  if ((POLICY_2FA_ROLES as readonly string[]).includes(user.role) && (await getSetting<boolean>("require_staff_2fa"))) {
+    twoFactorSetupRequired = true;
+    await audit({ actorId: user.id, action: "auth.login.2fa_grace", ip, meta: { role: user.role } });
+  }
+
   await audit({ actorId: user.id, action: "auth.login.success", ip });
-  return { ...(await tokensFor(user, undefined, { ip, userAgent })), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
+  return {
+    ...(await tokensFor(user, undefined, { ip, userAgent })),
+    user: { id: user.id, name: user.name, email: user.email, role: user.role },
+    ...(twoFactorSetupRequired ? { twoFactorSetupRequired: true as const } : {}),
+  };
 }
 
 // --- two-factor (TOTP) -------------------------------------------------------

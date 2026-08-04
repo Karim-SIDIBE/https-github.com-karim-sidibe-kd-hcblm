@@ -28,7 +28,7 @@ export function Security() {
 
   async function confirmEnable() {
     setBusy(true); setErr(null);
-    try { const r = await twofa.enable(code.trim()); setBackup(r.backupCodes); setCode(""); setPhase("backup"); }
+    try { const r = await twofa.enable(code.trim()); setBackup(r.backupCodes); setCode(""); setPhase("backup"); window.dispatchEvent(new CustomEvent("kd-2fa-changed")); }
     catch (e: any) { setErr(e?.message || "Code invalide"); } finally { setBusy(false); }
   }
 

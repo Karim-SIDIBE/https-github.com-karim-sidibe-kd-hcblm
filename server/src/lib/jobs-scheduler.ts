@@ -20,7 +20,7 @@
  */
 import { env } from "../config/env.js";
 import { dispatchPending } from "../modules/notifications/notifications.service.js";
-import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts } from "../modules/jobs/jobs.service.js";
+import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts, recordRun, type JobKey } from "../modules/jobs/jobs.service.js";
 import { runDueReports } from "../modules/reports/reports.service.js";
 import { runRetentionPurge } from "../modules/rgpd/rgpd.service.js";
 import { forwardPending } from "./lrs/forwarder.js";
@@ -38,42 +38,40 @@ export function startJobsScheduler(log: Logger = { info: console.log, error: con
   let fastBusy = false;
   let slowBusy = false;
 
+  // Every job is recorded (JobRun → admin monitor) and isolated: one failing
+  // job no longer aborts the rest of its tick. `skipIf` keeps the minute-tick
+  // queues from writing thousands of no-op rows a day.
+  const safe = async <T>(name: JobKey, fn: () => Promise<T>, skipIf?: (r: T) => boolean): Promise<T | null> => {
+    try { return await recordRun(name, "scheduler", null, fn, skipIf ? { skipIf } : {}); }
+    catch (e) { log.error(`[jobs] ${name} en erreur : ${e instanceof Error ? e.message : e}`); return null; }
+  };
+
   const fast = async () => {
     if (fastBusy) return; // a slow SMTP batch must not overlap the next tick
     fastBusy = true;
-    try {
-      const n = await dispatchPending(200);
-      if (n.scanned > 0) log.info(`[jobs] notifications : ${n.sent} envoyée(s), ${n.failed} échec(s)`);
-      await flushPendingWebhooks(200);
-      await forwardPending(200);
-    } catch (e) {
-      log.error(`[jobs] tick livraison en erreur : ${e instanceof Error ? e.message : e}`);
-    } finally {
-      fastBusy = false;
-    }
+    const n = await safe("notifications", () => dispatchPending(200), (r) => r.scanned === 0);
+    if (n && n.scanned > 0) log.info(`[jobs] notifications : ${n.sent} envoyée(s), ${n.failed} échec(s)`);
+    await safe("webhooks-flush", () => flushPendingWebhooks(200), (r) => r.scanned === 0);
+    await safe("lrs-forward", () => forwardPending(200), (r) => r.skipped === true || (r.forwarded === 0 && r.failed === 0));
+    fastBusy = false;
   };
 
   const slow = async () => {
     if (slowBusy) return;
     slowBusy = true;
     const now = new Date();
-    try {
-      const r = await runReEngagement(now);
-      if (r.created.length > 0) log.info(`[jobs] re-engagement : ${r.created.length} relance(s)`);
-      const j = await runJournalTriggers(now);
-      if (j.created.length > 0) log.info(`[jobs] journal : ${j.created.length} déclencheur(s)`);
-      await runProjectSlaAlerts(now);
-      const ia = await runInsightsAlerts(now);
-      if (!ia.skipped && ia.alerts > 0) log.info(`[jobs] pilotage pédagogique : ${ia.alerts} signal(aux) notifié(s)`);
-      await runDueReports(now);
-      await runRetentionPurge(now);
-      const x = await archiveGranularStatements(now);
-      if (x.archived > 0) log.info(`[jobs] rétention xAPI : ${x.archived} statement(s) archivé(s) → ${x.file}`);
-    } catch (e) {
-      log.error(`[jobs] tick quotidien en erreur : ${e instanceof Error ? e.message : e}`);
-    } finally {
-      slowBusy = false;
-    }
+    const r = await safe("re-engagement", () => runReEngagement(now));
+    if (r && r.created.length > 0) log.info(`[jobs] re-engagement : ${r.created.length} relance(s)`);
+    const j = await safe("journal-triggers", () => runJournalTriggers(now));
+    if (j && j.created.length > 0) log.info(`[jobs] journal : ${j.created.length} déclencheur(s)`);
+    await safe("project-sla", () => runProjectSlaAlerts(now));
+    const ia = await safe("insights-alerts", () => runInsightsAlerts(now));
+    if (ia && !ia.skipped && ia.alerts > 0) log.info(`[jobs] pilotage pédagogique : ${ia.alerts} signal(aux) notifié(s)`);
+    await safe("scheduled-reports", () => runDueReports(now));
+    await safe("retention", () => runRetentionPurge(now));
+    const x = await safe("lrs-retention", () => archiveGranularStatements(now));
+    if (x && x.archived > 0) log.info(`[jobs] rétention xAPI : ${x.archived} statement(s) archivé(s) → ${x.file}`);
+    slowBusy = false;
   };
 
   const timers = [setInterval(() => void fast(), FAST_MS), setInterval(() => void slow(), SLOW_MS)];
