@@ -12,8 +12,10 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // React in its own chunk: it changes rarely, so returning visitors
-        // keep it cached across app deployments.
-        manualChunks: { react: ["react", "react-dom"] },
+        // keep it cached across app deployments. (Function form — Vite 8/Rolldown
+        // dropped the object form.)
+        manualChunks: (id) =>
+          /node_modules\/(react|react-dom|scheduler)\//.test(id) ? "react" : undefined,
       },
     },
   },
