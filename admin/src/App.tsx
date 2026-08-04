@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import {
   IDash, ILearners, IEnrol, IReeng, ICourse, IEval, ICert, IOrg, ISession, IAudit, ISettings, ISearch,
 } from "./icons";
@@ -6,28 +6,32 @@ import { auth, api, logoutEverywhere, type CourseSummary, type Principal } from 
 import { initials } from "./lib/ui";
 import { Login } from "./screens/Login";
 import { ModalHost } from "./lib/modal";
-import { Dashboard } from "./screens/Dashboard";
-import { Insights } from "./screens/Insights";
-import { Learners } from "./screens/Learners";
-import { Enrol } from "./screens/Enrol";
-import { Relances } from "./screens/Relances";
-import { Audit } from "./screens/Audit";
-import { Orgs } from "./screens/Orgs";
-import { Entreprises } from "./screens/Entreprises";
-import { Utilisateurs } from "./screens/Utilisateurs";
-import { Sessions } from "./screens/Sessions";
-import { Evaluation } from "./screens/Evaluation";
-import { Certificats } from "./screens/Certificats";
-import { Cours } from "./screens/Cours";
-import { Medias } from "./screens/Medias";
-import { QuestionBank } from "./screens/QuestionBank";
-import { Settings } from "./screens/Settings";
-import { UiTexts } from "./screens/UiTexts";
-import { Security } from "./screens/Security";
-import { Jobs } from "./screens/Jobs";
-import { Webhooks } from "./screens/Webhooks";
-import { Integrations } from "./screens/Integrations";
 import { twofa } from "./lib/api";
+
+// Screens are code-split (React.lazy): each loads on first visit, so the
+// initial bundle stays small and heavy screens (éditeur de cours, QR 2FA…)
+// only cost their weight when opened.
+const Dashboard = lazy(() => import("./screens/Dashboard").then((m) => ({ default: m.Dashboard })));
+const Insights = lazy(() => import("./screens/Insights").then((m) => ({ default: m.Insights })));
+const Learners = lazy(() => import("./screens/Learners").then((m) => ({ default: m.Learners })));
+const Enrol = lazy(() => import("./screens/Enrol").then((m) => ({ default: m.Enrol })));
+const Relances = lazy(() => import("./screens/Relances").then((m) => ({ default: m.Relances })));
+const Audit = lazy(() => import("./screens/Audit").then((m) => ({ default: m.Audit })));
+const Orgs = lazy(() => import("./screens/Orgs").then((m) => ({ default: m.Orgs })));
+const Entreprises = lazy(() => import("./screens/Entreprises").then((m) => ({ default: m.Entreprises })));
+const Utilisateurs = lazy(() => import("./screens/Utilisateurs").then((m) => ({ default: m.Utilisateurs })));
+const Sessions = lazy(() => import("./screens/Sessions").then((m) => ({ default: m.Sessions })));
+const Evaluation = lazy(() => import("./screens/Evaluation").then((m) => ({ default: m.Evaluation })));
+const Certificats = lazy(() => import("./screens/Certificats").then((m) => ({ default: m.Certificats })));
+const Cours = lazy(() => import("./screens/Cours").then((m) => ({ default: m.Cours })));
+const Medias = lazy(() => import("./screens/Medias").then((m) => ({ default: m.Medias })));
+const QuestionBank = lazy(() => import("./screens/QuestionBank").then((m) => ({ default: m.QuestionBank })));
+const Settings = lazy(() => import("./screens/Settings").then((m) => ({ default: m.Settings })));
+const UiTexts = lazy(() => import("./screens/UiTexts").then((m) => ({ default: m.UiTexts })));
+const Security = lazy(() => import("./screens/Security").then((m) => ({ default: m.Security })));
+const Jobs = lazy(() => import("./screens/Jobs").then((m) => ({ default: m.Jobs })));
+const Webhooks = lazy(() => import("./screens/Webhooks").then((m) => ({ default: m.Webhooks })));
+const Integrations = lazy(() => import("./screens/Integrations").then((m) => ({ default: m.Integrations })));
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
 const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", D = "LEARNING_DESIGNER", R = "REVIEWER", EC = "ENTERPRISE_CLIENT", EM = "EMPLOYER";
@@ -185,6 +189,7 @@ export function App() {
             }} />
           </label>
         </header>
+        <Suspense fallback={<div className="content"><div className="card"><div className="card-b">Chargement…</div></div></div>}>
         {!courseId && !["settings", "security", "entreprises", "users", "courses", "medias", "uitexts", "jobs", "webhooks", "integrations", "audit"].includes(view) ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
@@ -209,6 +214,7 @@ export function App() {
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Dashboard ctx={ctx} />}
+        </Suspense>
       </div>
     </div>
   );

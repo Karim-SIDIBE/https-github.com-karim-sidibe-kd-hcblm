@@ -8,4 +8,13 @@ export default defineConfig({
   plugins: [react()],
   define: { __API_URL__: JSON.stringify(API_URL) },
   server: { port: 5174 },
+  build: {
+    rollupOptions: {
+      output: {
+        // React in its own chunk: it changes rarely, so returning visitors
+        // keep it cached across app deployments.
+        manualChunks: { react: ["react", "react-dom"] },
+      },
+    },
+  },
 });
