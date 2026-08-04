@@ -23,7 +23,6 @@ import { QuestionBank } from "./screens/QuestionBank";
 import { Settings } from "./screens/Settings";
 import { UiTexts } from "./screens/UiTexts";
 import { Security } from "./screens/Security";
-import { Soon } from "./screens/Soon";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
 const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", D = "LEARNING_DESIGNER", R = "REVIEWER", EC = "ENTERPRISE_CLIENT", EM = "EMPLOYER";
@@ -138,7 +137,16 @@ export function App() {
         <header className="topbar">
           <div className="crumbs">Administration <span style={{ margin: "0 6px", color: "var(--line-strong)" }}>/</span> <b>{TITLES[view] ?? "Tableau de bord"}</b></div>
           <div className="spacer" />
-          <label className="search"><ISearch /><input placeholder="Rechercher un apprenant, une cohorte…" /></label>
+          <label className="search"><ISearch />
+            {/* Entrée → écran Apprenants avec le filtre prérempli (écouté par Learners). */}
+            <input placeholder="Rechercher un apprenant… (Entrée)" onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                const value = (e.target as HTMLInputElement).value.trim();
+                go("learners");
+                setTimeout(() => window.dispatchEvent(new CustomEvent("kd-admin-search", { detail: value })), 50);
+              }
+            }} />
+          </label>
         </header>
         {!courseId && view !== "settings" && view !== "security" && view !== "entreprises" && view !== "users" && view !== "courses" && view !== "medias" && view !== "uitexts" ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
@@ -150,8 +158,8 @@ export function App() {
           : view === "reeng" ? <Relances ctx={ctx} />
           : view === "audit" ? <Audit />
           : view === "entreprises" ? <Entreprises />
-          : view === "orgs" ? <Orgs />
-          : view === "sessions" ? <Sessions />
+          : view === "orgs" ? <Orgs ctx={ctx} />
+          : view === "sessions" ? <Sessions ctx={ctx} />
           : view === "eval" ? <Evaluation />
           : view === "certs" ? <Certificats />
           : view === "courses" ? <Cours ctx={ctx} />
@@ -160,7 +168,7 @@ export function App() {
           : view === "uitexts" ? <UiTexts />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
-          : <Soon title={TITLES[view] ?? "Module"} />}
+          : <Dashboard ctx={ctx} />}
       </div>
     </div>
   );

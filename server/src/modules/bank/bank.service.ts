@@ -86,6 +86,22 @@ export async function createBankQuestion(input: { question?: unknown; subArea?: 
   return prisma.bankQuestion.create({ data: { question: q as object, subArea, level: input.level ?? "", createdById: input.createdById ?? null } });
 }
 
+/** Edit a bank question in place (admin fix loop: weak question → reword it). */
+export async function updateBankQuestion(id: string, input: { question?: unknown; subArea?: string; level?: string }) {
+  const existing = await prisma.bankQuestion.findUnique({ where: { id } });
+  if (!existing) throw new BankError(404, "not_found", "Question introuvable");
+  let q = existing.question;
+  if (input.question !== undefined) {
+    try { q = ScoredQuestion.parse(input.question) as object; }
+    catch (e) { throw new BankError(400, "invalid_question", (e as { issues?: { message: string }[] }).issues?.[0]?.message ?? "Question invalide"); }
+  }
+  const subArea = input.subArea !== undefined ? input.subArea.trim() : existing.subArea;
+  return prisma.bankQuestion.update({
+    where: { id },
+    data: { question: q as object, subArea, level: input.level ?? existing.level },
+  });
+}
+
 export async function deleteBankQuestion(id: string) {
   await prisma.bankQuestion.deleteMany({ where: { id } });
   return { id };

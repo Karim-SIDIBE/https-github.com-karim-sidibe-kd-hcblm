@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { api, type CredentialRow } from "../lib/api";
+import { downloadBlob } from "../lib/csv";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 
 export function Certificats() {
@@ -10,6 +11,23 @@ export function Certificats() {
   const rows = useMemo(() => (data ?? []).filter((c) => q === "" || (c.learner.name + c.learner.email + c.badgeLabel + c.courseTitle).toLowerCase().includes(q.toLowerCase())), [data, q]);
   const valid = (data ?? []).filter((c) => !c.revoked).length;
   const revoked = (data ?? []).filter((c) => c.revoked).length;
+
+  async function download(c: CredentialRow, kind: "pdf" | "vc") {
+    setBusy(`${kind}:${c.id}`);
+    try {
+      const slug = c.learner.name.toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+      downloadBlob(kind === "pdf" ? `certificat-${slug}.pdf` : `credential-${slug}.jwt`, await api.credentialFile(c.id, kind));
+    } catch (e: any) { alert(e?.message || "Erreur de téléchargement"); }
+    finally { setBusy(null); }
+  }
+
+  async function unrevoke(c: CredentialRow) {
+    if (!window.confirm(`Rétablir le certificat de ${c.learner.name} ? Il redeviendra vérifiable publiquement.`)) return;
+    setBusy(`un:${c.id}`);
+    try { await api.unrevokeCredential(c.id); reload(); }
+    catch (e: any) { alert(e?.message || "Erreur"); }
+    finally { setBusy(null); }
+  }
 
   async function revoke(c: CredentialRow) {
     const reason = window.prompt(`Révoquer le certificat de ${c.learner.name} ?\nMotif (optionnel) :`, "");
@@ -53,7 +71,10 @@ export function Certificats() {
                   <td>{c.revoked ? <span className="pill pill--red" title={c.revocationReason ?? ""}><span className="dot" />Révoqué</span> : <span className="pill pill--green"><span className="dot" />Valide</span>}</td>
                   <td style={{ textAlign: "right" }}>
                     <a className="btn btn--sm btn--ghost" href={c.verifyUrl} target="_blank" rel="noreferrer">Vérifier</a>
+                    <button className="btn btn--sm btn--ghost" style={{ marginLeft: 6 }} disabled={busy === `pdf:${c.id}`} onClick={() => download(c, "pdf")}>{busy === `pdf:${c.id}` ? "…" : "PDF"}</button>
+                    <button className="btn btn--sm btn--ghost" style={{ marginLeft: 6 }} title="Verifiable Credential (JWT signé)" disabled={busy === `vc:${c.id}`} onClick={() => download(c, "vc")}>{busy === `vc:${c.id}` ? "…" : "VC"}</button>
                     {!c.revoked && <button className="btn btn--sm" style={{ marginLeft: 6, color: "var(--danger)", borderColor: "var(--danger-tint)" }} disabled={busy === c.id} onClick={() => revoke(c)}>{busy === c.id ? "…" : "Révoquer"}</button>}
+                    {c.revoked && <button className="btn btn--sm" style={{ marginLeft: 6 }} disabled={busy === `un:${c.id}`} onClick={() => unrevoke(c)}>{busy === `un:${c.id}` ? "…" : "Rétablir"}</button>}
                   </td>
                 </tr>
               ))}

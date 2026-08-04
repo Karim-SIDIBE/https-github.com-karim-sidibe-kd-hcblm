@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  ForumError, addMember, createCohort, createThread, deletePost, editPost, getThread,
+  ForumError, addMember, cohortDetail, createCohort, createThread, deletePost, editPost, getThread,
   listCohorts, listThreads, removeMember, reply as replyToThread, setThreadFlags,
 } from "./forum.service.js";
 import { authenticate, guard } from "../../lib/auth.js";
@@ -20,6 +20,11 @@ export async function forumRoutes(app: FastifyInstance) {
   });
 
   app.get("/cohorts", { preHandler: authenticate }, async (req) => ({ data: await listCohorts(req.principal!) }));
+
+  app.get("/cohorts/:id", { preHandler: guard("forum:moderate") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await cohortDetail(id) }; } catch (err) { return handle(reply, err); }
+  });
 
   app.post("/cohorts/:id/members", { preHandler: guard("forum:moderate") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);

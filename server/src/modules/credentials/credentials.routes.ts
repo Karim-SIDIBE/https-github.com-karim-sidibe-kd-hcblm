@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, vcJwt, verify,
+  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, unrevoke, vcJwt, verify,
 } from "./credentials.service.js";
 import { issuerDocument } from "../../lib/credentials/openbadge.js";
 import { audit } from "../../lib/audit.js";
@@ -69,6 +69,16 @@ export async function credentialRoutes(app: FastifyInstance) {
     try {
       const r = await revoke(id, reason, req.principal?.id);
       await audit({ actorId: req.principal?.id, action: "credential.revoke", targetType: "credential", targetId: id, ip: req.ip, meta: { reason } });
+      return { data: r };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Reinstate a wrongly-revoked credential (same permission as revoking).
+  app.post("/credentials/:id/unrevoke", { preHandler: guard("credential:revoke") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try {
+      const r = await unrevoke(id);
+      await audit({ actorId: req.principal?.id, action: "credential.unrevoke", targetType: "credential", targetId: id, ip: req.ip });
       return { data: r };
     } catch (err) { return handle(reply, err); }
   });
