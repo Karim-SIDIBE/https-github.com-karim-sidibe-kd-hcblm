@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   api, auth, login as apiLogin, verify2fa, genPassword, publishedCourse, ApiError,
-  type Org, type Seats, type Member, type CourseSummary, type Principal,
+  type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow,
 } from "./api";
 
 /* ------------------------------------------------------------------ Login - */
@@ -101,8 +101,12 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
     setBusy(true); setResult(null);
     try {
       const u = await api.createLearner(orgId, { name: name.trim(), email: email.trim(), password: pwd, invite });
-      if (enrol && selectedCourse) { try { await api.enroll(orgId, u.id, selectedCourse); } catch { /* non-fatal */ } }
-      setResult({ ok: true, msg: `✅ ${u.name} créé·e. ${u.invited ? "Invitation envoyée." : "Identifiants : " + u.email + " / " + pwd}` });
+      let enrolMsg = "";
+      if (enrol && selectedCourse) {
+        try { await api.enroll(orgId, u.id, selectedCourse); enrolMsg = " Inscrit·e au parcours."; }
+        catch (err) { enrolMsg = ` ⚠️ Compte créé mais inscription au parcours échouée : ${err instanceof ApiError ? err.message : "erreur"}.`; }
+      }
+      setResult({ ok: true, msg: `✅ ${u.name} créé·e.${enrolMsg} ${u.invited ? "Invitation envoyée." : "Identifiants : " + u.email + " / " + pwd}` });
       setName(""); setEmail(""); setPwd(genPassword());
       onDone();
     } catch (err) {
@@ -132,12 +136,14 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
 }
 
 /* --------------------------------------------------------------- Learners - */
-function Learners({ orgId, members, selectedCourse, onChange }: {
-  orgId: string; members: Member[]; selectedCourse: string; onChange: () => void;
+function Learners({ orgId, members, progress, selectedCourse, onChange }: {
+  orgId: string; members: Member[]; progress: Map<string, ProgressRow>; selectedCourse: string; onChange: () => void;
 }) {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  const learners = members.filter((m) => m.orgRole === "MEMBER");
+  const [q, setQ] = useState("");
+  const learners = members.filter((m) => m.orgRole === "MEMBER")
+    .filter((m) => q.trim() === "" || (m.user.name + " " + m.user.email).toLowerCase().includes(q.trim().toLowerCase()));
 
   async function toggle(m: Member) {
     const disabling = m.user.disabledAt == null;
@@ -149,30 +155,74 @@ function Learners({ orgId, members, selectedCourse, onChange }: {
   async function enrol(m: Member) {
     if (!selectedCourse) { setNote("Sélectionnez un parcours en haut."); return; }
     setBusyId(m.user.id); setNote(null);
-    try { await api.enroll(orgId, m.user.id, selectedCourse); setNote(`${m.user.name} inscrit·e au parcours.`); }
+    try { await api.enroll(orgId, m.user.id, selectedCourse); setNote(`✅ ${m.user.name} inscrit·e au parcours.`); onChange(); }
     catch (e) { setNote(e instanceof ApiError ? e.message : "Erreur"); }
     finally { setBusyId(null); }
   }
+  async function reinvite(m: Member) {
+    setBusyId(m.user.id); setNote(null);
+    try {
+      const r = await api.resendInvite(orgId, m.user.id);
+      setNote(r.delivered
+        ? `✅ Invitation renvoyée à ${m.user.email} (nouveau mot de passe envoyé).`
+        : `⚠️ Envoi non configuré — communiquez ce mot de passe à ${m.user.email} : ${r.tempPassword}`);
+    } catch (e) { setNote(e instanceof ApiError ? e.message : "Erreur"); }
+    finally { setBusyId(null); }
+  }
+  async function exportCsv() {
+    try {
+      const blob = await api.progressCsv(orgId);
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = "progression-apprenants.csv"; a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e) { setNote(e instanceof ApiError ? e.message : "Export impossible"); }
+  }
+
+  const statusFr: Record<string, string> = { ACTIVE: "En cours", CERTIFIED: "Certifié", COMPLETED: "Terminé" };
 
   return (
     <div className="card">
-      <div className="card-h"><h3>Apprenants <span className="muted">({learners.length})</span></h3></div>
+      <div className="card-h">
+        <h3>Apprenants <span className="muted">({learners.length})</span></h3>
+        <div className="row" style={{ gap: 8 }}>
+          <input className="field" style={{ width: 180, padding: "7px 10px", fontSize: 12.5 }} placeholder="Rechercher…" value={q} onChange={(e) => setQ(e.target.value)} />
+          <button className="btn btn--sm" onClick={() => void exportCsv()} title="Exporter la progression de tous les apprenants (CSV Excel)">⤓ CSV</button>
+        </div>
+      </div>
       <div className="card-b">
-        {note && <p className="muted" style={{ marginTop: 0 }}>{note}</p>}
+        {note && <p style={{ marginTop: 0, fontSize: 13, fontWeight: 600 }}>{note}</p>}
         {learners.length === 0
-          ? <p className="muted">Aucun apprenant pour l'instant. Ajoutez-en un avec le formulaire.</p>
+          ? <p className="muted">{q ? "Aucun apprenant ne correspond à cette recherche." : "Aucun apprenant pour l'instant. Ajoutez-en un avec le formulaire."}</p>
           : (
             <table className="table">
-              <thead><tr><th>Apprenant</th><th>Statut</th><th style={{ textAlign: "right" }}>Actions</th></tr></thead>
+              <thead><tr><th>Apprenant</th><th>Parcours & progression</th><th>Statut</th><th style={{ textAlign: "right" }}>Actions</th></tr></thead>
               <tbody>
                 {learners.map((m) => {
                   const disabled = m.user.disabledAt != null;
+                  const p = progress.get(m.user.id);
                   return (
                     <tr key={m.user.id}>
                       <td><div className="who"><b style={{ fontSize: 13 }}>{m.user.name}</b><span style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{m.user.email}</span></div></td>
+                      <td>
+                        {!p || p.enrollments.length === 0
+                          ? <span className="muted" style={{ fontSize: 12 }}>Aucune inscription</span>
+                          : p.enrollments.map((e, i) => (
+                            <div key={i} style={{ marginBottom: i < p.enrollments.length - 1 ? 8 : 0 }}>
+                              <div style={{ fontSize: 12, marginBottom: 2 }}>{e.courseTitle}
+                                {e.status === "CERTIFIED" && <span className="pill pill--green" style={{ fontSize: 10, marginLeft: 6 }}>Certifié</span>}
+                              </div>
+                              <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                                <div className="bar" style={{ flex: 1, maxWidth: 180 }}><i style={{ width: `${Math.max(e.progressPercent, 2)}%`, background: e.progressPercent === 100 ? "var(--green, #2DAA4F)" : "var(--accent)" }} /></div>
+                                <b style={{ fontSize: 12 }}>{e.progressPercent}%</b>
+                                <span className="muted" style={{ fontSize: 11 }}>{statusFr[e.status] ?? e.status}</span>
+                              </div>
+                            </div>
+                          ))}
+                      </td>
                       <td>{disabled ? <span className="pill pill--red">Désactivé</span> : <span className="pill pill--green">Actif</span>}</td>
                       <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
                         {!disabled && <button className="btn btn--sm" disabled={busyId === m.user.id} onClick={() => enrol(m)} style={{ marginRight: 6 }}>Inscrire</button>}
+                        {!disabled && <button className="btn btn--sm" disabled={busyId === m.user.id} onClick={() => reinvite(m)} style={{ marginRight: 6 }} title="Réinitialise le mot de passe et renvoie l'invitation">↻ Inviter</button>}
                         <button className="btn btn--sm" disabled={busyId === m.user.id} onClick={() => toggle(m)}>{disabled ? "Réactiver" : "Désactiver"}</button>
                       </td>
                     </tr>
@@ -192,6 +242,8 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
   const [orgId, setOrgId] = useState<string>("");
   const [seats, setSeats] = useState<Seats | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [progress, setProgress] = useState<Map<string, ProgressRow>>(new Map());
+  const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
@@ -212,14 +264,14 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
 
   const loadOrg = useCallback(async (id: string) => {
     if (!id) return;
-    setForbidden(false); setError(null);
+    setForbidden(false); setError(null); setLoading(true);
     try {
-      const [s, m] = await Promise.all([api.seats(id), api.members(id)]);
-      setSeats(s); setMembers(m);
+      const [s, m, p] = await Promise.all([api.seats(id), api.members(id), api.progress(id).catch(() => [] as ProgressRow[])]);
+      setSeats(s); setMembers(m); setProgress(new Map(p.map((r) => [r.userId, r])));
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) { setForbidden(true); setSeats(null); setMembers([]); }
       else setError(e instanceof Error ? e.message : "Erreur");
-    }
+    } finally { setLoading(false); }
   }, []);
 
   useEffect(() => { void loadOrg(orgId); }, [orgId, loadOrg]);
@@ -259,13 +311,18 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
           Votre compte n'est pas administrateur de cette organisation. Demandez à DECLICK de vous accorder le rôle administrateur.
         </div>}
 
+        {!forbidden && !seats && !error && (
+          <div className="card" style={{ padding: "22px 16px" }}><span className="muted">Chargement de l'organisation…</span></div>
+        )}
         {!forbidden && seats && (
-          <div className="grid" style={{ gridTemplateColumns: "1fr 1.4fr", alignItems: "start", gap: 16 }}>
+          <div className="grid grid-console" style={{ alignItems: "start", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <SeatsCard seats={seats} />
               <AddLearner orgId={orgId} selectedCourse={selectedCourse} full={seats.available <= 0} onDone={() => loadOrg(orgId)} />
             </div>
-            <Learners orgId={orgId} members={members} selectedCourse={selectedCourse} onChange={() => loadOrg(orgId)} />
+            <div style={{ opacity: loading ? 0.6 : 1, transition: "opacity .15s" }}>
+              <Learners orgId={orgId} members={members} progress={progress} selectedCourse={selectedCourse} onChange={() => loadOrg(orgId)} />
+            </div>
           </div>
         )}
       </main>

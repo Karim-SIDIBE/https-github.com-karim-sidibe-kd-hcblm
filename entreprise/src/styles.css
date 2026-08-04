@@ -197,3 +197,7 @@ button { font-family:inherit; cursor:pointer; }
 .check { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--fg-2); }
 .bar { height:9px; background:var(--bg-soft); border:1px solid var(--line); border-radius:var(--r-pill); overflow:hidden; }
 .bar > i { display:block; height:100%; border-radius:var(--r-pill); transition:width .3s; }
+
+/* Console grid: two columns on desktop, one on small screens. */
+.grid-console{grid-template-columns:1fr 1.4fr}
+@media (max-width: 860px){ .grid-console{grid-template-columns:1fr} }

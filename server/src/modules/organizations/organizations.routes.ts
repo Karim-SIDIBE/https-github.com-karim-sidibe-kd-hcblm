@@ -2,8 +2,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   OrgError, addMember, createOrganization, createOrgLearner, enrollOrgLearner, getOrganization,
-  listMembers, listOrganizations, removeMember, seatUsage, setSeats, setLearnerDisabled,
+  listMembers, listOrganizations, orgProgress, removeMember, seatUsage, setSeats, setLearnerDisabled,
 } from "./organizations.service.js";
+import { inviteUser } from "../users/users.service.js";
+import { toCsv } from "../analytics/analytics.service.js";
+import { prisma } from "../../db/prisma.js";
 import { EngineError } from "../enrollments/enrollments.service.js";
 import { provisionToken } from "../scim/scim.service.js";
 import { authenticate, guard } from "../../lib/auth.js";
@@ -129,6 +132,41 @@ export async function organizationRoutes(app: FastifyInstance) {
       const e = await enrollOrgLearner(id, userId, courseId);
       await audit({ actorId: req.principal?.id, action: "org.enroll", targetType: "Enrollment", targetId: (e as { id: string }).id, ip: req.ip, meta: { organizationId: id, courseId } });
       return reply.status(201).send({ data: e });
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Learner progress across the organization (ENT): every MEMBER's enrolments
+  // with % progress, status, last activity. ?format=csv exports flat rows.
+  app.get("/organizations/:id/progress", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    const { format } = z.object({ format: z.enum(["csv", "json"]).optional() }).parse(req.query ?? {});
+    try {
+      const rows = await orgProgress(id);
+      if (format === "csv") {
+        const flat = rows.flatMap((u) => (u.enrollments.length ? u.enrollments : [null]).map((e) => ({
+          apprenant: u.name, email: u.email, compte: u.disabled ? "désactivé" : "actif",
+          parcours: e?.courseTitle ?? "", progressionPct: e?.progressPercent ?? "", statut: e?.status ?? "",
+          derniereActivite: e?.lastActivity ? new Date(e.lastActivity).toISOString() : "",
+        })));
+        reply.header("content-type", "text/csv; charset=utf-8");
+        reply.header("content-disposition", `attachment; filename="progression-apprenants.csv"`);
+        return reply.send("﻿" + toCsv(flat)); // BOM for Excel
+      }
+      return { data: rows };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Resend the access invitation to an org learner (fresh temp password).
+  app.post("/organizations/:id/learners/:userId/invite", { preHandler: authenticate }, async (req, reply) => {
+    const { id, userId } = z.object({ id: z.string(), userId: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    const member = await prisma.organizationMembership.findFirst({ where: { organizationId: id, userId } });
+    if (!member) return reply.notFound("Apprenant introuvable dans cette organisation");
+    try {
+      const r = await inviteUser(userId);
+      await audit({ actorId: req.principal?.id, action: "org.learner.invite", targetType: "User", targetId: userId, ip: req.ip, meta: { organizationId: id, delivered: r.delivered } });
+      return { data: { delivered: r.delivered, tempPassword: r.tempPassword } };
     } catch (err) { return handle(reply, err); }
   });
 
