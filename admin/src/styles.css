@@ -183,3 +183,20 @@ button { font-family:inherit; cursor:pointer; }
 .soonwrap .box .ic { width:60px; height:60px; border-radius:18px; background:var(--navy-50); color:var(--navy-500); display:grid; place-items:center; margin:0 auto 16px; }
 .soonwrap .box h2 { font-size:21px; }
 .soonwrap .box p { color:var(--fg-2); margin-top:8px; }
+
+/* --- Collapsible sidebar (UX): icons-only mode, state persisted --- */
+.app.nav-collapsed{grid-template-columns:72px 1fr}
+.app.nav-collapsed .sidebar{overflow:hidden}
+.app.nav-collapsed .brand .wm,
+.app.nav-collapsed .navgroup>.label,
+.app.nav-collapsed .navitem .nav-label,
+.app.nav-collapsed .navitem .soon,
+.app.nav-collapsed .userbox .who{display:none}
+.app.nav-collapsed .brand{justify-content:center;padding:18px 8px 10px}
+.app.nav-collapsed .navitem{justify-content:center;padding:11px 0;gap:0}
+.app.nav-collapsed .navitem svg{width:20px;height:20px}
+.app.nav-collapsed .userbox{justify-content:center;padding:12px 6px}
+.app.nav-collapsed .userbox .logout{margin-left:0}
+.navcollapse{background:none;border:0;color:var(--navy-100);font-size:12.5px;font-weight:600;cursor:pointer;padding:9px 24px;text-align:left;opacity:.65;transition:opacity .12s;font-family:inherit}
+.navcollapse:hover{opacity:1}
+.app.nav-collapsed .navcollapse{text-align:center;padding:9px 0}

@@ -52,7 +52,7 @@ export const api = {
   myOrgs: () => req<Org[]>("GET", "/organizations"),
   seats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),
   members: (orgId: string) => req<Member[]>("GET", `/organizations/${orgId}/members`),
-  createLearner: (orgId: string, b: { name: string; email: string; password?: string; phone?: string; invite?: boolean }) =>
+  createLearner: (orgId: string, b: { name: string; email: string; password?: string; invite?: boolean }) =>
     req<NewLearner>("POST", `/organizations/${orgId}/learners`, b),
   setDisabled: (orgId: string, userId: string, disabled: boolean) =>
     req<{ userId: string; disabled: boolean }>("PATCH", `/organizations/${orgId}/learners/${userId}`, { disabled }),

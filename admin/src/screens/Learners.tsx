@@ -74,9 +74,11 @@ export function Learners({ ctx }: { ctx: CourseCtx }) {
   const [error, setError] = useState<string | null>(null);
   // Global header search: « Entrée » from the topbar lands here with its query.
   useEffect(() => {
-    const on = (e: Event) => setQ((e as CustomEvent<string>).detail ?? "");
-    window.addEventListener("kd-admin-search", on);
-    return () => window.removeEventListener("kd-admin-search", on);
+    const onSearch = (e: Event) => setQ((e as CustomEvent<string>).detail ?? "");
+    const onFilter = (e: Event) => setFilter((e as CustomEvent<string>).detail || "Tous");
+    window.addEventListener("kd-admin-search", onSearch);
+    window.addEventListener("kd-learners-filter", onFilter);
+    return () => { window.removeEventListener("kd-admin-search", onSearch); window.removeEventListener("kd-learners-filter", onFilter); };
   }, []);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
