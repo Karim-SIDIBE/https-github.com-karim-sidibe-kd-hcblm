@@ -88,6 +88,9 @@ function Brand() {
 
 export function App() {
   const [user, setUser] = useState<Principal | null>(auth.user());
+  // Collapsible sidebar (UX) — persisted per browser.
+  const [collapsed, setCollapsed] = useState(() => localStorage.getItem("kd_admin_nav") === "min");
+  const toggleNav = () => setCollapsed((v) => { localStorage.setItem("kd_admin_nav", v ? "full" : "min"); return !v; });
   const route = useHash();
   const go = (id: string) => { location.hash = `/${id}`; };
 
@@ -138,7 +141,7 @@ export function App() {
   if (!user) return <Login onDone={() => setUser(auth.user())} />;
 
   return (
-    <div className="app">
+    <div className={`app${collapsed ? " nav-collapsed" : ""}`}>
       <ModalHost />
       <aside className="sidebar">
         <Brand />
@@ -147,13 +150,16 @@ export function App() {
             <div className="navgroup" key={g.group}>
               <div className="label">{g.group}</div>
               {g.items.map(({ id, label, Icon, soon }) => (
-                <button key={id} className={`navitem ${view === id ? "on" : ""}`} onClick={() => go(id)}>
-                  <Icon /> {label}{soon && <span className="soon">Bientôt</span>}
+                <button key={id} className={`navitem ${view === id ? "on" : ""}`} title={label} onClick={() => go(id)}>
+                  <Icon /> <span className="nav-label">{label}</span>{soon && <span className="soon">Bientôt</span>}
                 </button>
               ))}
             </div>
           ))}
         </nav>
+        <button className="navcollapse" title={collapsed ? "Déployer le menu" : "Réduire le menu"} onClick={toggleNav}>
+          {collapsed ? "»" : "« Réduire le menu"}
+        </button>
         <div className="userbox">
           <div className="av">{initials(user.name)}</div>
           <div className="who"><b>{user.name}</b><span>{user.role.replace(/_/g, " ").toLowerCase()}</span></div>

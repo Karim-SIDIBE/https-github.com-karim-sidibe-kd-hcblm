@@ -52,7 +52,7 @@ export const api = {
   myOrgs: () => req<Org[]>("GET", "/organizations"),
   seats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),
   members: (orgId: string) => req<Member[]>("GET", `/organizations/${orgId}/members`),
-  createLearner: (orgId: string, b: { name: string; email: string; password?: string; phone?: string; invite?: boolean }) =>
+  createLearner: (orgId: string, b: { name: string; email: string; password?: string; invite?: boolean }) =>
     req<NewLearner>("POST", `/organizations/${orgId}/learners`, b),
   setDisabled: (orgId: string, userId: string, disabled: boolean) =>
     req<{ userId: string; disabled: boolean }>("PATCH", `/organizations/${orgId}/learners/${userId}`, { disabled }),
@@ -62,13 +62,26 @@ export const api = {
 };
 
 // --- helpers ---
+/** A strong, human-typable random password (no ambiguous chars).
+ *  Crypto-grade randomness (getRandomValues) — Math.random is not suitable
+ *  for credentials. Rejection sampling keeps the picks unbiased. */
 export function genPassword(): string {
   const A = "ABCDEFGHJKLMNPQRSTUVWXYZ", a = "abcdefghijkmnpqrstuvwxyz", n = "23456789", s = "!@#$%&*";
   const all = A + a + n + s;
-  const pick = (set: string) => set[Math.floor(Math.random() * set.length)];
-  let p = pick(A) + pick(a) + pick(n) + pick(s);
-  for (let i = 0; i < 8; i++) p += pick(all);
-  return p.split("").sort(() => Math.random() - 0.5).join("");
+  const rand = (max: number): number => {
+    const limit = Math.floor(0x100000000 / max) * max; // reject to avoid modulo bias
+    const buf = new Uint32Array(1);
+    do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+    return buf[0] % max;
+  };
+  const pick = (set: string) => set[rand(set.length)];
+  const chars = [pick(A), pick(a), pick(n), pick(s)];
+  for (let i = 0; i < 8; i++) chars.push(pick(all));
+  for (let i = chars.length - 1; i > 0; i--) { // Fisher–Yates, crypto-seeded
+    const j = rand(i + 1);
+    [chars[i], chars[j]] = [chars[j], chars[i]];
+  }
+  return chars.join("");
 }
 
 /** First published version's title for a course (for the enrol dropdown). */

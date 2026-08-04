@@ -11,12 +11,22 @@ const BLOCK_FR: Record<string, string> = {
   ONBOARDING: "Onboarding · Ancrage", COMPREHENSION: "Compréhension", PRACTICE: "Pratique terrain", ANCHORING: "Ancrage", CERTIFICATION: "Certification",
 };
 
-function Kpi({ icon, ic, val, lbl }: { icon: JSX.Element; ic: string; val: string; lbl: string }) {
+// Drill-down navigation (UX-1): every headline number links to its detail
+// screen; Learners picks up the preset filter/search via CustomEvents.
+function goLearners(opts: { filter?: string; q?: string } = {}) {
+  location.hash = "/learners";
+  setTimeout(() => {
+    if (opts.filter) window.dispatchEvent(new CustomEvent("kd-learners-filter", { detail: opts.filter }));
+    window.dispatchEvent(new CustomEvent("kd-admin-search", { detail: opts.q ?? "" }));
+  }, 60);
+}
+
+function Kpi({ icon, ic, val, lbl, onClick, hint }: { icon: JSX.Element; ic: string; val: string; lbl: string; onClick?: () => void; hint?: string }) {
   return (
-    <div className="kpi">
+    <div className="kpi" onClick={onClick} title={hint} style={onClick ? { cursor: "pointer" } : undefined}>
       <div className={`ic ${ic}`}>{icon}</div>
       <div className="val num">{val}</div>
-      <div className="lbl">{lbl}</div>
+      <div className="lbl">{lbl}{onClick && <span style={{ opacity: 0.45 }}> ›</span>}</div>
     </div>
   );
 }
@@ -120,11 +130,11 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
       {rep.error && <div className="card"><div className="card-b" style={{ color: "var(--danger)" }}>Erreur : {rep.error}</div></div>}
 
       <div className="grid kpis" style={{ marginBottom: 16 }}>
-        <Kpi icon={<IUsersK />} ic="ic--orange" val={r ? r.enrollments.toLocaleString("fr-FR") : "…"} lbl="Apprenants inscrits" />
-        <Kpi icon={<IPulse />} ic="ic--info" val={r ? r.activeLearners.toLocaleString("fr-FR") : "…"} lbl="Actifs (7 jours)" />
-        <Kpi icon={<ITrophy />} ic="ic--green" val={r ? `${r.completionRate}%` : "…"} lbl="Taux de complétion" />
-        <Kpi icon={<ITarget />} ic="ic--navy" val={r ? `${r.forecast.forecastPercent}%` : "…"} lbl="Prévision de certification" />
-        <Kpi icon={<ICert />} ic="ic--warn" val={r ? String(certified) : "…"} lbl="Apprenants certifiés" />
+        <Kpi icon={<IUsersK />} ic="ic--orange" val={r ? r.enrollments.toLocaleString("fr-FR") : "…"} lbl="Apprenants inscrits" hint="Voir la liste des apprenants" onClick={() => goLearners({ filter: "Tous" })} />
+        <Kpi icon={<IPulse />} ic="ic--info" val={r ? r.activeLearners.toLocaleString("fr-FR") : "…"} lbl="Actifs (7 jours)" hint="Voir les apprenants en cours" onClick={() => goLearners({ filter: "En cours" })} />
+        <Kpi icon={<ITrophy />} ic="ic--green" val={r ? `${r.completionRate}%` : "…"} lbl="Taux de complétion" hint="Analyser dans Pilotage pédagogique" onClick={() => { location.hash = "/insights"; }} />
+        <Kpi icon={<ITarget />} ic="ic--navy" val={r ? `${r.forecast.forecastPercent}%` : "…"} lbl="Prévision de certification" hint="Analyser dans Pilotage pédagogique" onClick={() => { location.hash = "/insights"; }} />
+        <Kpi icon={<ICert />} ic="ic--warn" val={r ? String(certified) : "…"} lbl="Apprenants certifiés" hint="Voir les apprenants certifiés" onClick={() => goLearners({ filter: "Certifiés" })} />
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "1.55fr 1fr" }}>
@@ -140,7 +150,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
                   const pct = Math.round((b.completed / maxF) * 100);
                   const isCert = b.type === "CERTIFICATION";
                   return (
-                    <div className={`row ${isCert ? "is-cert" : ""}`} key={b.index}>
+                    <div className={`row ${isCert ? "is-cert" : ""}`} key={b.index} style={{ cursor: "pointer" }} title="Analyser ce bloc dans Pilotage pédagogique" onClick={() => { location.hash = "/insights"; }}>
                       <div className="name">Bloc {b.index}<small>{BLOCK_FR[b.type] ?? b.type}</small></div>
                       <div className="bar"><i style={{ width: `${Math.max(pct, 2)}%` }} /></div>
                       <div className="figs"><b className="num">{b.completed}</b><span>{r.enrollments ? Math.round((b.completed / r.enrollments) * 100) : 0}% des inscrits</span></div>
@@ -159,7 +169,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
               : atRisk.length === 0 ? <div className="empty" style={{ padding: "34px 10px" }}><div className="big">✅</div>Aucun apprenant à risque.</div>
               : <div className="risk">
                   {atRisk.map((l) => (
-                    <div className="r" key={l.email}>
+                    <div className="r" key={l.email} style={{ cursor: "pointer" }} title="Ouvrir la fiche dans Apprenants" onClick={() => goLearners({ q: l.email })}>
                       <span className="av" style={{ background: avatarColor(l.name) }}>{initials(l.name)}</span>
                       <div className="who"><b>{l.name}</b><span>{l.factors[0] ?? `${l.progressPercent}%`} · {l.progressPercent}%</span></div>
                       <span className={`pill ${RISK_PILL[l.riskLevel]}`} title={l.factors.join(" · ")}>{l.riskScore} · {RISK_FR[l.riskLevel]}</span>
@@ -171,7 +181,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
       </div>
 
       <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-h"><h3>Forces &amp; faiblesses du groupe</h3>{comp.data && <span className="pill pill--soft">{comp.data.learnersAssessed} évalué{comp.data.learnersAssessed > 1 ? "s" : ""}</span>}</div>
+        <div className="card-h" style={{ cursor: "pointer" }} title="Analyser dans Pilotage pédagogique" onClick={() => { location.hash = "/insights"; }}><h3>Forces &amp; faiblesses du groupe ›</h3>{comp.data && <span className="pill pill--soft">{comp.data.learnersAssessed} évalué{comp.data.learnersAssessed > 1 ? "s" : ""}</span>}</div>
         <div className="card-b" style={{ paddingTop: 6 }}>
           {comp.loading ? <div className="muted">Chargement…</div>
             : !comp.data?.competencies.length ? <div className="empty" style={{ padding: "26px 10px" }}><div className="big">📊</div>Aucun quiz diagnostique complété pour l'instant.</div>
@@ -199,8 +209,8 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
         <div className="card-b row" style={{ gap: 10, flexWrap: "wrap", paddingTop: 6 }}>
           {!r ? <span className="muted">Chargement…</span> : (<>
             {r.badgesIssued.length === 0 && <span className="muted">Aucun badge délivré pour l'instant.</span>}
-            {r.badgesIssued.map((b) => <span key={b.type} className="pill pill--soft" style={{ fontSize: 13, padding: "6px 12px" }}>{b.type} · <b className="num">{b.count}</b></span>)}
-            <span className="pill pill--green" style={{ fontSize: 13, padding: "6px 12px" }}>Certificats · <b className="num">{r.credentialsIssued}</b></span>
+            {r.badgesIssued.map((b) => <span key={b.type} className="pill pill--soft" style={{ fontSize: 13, padding: "6px 12px", cursor: "pointer" }} title="Voir les certificats" onClick={() => { location.hash = "/certs"; }}>{b.type} · <b className="num">{b.count}</b></span>)}
+            <span className="pill pill--green" style={{ fontSize: 13, padding: "6px 12px", cursor: "pointer" }} title="Voir les certificats" onClick={() => { location.hash = "/certs"; }}>Certificats · <b className="num">{r.credentialsIssued}</b></span>
           </>)}
         </div>
       </div>

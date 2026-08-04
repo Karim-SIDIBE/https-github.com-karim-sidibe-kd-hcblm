@@ -58,7 +58,6 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
 }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
   const [pwd, setPwd] = useState(genPassword());
   const [enrol, setEnrol] = useState(true);
   const [invite, setInvite] = useState(true);
@@ -69,10 +68,10 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
     e.preventDefault();
     setBusy(true); setResult(null);
     try {
-      const u = await api.createLearner(orgId, { name: name.trim(), email: email.trim(), password: pwd, phone: phone.trim() || undefined, invite });
+      const u = await api.createLearner(orgId, { name: name.trim(), email: email.trim(), password: pwd, invite });
       if (enrol && selectedCourse) { try { await api.enroll(orgId, u.id, selectedCourse); } catch { /* non-fatal */ } }
       setResult({ ok: true, msg: `✅ ${u.name} créé·e. ${u.invited ? "Invitation envoyée." : "Identifiants : " + u.email + " / " + pwd}` });
-      setName(""); setEmail(""); setPhone(""); setPwd(genPassword());
+      setName(""); setEmail(""); setPwd(genPassword());
       onDone();
     } catch (err) {
       setResult({ ok: false, msg: err instanceof ApiError ? err.message : "Erreur" });
@@ -85,14 +84,13 @@ function AddLearner({ orgId, selectedCourse, full, onDone }: {
       <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
         <label className="lbl">Nom complet<input className="field" value={name} onChange={(e) => setName(e.target.value)} placeholder="Aminata Diallo" required /></label>
         <label className="lbl">E-mail<input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="aminata.d@exemple.com" required /></label>
-        <label className="lbl">Téléphone <span className="muted">(optionnel — invitation WhatsApp)</span><input className="field" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+225 07 00 00 00 00" /></label>
         <label className="lbl">Mot de passe initial
           <div className="row" style={{ gap: 8 }}>
             <input className="field" style={{ fontFamily: "monospace" }} value={pwd} onChange={(e) => setPwd(e.target.value)} required />
             <button type="button" className="btn btn--sm" onClick={() => setPwd(genPassword())}>Générer</button>
           </div>
         </label>
-        <label className="check"><input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} /> Envoyer l'invitation (e-mail + WhatsApp)</label>
+        <label className="check"><input type="checkbox" checked={invite} onChange={(e) => setInvite(e.target.checked)} /> Envoyer l'invitation par e-mail</label>
         {selectedCourse && <label className="check"><input type="checkbox" checked={enrol} onChange={(e) => setEnrol(e.target.checked)} /> Inscrire au parcours sélectionné</label>}
         <button className="btn btn--primary" disabled={busy || full} style={{ justifyContent: "center", padding: 11 }}>{busy ? "…" : full ? "Licences épuisées" : "Créer et inviter"}</button>
         {result && <div className="card" style={{ background: result.ok ? "var(--success-tint)" : "var(--danger-tint)", border: "none", padding: "10px 12px", fontSize: 13 }}>{result.msg}</div>}
