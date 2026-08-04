@@ -54,7 +54,17 @@ async function tryRefresh(): Promise<boolean> {
   } catch { return false; }
 }
 
-async function req<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
+/** Paged-list envelope returned by the server list endpoints. */
+export type Paged<T> = { data: T[]; total: number; page: number; pageSize: number };
+
+/** Like req() but returns the FULL response envelope (data + total + …). */
+async function reqPaged<T>(path: string, params: Record<string, string | number | undefined>): Promise<T> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) if (v !== undefined && v !== "") qs.set(k, String(v));
+  return req<T>("GET", `${path}${qs.toString() ? `?${qs}` : ""}`, undefined, false, true);
+}
+
+async function req<T>(method: string, path: string, body?: unknown, retried = false, raw = false): Promise<T> {
   const headers: Record<string, string> = {};
   const t = auth.token();
   if (t) headers["authorization"] = `Bearer ${t}`;
@@ -66,13 +76,13 @@ async function req<T>(method: string, path: string, body?: unknown, retried = fa
     const idle = Date.now() - lastActivity > IDLE_LOGOUT_MS;
     if (!retried && !idle && auth.refreshToken()) {
       const ok = await (refreshing ??= tryRefresh().finally(() => { refreshing = null; }));
-      if (ok) return req<T>(method, path, body, true);
+      if (ok) return req<T>(method, path, body, true, raw);
     }
     auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée");
   }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, json.error || "error", json.message || "Erreur serveur");
-  return (json.data ?? json) as T;
+  return (raw ? json : json.data ?? json) as T;
 }
 
 // --- auth ---
@@ -184,6 +194,7 @@ export type CredentialRow = {
   revoked: boolean; revocationReason: string | null;
   learner: { name: string; email: string }; courseTitle: string; verifyUrl: string;
 };
+export type SavedViewRow = { id: string; name: string; config: Record<string, unknown>; updatedAt: string };
 export type RubricCriterion = { label: string; weightPoints: number };
 export type EvalQueueItem = {
   enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
@@ -333,6 +344,17 @@ export const api = {
   },
   rubricSuggestion: (enrollmentId: string) => req<RubricSuggestion>("POST", `/enrollments/${enrollmentId}/rubric-suggestion`, {}),
   updateBankQuestion: (id: string, b: { question?: unknown; subArea?: string; level?: string }) => req<BankQuestion>("PATCH", `/bank/questions/${id}`, b),
+  // --- paged lists (M2: real server-side pagination/sort/search) ---
+  usersPaged: (p: { q?: string; page?: number; pageSize?: number; sort?: string }) => reqPaged<Paged<UserRow>>("/users", p),
+  auditPaged: (p: { q?: string; action?: string; page?: number; pageSize?: number }) => reqPaged<Paged<AuditRow>>("/audit", p),
+  mediaPaged: (p: { q?: string; folder?: string; page?: number; pageSize?: number }) => reqPaged<Paged<MediaAsset>>("/media", p),
+  credentialsPaged: (p: { q?: string; status?: string; page?: number; pageSize?: number }) => reqPaged<Paged<CredentialRow> & { valid: number; revoked: number }>("/credentials", p),
+  learnersPaged: (courseId: string, p: { q?: string; status?: string; page?: number; pageSize?: number; sort?: string }) => reqPaged<Paged<LearnerRow>>(`/analytics/courses/${courseId}/learners`, p),
+  updateUser: (id: string, b: { name?: string; email?: string; role?: string; disabled?: boolean; password?: string }) => req<{ id: string; name: string; email: string; role: string; disabled: boolean }>("PATCH", `/users/${id}`, b),
+  // --- saved views (per-user, per-screen, stored server-side) ---
+  views: (screen: string) => req<SavedViewRow[]>("GET", `/views?screen=${encodeURIComponent(screen)}`),
+  saveView: (screen: string, name: string, config: Record<string, unknown>) => req<SavedViewRow>("PUT", "/views", { screen, name, config }),
+  deleteView: (id: string) => req<{ id: string }>("DELETE", `/views/${id}`),
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),

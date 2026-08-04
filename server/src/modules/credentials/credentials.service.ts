@@ -164,13 +164,36 @@ export async function listForEnrollment(enrollmentId: string) {
   }));
 }
 
-/** All issued credentials, with learner + course (admin console list). */
-export async function listAllCredentials() {
-  const creds = await prisma.credential.findMany({
-    orderBy: { issuedAt: "desc" },
-    include: { badge: true, enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true } } } } },
-  });
-  return creds.map((c) => ({
+/** All issued credentials, with learner + course (admin console list).
+ *  Paged + searchable (learner name/e-mail, course title) + status filter.
+ *  `valid`/`revoked` are the counts under the same search (for the KPIs). */
+export async function listAllCredentials(opts: { q?: string; status?: "valid" | "revoked"; page?: number; pageSize?: number } = {}) {
+  const term = opts.q?.trim();
+  const baseWhere = term
+    ? {
+        OR: [
+          { enrollment: { user: { name: { contains: term, mode: "insensitive" as const } } } },
+          { enrollment: { user: { email: { contains: term, mode: "insensitive" as const } } } },
+          { enrollment: { courseVersion: { title: { contains: term, mode: "insensitive" as const } } } },
+        ],
+      }
+    : {};
+  const where = {
+    ...baseWhere,
+    ...(opts.status === "valid" ? { revokedAt: null } : opts.status === "revoked" ? { revokedAt: { not: null } } : {}),
+  };
+  const page = opts.page ?? 1;
+  const pageSize = opts.pageSize ?? 500;
+  const [total, valid, revoked, creds] = await Promise.all([
+    prisma.credential.count({ where }),
+    prisma.credential.count({ where: { ...baseWhere, revokedAt: null } }),
+    prisma.credential.count({ where: { ...baseWhere, revokedAt: { not: null } } }),
+    prisma.credential.findMany({
+      where, orderBy: { issuedAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize,
+      include: { badge: true, enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true } } } } },
+    }),
+  ]);
+  const rows = creds.map((c) => ({
     id: c.id,
     achievementType: c.achievementType,
     badgeLabel: c.badge.type,
@@ -181,6 +204,7 @@ export async function listAllCredentials() {
     courseTitle: c.enrollment.courseVersion.title,
     verifyUrl: `${credentialUrl(c.id)}/verify`,
   }));
+  return { rows, total, valid, revoked };
 }
 
 /** Certificate PDF for a credential. */

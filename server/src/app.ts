@@ -36,6 +36,7 @@ import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 import { uiTextRoutes } from "./modules/uitexts/uitexts.routes.js";
+import { viewsRoutes } from "./modules/views/views.routes.js";
 import { render as renderMetrics, recordHttp, requestStarted, requestEnded } from "./lib/metrics.js";
 import { getRedis } from "./lib/redis.js";
 
@@ -156,6 +157,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await ltiRoutes(api);
       await courseRoutes(api);
       await userRoutes(api);
+      await viewsRoutes(api);
       await rgpdRoutes(api);
       await meRoutes(api);
       await organizationRoutes(api);

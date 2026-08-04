@@ -3,6 +3,7 @@ import { api, type Cohort, type CourseInsights, type ExploreBucket, type Insight
 import { downloadBlob } from "../lib/csv";
 import { useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
+import { modal } from "../lib/modal";
 
 /**
  * Pilotage pédagogique — the local xAPI mini-LRS turned into steering signals:
@@ -28,14 +29,14 @@ export function Insights({ ctx }: { ctx: CourseCtx }) {
   async function doExport(format: "csv" | "ndjson") {
     setBusy(format);
     try { downloadBlob(`xapi-statements.${format}`, await api.exportStatements(ctx.courseId, format)); }
-    catch (e: any) { alert(e?.message || "Erreur d'export"); }
+    catch (e: any) { await modal.alert({ title: "Export impossible", body: e?.message || "Erreur d'export" }); }
     finally { setBusy(null); }
   }
 
   async function getArchive(name: string) {
     setBusy(name);
     try { downloadBlob(name, await api.downloadArchive(name)); }
-    catch (e: any) { alert(e?.message || "Erreur de téléchargement"); }
+    catch (e: any) { await modal.alert({ title: "Téléchargement impossible", body: e?.message || "Erreur de téléchargement" }); }
     finally { setBusy(null); }
   }
 

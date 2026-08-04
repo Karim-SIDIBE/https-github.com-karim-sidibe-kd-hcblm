@@ -6,6 +6,7 @@ import {
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { scopeParam } from "../../lib/security/tenant-scope.js";
+import { envelope, pageQuery, sortSpec } from "../../lib/paging.js";
 
 const owned = [authenticate, requireEnrollmentAccess];
 // analytics:read + confine non-staff customer roles to their own org's data.
@@ -49,11 +50,33 @@ export async function analyticsRoutes(app: FastifyInstance) {
   });
 
   // Per-learner course rows (JSON or CSV export).
+  // Progress is computed in JS, so paging/sort happen here after the mapping;
+  // CSV export always covers the FULL (searched) dataset, never one page.
   app.get("/analytics/courses/:courseId/learners", { preHandler: courseScoped }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
-    const { format } = z.object({ format: z.enum(["csv", "json"]).optional() }).parse(req.query);
-    try { return maybeCsv(reply, format, await courseLearners(courseId), `course-${courseId}-learners`); }
-    catch (err) { return handle(reply, err); }
+    const query = pageQuery.extend({
+      format: z.enum(["csv", "json"]).optional(),
+      status: z.enum(["certified", "active", "inactive"]).optional(),
+    }).parse(req.query ?? {});
+    try {
+      let rows = await courseLearners(courseId);
+      const term = query.q?.trim().toLowerCase();
+      if (term) rows = rows.filter((r) => (r.name + " " + r.email).toLowerCase().includes(term));
+      if (query.status === "certified") rows = rows.filter((r) => r.status === "CERTIFIED");
+      else if (query.status === "active") rows = rows.filter((r) => r.active && r.status !== "CERTIFIED");
+      else if (query.status === "inactive") rows = rows.filter((r) => !r.active && r.status !== "CERTIFIED");
+      if (query.format === "csv") return maybeCsv(reply, "csv", rows, `course-${courseId}-learners`);
+      const sort = sortSpec(query.sort, ["name", "progressPercent", "lastActivity", "startedAt"], { field: "startedAt", dir: "desc" });
+      const dirMul = sort.dir === "asc" ? 1 : -1;
+      rows = [...rows].sort((a, b) => {
+        const va = a[sort.field as "name"] ?? "", vb = b[sort.field as "name"] ?? "";
+        return (va < vb ? -1 : va > vb ? 1 : 0) * dirMul;
+      });
+      const paged = "page" in ((req.query ?? {}) as object) || "pageSize" in ((req.query ?? {}) as object);
+      if (!paged) return { data: rows };
+      const start = (query.page - 1) * query.pageSize;
+      return envelope(rows.slice(start, start + query.pageSize), rows.length, query.page, query.pageSize);
+    } catch (err) { return handle(reply, err); }
   });
 
   // Full course report as a multi-sheet Excel workbook (over the full dataset).

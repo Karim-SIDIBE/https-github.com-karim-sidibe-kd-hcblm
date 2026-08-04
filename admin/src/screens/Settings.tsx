@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { api, type Issuer, type Webhook } from "../lib/api";
 import { genPassword, useAsync } from "../lib/ui";
+import { modal } from "../lib/modal";
 
 const BRAND = {
   name: (import.meta.env.VITE_BRAND_NAME as string | undefined)?.trim() || "DECLICK DIGITAL",
@@ -36,7 +37,7 @@ export function Settings() {
   const [purgeMsg, setPurgeMsg] = useState<string | null>(null);
 
   async function runPurge() {
-    if (!window.confirm("Lancer la purge RGPD maintenant ?\nExécute les effacements arrivés à échéance et supprime tokens/journaux/codes expirés.")) return;
+    if (!(await modal.confirm({ title: "Lancer la purge RGPD maintenant ?", body: "Exécute les effacements arrivés à échéance et supprime tokens/journaux/codes expirés.", okLabel: "Lancer" }))) return;
     setPurgeBusy(true); setPurgeMsg(null);
     try {
       const r = await api.runRetention();

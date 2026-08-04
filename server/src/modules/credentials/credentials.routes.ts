@@ -7,6 +7,7 @@ import { issuerDocument } from "../../lib/credentials/openbadge.js";
 import { audit } from "../../lib/audit.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
+import { envelope, pageQuery } from "../../lib/paging.js";
 
 const owned = [authenticate, requireEnrollmentAccess];
 
@@ -17,9 +18,14 @@ function handle(reply: FastifyReply, err: unknown) {
 
 export async function credentialRoutes(app: FastifyInstance) {
   // --- admin: list all issued credentials (staff only) ---
+  // Paged: ?q=&status=(valid|revoked)&page=&pageSize= → { data, total, valid, revoked, ... }.
   app.get("/credentials", { preHandler: authenticate }, async (req, reply) => {
     if (!isStaff(req.principal!.role)) return reply.status(403).send({ error: "forbidden", message: "Réservé au personnel" });
-    return { data: await listAllCredentials() };
+    const query = pageQuery.extend({ status: z.enum(["valid", "revoked"]).optional() }).parse(req.query ?? {});
+    const paged = "page" in ((req.query ?? {}) as object) || "pageSize" in ((req.query ?? {}) as object);
+    const pageSize = paged ? query.pageSize : 500;
+    const { rows, total, valid, revoked } = await listAllCredentials({ q: query.q, status: query.status, page: query.page, pageSize });
+    return envelope(rows, total, query.page, pageSize, { valid, revoked });
   });
 
   // --- public (verifiers / anyone): issuer, badge class, hosted assertion, VC, verify ---

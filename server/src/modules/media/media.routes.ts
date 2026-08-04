@@ -6,6 +6,7 @@ import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
 import { env } from "../../config/env.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { verifyMediaToken } from "../../lib/auth/jwt.js";
+import { envelope, pageQuery } from "../../lib/paging.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof MediaError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
@@ -56,7 +57,14 @@ async function sendObject(req: FastifyRequest, reply: FastifyReply, storageKey: 
 
 export async function mediaRoutes(app: FastifyInstance) {
   // Media library (authoring) — authors/admins.
-  app.get("/media", { preHandler: guard("media:manage") }, async () => ({ data: await listMedia() }));
+  // Paged: ?q=&folder=(root|<id>)&page=&pageSize= → { data, total, page, pageSize }.
+  app.get("/media", { preHandler: guard("media:manage") }, async (req) => {
+    const query = pageQuery.extend({ folder: z.string().optional() }).parse(req.query ?? {});
+    const paged = "page" in ((req.query ?? {}) as object) || "pageSize" in ((req.query ?? {}) as object);
+    const pageSize = paged ? query.pageSize : 500;
+    const { rows, total } = await listMedia({ q: query.q, folder: query.folder, page: query.page, pageSize });
+    return envelope(rows, total, query.page, pageSize);
+  });
 
   // --- library folders (create / rename / delete-when-empty) ---
   app.get("/media/folders", { preHandler: guard("media:manage") }, async () => ({ data: await listFolders() }));

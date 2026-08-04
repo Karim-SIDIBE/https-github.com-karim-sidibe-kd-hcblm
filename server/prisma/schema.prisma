@@ -147,8 +147,27 @@ model User {
   verificationCodes VerificationCode[]
   consents          Consent[]
   devices           Device[]
+  savedViews        SavedView[]
 
   @@index([role])
+}
+
+/// A named, per-user configuration of an admin list screen (columns, filters,
+/// search, sort). Stored server-side so views follow the account across
+/// browsers instead of living in localStorage.
+model SavedView {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Which admin screen the view belongs to (e.g. "learners", "audit").
+  screen    String
+  name      String
+  config    Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, screen, name])
+  @@index([userId, screen])
 }
 
 /// One-time codes for B2C e-mail/phone verification (OTP). Only the hash of the
