@@ -140,3 +140,75 @@ export async function deleteUser(actorId: string | undefined, userId: string) {
   await prisma.user.delete({ where: { id: userId } });
   return { id: user.id, email: user.email };
 }
+
+// --- bulk import (M3) --------------------------------------------------------
+
+export type ImportRow = { name?: string; email?: string; role?: string };
+export type ImportReport = {
+  total: number;
+  created: number;
+  existing: number;
+  enrolled: number;
+  invited: number;
+  errors: { line: number; email: string; error: string }[];
+  credentials: { email: string; password: string }[];
+};
+
+const VALID_ROLES = new Set(["LEARNER", "LEARNING_DESIGNER", "REVIEWER", "INSTRUCTOR", "EVALUATOR", "COURSE_ADMIN", "SUPER_ADMIN", "ENTERPRISE_CLIENT", "EMPLOYER"]);
+const EMAIL_RX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/**
+ * Bulk user import (CSV upload in the admin). Row-independent: one bad line
+ * never blocks the rest. Existing accounts are not modified but still get
+ * enrolled/invited when requested. Created accounts receive a strong temp
+ * password, returned in the report unless the invitation e-mail delivers it.
+ */
+export async function importUsers(
+  rows: ImportRow[],
+  opts: { courseId?: string; invite?: boolean } = {},
+): Promise<ImportReport> {
+  const report: ImportReport = { total: rows.length, created: 0, existing: 0, enrolled: 0, invited: 0, errors: [], credentials: [] };
+  if (opts.courseId) {
+    const course = await prisma.course.findUnique({ where: { id: opts.courseId } });
+    if (!course) throw new UserError(404, "no_course", "Parcours introuvable");
+  }
+  for (let i = 0; i < rows.length; i++) {
+    const line = i + 1;
+    const row = rows[i] ?? {};
+    const email = row.email?.trim().toLowerCase() ?? "";
+    const name = row.name?.trim() ?? "";
+    const role = (row.role?.trim().toUpperCase() || "LEARNER");
+    if (!EMAIL_RX.test(email)) { report.errors.push({ line, email, error: "E-mail invalide" }); continue; }
+    if (!name) { report.errors.push({ line, email, error: "Nom manquant" }); continue; }
+    if (!VALID_ROLES.has(role)) { report.errors.push({ line, email, error: `Rôle inconnu : ${role}` }); continue; }
+    try {
+      let user = await prisma.user.findUnique({ where: { email } });
+      if (user) {
+        report.existing++;
+      } else {
+        const password = generateTempPassword();
+        user = await prisma.user.create({
+          data: { email, name, role: role as never, passwordHash: await hashPassword(password), emailVerifiedAt: new Date() },
+        });
+        report.created++;
+        report.credentials.push({ email, password });
+      }
+      if (opts.courseId) {
+        // Reuse the engine's enrolment (publishes the xAPI "initialized" trace).
+        const already = await prisma.enrollment.findFirst({ where: { userId: user.id, courseId: opts.courseId } });
+        if (!already) {
+          const { enroll } = await import("../enrollments/enrollments.service.js");
+          await enroll(user.id, opts.courseId);
+          report.enrolled++;
+        }
+      }
+      if (opts.invite) {
+        try { const r = await inviteUser(user.id); if (r.delivered) report.invited++; }
+        catch { /* invitation failure must not fail the row */ }
+      }
+    } catch (e) {
+      report.errors.push({ line, email, error: e instanceof Error ? e.message : "Erreur" });
+    }
+  }
+  return report;
+}

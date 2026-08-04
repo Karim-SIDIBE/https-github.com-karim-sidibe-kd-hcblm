@@ -24,6 +24,9 @@ import { QuestionBank } from "./screens/QuestionBank";
 import { Settings } from "./screens/Settings";
 import { UiTexts } from "./screens/UiTexts";
 import { Security } from "./screens/Security";
+import { Jobs } from "./screens/Jobs";
+import { Webhooks } from "./screens/Webhooks";
+import { twofa } from "./lib/api";
 
 type NavItem = { id: string; label: string; Icon: () => JSX.Element; roles: string[]; soon?: boolean };
 const A = "SUPER_ADMIN", C = "COURSE_ADMIN", I = "INSTRUCTOR", E = "EVALUATOR", D = "LEARNING_DESIGNER", R = "REVIEWER", EC = "ENTERPRISE_CLIENT", EM = "EMPLOYER";
@@ -52,6 +55,8 @@ const NAV: { group: string; items: NavItem[] }[] = [
   { group: "Système", items: [
     { id: "uitexts", label: "Textes de l'interface", Icon: ISettings, roles: [A] },
     { id: "audit", label: "Journal d'audit", Icon: IAudit, roles: [A, C] },
+    { id: "jobs", label: "Jobs & planification", Icon: ISettings, roles: [A, C] },
+    { id: "webhooks", label: "Webhooks", Icon: ISettings, roles: [A, C] },
     { id: "security", label: "Sécurité (2FA)", Icon: ISettings, roles: [A, C, I, E, D, R, EC, EM] },
     { id: "settings", label: "Réglages", Icon: ISettings, roles: [A, C] },
   ]},
@@ -97,6 +102,25 @@ export function App() {
   }, [user]);
   const ctx = useMemo<CourseCtx>(() => ({ courses, courseId, setCourseId }), [courses, courseId]);
 
+  // Staff-2FA policy (M3): when enabled and this privileged account has no
+  // TOTP, show a persistent banner and land on the Security screen once.
+  const [need2fa, setNeed2fa] = useState(false);
+  const [twofaTick, setTwofaTick] = useState(0);
+  useEffect(() => {
+    const on = () => setTwofaTick((t) => t + 1); // Security dispatches after enabling
+    window.addEventListener("kd-2fa-changed", on);
+    return () => window.removeEventListener("kd-2fa-changed", on);
+  }, []);
+  useEffect(() => {
+    if (!user || !["SUPER_ADMIN", "COURSE_ADMIN"].includes(user.role)) { setNeed2fa(false); return; }
+    Promise.all([api.settings().catch(() => ({}) as Record<string, unknown>), twofa.status().catch(() => ({ enabled: true }))])
+      .then(([s, st]) => {
+        const required = s["require_staff_2fa"] === true && !st.enabled;
+        setNeed2fa(required);
+        if (required && twofaTick === 0) location.hash = "/security";
+      });
+  }, [user, twofaTick]);
+
   // Role-aware navigation: each role sees only its modules + a default landing.
   const nav = useMemo(() => {
     const r = user?.role ?? "";
@@ -136,6 +160,11 @@ export function App() {
       </aside>
 
       <div className="main">
+        {need2fa && (
+          <div style={{ background: "var(--warning-tint, #FFF3E8)", borderBottom: "1px solid var(--line)", padding: "9px 20px", fontSize: 13, fontWeight: 600 }}>
+            🔐 La politique de sécurité exige la double authentification (2FA) pour votre rôle — <a href="#/security" style={{ textDecoration: "underline" }}>activez-la maintenant</a>.
+          </div>
+        )}
         <header className="topbar">
           <div className="crumbs">Administration <span style={{ margin: "0 6px", color: "var(--line-strong)" }}>/</span> <b>{TITLES[view] ?? "Tableau de bord"}</b></div>
           <div className="spacer" />
@@ -168,6 +197,8 @@ export function App() {
           : view === "medias" ? <Medias />
           : view === "bank" ? <QuestionBank />
           : view === "uitexts" ? <UiTexts />
+          : view === "jobs" ? <Jobs />
+          : view === "webhooks" ? <Webhooks />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Dashboard ctx={ctx} />}

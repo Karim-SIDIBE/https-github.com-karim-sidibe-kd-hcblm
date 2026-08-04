@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { api, type Issuer, type Webhook } from "../lib/api";
+import { useEffect, useState } from "react";
+import { api, auth, type Issuer, type Webhook } from "../lib/api";
 import { genPassword, useAsync } from "../lib/ui";
 import { modal } from "../lib/modal";
 
@@ -35,6 +35,19 @@ export function Settings() {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [purgeBusy, setPurgeBusy] = useState(false);
   const [purgeMsg, setPurgeMsg] = useState<string | null>(null);
+
+  // Staff-2FA policy (M3) — SUPER_ADMIN only.
+  const isSuperAdmin = auth.user()?.role === "SUPER_ADMIN";
+  const [staff2fa, setStaff2fa] = useState<boolean | null>(null);
+  const [policyBusy, setPolicyBusy] = useState(false);
+  useEffect(() => { api.settings().then((s) => setStaff2fa(s["require_staff_2fa"] === true)).catch(() => setStaff2fa(false)); }, []);
+  async function togglePolicy(on: boolean) {
+    if (on && !(await modal.confirm({ title: "Exiger la 2FA pour les administrateurs ?", body: "Les comptes SUPER_ADMIN et COURSE_ADMIN sans double authentification seront invités à l'activer dès leur prochaine connexion (bandeau + redirection vers Sécurité). Chaque connexion sans 2FA est journalisée.", okLabel: "Activer la politique" }))) return;
+    setPolicyBusy(true);
+    try { await api.setSetting("require_staff_2fa", on); setStaff2fa(on); }
+    catch (e) { await modal.alert({ title: "Modification impossible", body: e instanceof Error ? e.message : "Erreur" }); }
+    finally { setPolicyBusy(false); }
+  }
 
   async function runPurge() {
     if (!(await modal.confirm({ title: "Lancer la purge RGPD maintenant ?", body: "Exécute les effacements arrivés à échéance et supprime tokens/journaux/codes expirés.", okLabel: "Lancer" }))) return;
@@ -98,8 +111,17 @@ export function Settings() {
               <Row k="API" v={API} />
               <Row k="Console" v="DECLICK DIGITAL Admin v0.1" />
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+                <label className="row" style={{ gap: 8, fontSize: 13, fontWeight: 600, cursor: isSuperAdmin ? "pointer" : "default" }}
+                  title={isSuperAdmin ? "Politique de sécurité de la console" : "Réservé au super-administrateur"}>
+                  <input type="checkbox" checked={staff2fa === true} disabled={!isSuperAdmin || policyBusy || staff2fa === null}
+                    onChange={(e) => void togglePolicy(e.target.checked)} />
+                  🔐 Exiger la 2FA pour les administrateurs
+                </label>
+                <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0" }}>S'applique aux rôles SUPER_ADMIN et COURSE_ADMIN : sans 2FA active, la console les redirige vers l'activation à chaque connexion (et la connexion « en grâce » est journalisée dans l'audit).</p>
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
                 <button className="btn btn--sm" disabled={purgeBusy} onClick={runPurge}>{purgeBusy ? "…" : "🧹 Lancer la purge RGPD"}</button>
-                <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0" }}>Exécute les effacements arrivés à échéance (délai de grâce écoulé) et purge les tokens/journaux/codes expirés. Normalement déclenché par un cron quotidien.</p>
+                <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0" }}>Exécute les effacements arrivés à échéance (délai de grâce écoulé) et purge les tokens/journaux/codes expirés. Tous les jobs de fond sont visibles dans <a href="#/jobs">Jobs &amp; planification</a>.</p>
                 {purgeMsg && <p style={{ fontSize: 12.5, margin: "8px 0 0", fontWeight: 600, color: purgeMsg.startsWith("✅") ? "var(--green)" : "var(--danger)" }}>{purgeMsg}</p>}
               </div>
             </div>
@@ -127,8 +149,10 @@ export function Settings() {
             <div className="card-b" style={{ paddingTop: 4 }}>
               {webhooks.loading ? <span className="muted">Chargement…</span>
                 : (webhooks.data?.length ?? 0) === 0
-                  ? <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucun webhook configuré. Les clés IA, SMS/WhatsApp/push et le LRS xAPI se configurent côté serveur (variables d'environnement) — voir deploy/.env.example.</p>
+                  ? <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucun webhook configuré.</p>
                   : <div>{webhooks.data!.map((w) => <Row key={w.id} k={(w.events ?? []).join(", ") || "webhook"} v={w.url} />)}</div>}
+              <p style={{ fontSize: 12.5, marginTop: 10 }}><a className="btn btn--sm" href="#/webhooks">Gérer dans Webhooks →</a></p>
+              <p className="muted" style={{ fontSize: 11.5, margin: "8px 0 0" }}>Les clés IA, SMS/WhatsApp/push et le LRS xAPI se configurent côté serveur (variables d'environnement) — voir deploy/.env.example.</p>
             </div>
           </div>
         </div>

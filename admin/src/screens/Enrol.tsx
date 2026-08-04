@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { api, courseTitle, ApiError } from "../lib/api";
+import { useRef, useState } from "react";
+import { api, courseTitle, ApiError, type ImportReport } from "../lib/api";
 import { genPassword } from "../lib/ui";
+import { downloadCsv, table, today, type Col } from "../lib/csv";
 import type { CourseCtx } from "../App";
 
 const field: React.CSSProperties = { width: "100%", padding: "10px 12px", border: "1px solid var(--line-strong)", borderRadius: 9, fontFamily: "inherit", fontSize: 13.5 };
@@ -19,6 +20,24 @@ async function createAndEnrol(name: string, email: string, password: string, cou
     if (e instanceof ApiError && e.status === 409) return { name, email, password, status: "exists", detail: "E-mail déjà existant" };
     return { name, email, password, status: "error", detail: e instanceof Error ? e.message : "Erreur" };
   }
+}
+
+/** Parse pasted text or a CSV file: `Nom, Email[, Rôle]` per line; separators
+ *  `,` `;` tab; a header row (nom/name…) is detected and skipped; simple
+ *  quoted fields are unwrapped. */
+function parseRows(text: string): { name: string; email: string; role?: string }[] {
+  const unquote = (s: string) => s.trim().replace(/^"(.*)"$/s, "$1").trim();
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const rows: { name: string; email: string; role?: string }[] = [];
+  for (const line of lines) {
+    const parts = line.split(/[;,\t]/).map(unquote);
+    if (parts.length < 2) continue;
+    const [name, email, role] = parts;
+    if (/^(nom|name)$/i.test(name ?? "") || /^(e-?mail|courriel)$/i.test(email ?? "")) continue; // header row
+    if (!email) continue;
+    rows.push({ name: name || email, email, ...(role ? { role } : {}) });
+  }
+  return rows;
 }
 
 export function Enrol({ ctx }: { ctx: CourseCtx }) {
@@ -42,32 +61,38 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
     setBusy(false);
   }
 
-  // --- bulk ---
+  // --- bulk (M3: one server call, row-independent report) ---
   const [csv, setCsv] = useState("");
   const [running, setRunning] = useState(false);
-  const [results, setResults] = useState<RowResult[] | null>(null);
+  const [report, setReport] = useState<ImportReport | null>(null);
+  const [bulkErr, setBulkErr] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const parsed = parseRows(csv);
+
+  function loadFile(files: FileList | null) {
+    const f = files?.[0];
+    if (!f) return;
+    void f.text().then((t) => setCsv(t));
+    if (fileRef.current) fileRef.current.value = "";
+  }
 
   async function runBulk() {
-    const lines = csv.split("\n").map((l) => l.trim()).filter(Boolean);
-    const parsed = lines.map((l) => l.split(/[,;\t]/).map((x) => x.trim())).filter((p) => p[1]);
-    setRunning(true); setResults([]);
-    const out: RowResult[] = [];
-    for (const [n, em] of parsed) {
-      const r = await createAndEnrol(n || em, em, genPassword(), target, invite);
-      out.push(r); setResults([...out]);
-    }
-    setRunning(false);
+    if (parsed.length === 0) return;
+    setRunning(true); setReport(null); setBulkErr(null);
+    try { setReport(await api.importUsers(parsed, { courseId: target, invite })); }
+    catch (e) { setBulkErr(e instanceof Error ? e.message : "Import impossible"); }
+    finally { setRunning(false); }
   }
 
   function downloadCreds() {
-    const rows = (results ?? []).filter((r) => r.status === "ok");
-    const csvOut = "Nom,Email,Mot de passe\n" + rows.map((r) => `"${r.name}","${r.email}","${r.password}"`).join("\n");
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([csvOut], { type: "text/csv" }));
-    a.download = "identifiants-apprenants.csv"; a.click();
+    const rows = report?.credentials ?? [];
+    const cols: Col<{ email: string; password: string }>[] = [
+      { label: "Email", value: (r) => r.email },
+      { label: "Mot de passe", value: (r) => r.password },
+    ];
+    downloadCsv(`identifiants-apprenants-${today()}.csv`, table(cols, rows));
   }
-
-  const okCount = (results ?? []).filter((r) => r.status === "ok").length;
 
   return (
     <div className="content">
@@ -113,37 +138,64 @@ export function Enrol({ ctx }: { ctx: CourseCtx }) {
           </div>
         </form>
 
-        {/* Bulk */}
+        {/* Bulk — CSV file or pasted list, imported in ONE server call. */}
         <div className="card">
-          <div className="card-h"><h3>Import en masse (liste)</h3><span className="muted" style={{ fontSize: 12 }}>une ligne par apprenant : <code>Nom, Email</code></span></div>
+          <div className="card-h"><h3>Import CSV en masse</h3><span className="muted" style={{ fontSize: 12 }}>colonnes : <code>Nom, Email[, Rôle]</code> — en-tête optionnel</span></div>
           <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <textarea style={{ ...field, minHeight: 120, fontFamily: "monospace", fontSize: 12.5, resize: "vertical" }} value={csv} onChange={(e) => setCsv(e.target.value)}
-              placeholder={"Aminata Diallo, aminata.d@orange.ci\nKouamé N'Guessan, kouame.n@orange.ci"} />
-            <div className="row between">
-              <span className="muted" style={{ fontSize: 12 }}>{csv.split("\n").filter((l) => l.trim()).length} ligne(s) · mots de passe générés automatiquement</span>
-              <button className="btn btn--primary" disabled={running || !csv.trim()} onClick={runBulk}>{running ? "Import en cours…" : "Importer & inscrire"}</button>
+            <div className="row" style={{ gap: 8 }}>
+              <input ref={fileRef} type="file" accept=".csv,text/csv,text/plain" style={{ display: "none" }} onChange={(e) => loadFile(e.target.files)} />
+              <button className="btn btn--sm" onClick={() => fileRef.current?.click()}>📄 Charger un fichier CSV…</button>
+              <span className="muted" style={{ fontSize: 12 }}>ou collez la liste ci-dessous</span>
             </div>
+            <textarea style={{ ...field, minHeight: 120, fontFamily: "monospace", fontSize: 12.5, resize: "vertical" }} value={csv} onChange={(e) => { setCsv(e.target.value); setReport(null); }}
+              placeholder={"Nom, Email, Rôle (optionnel)\nAminata Diallo, aminata.d@orange.ci\nKouamé N'Guessan, kouame.n@orange.ci, LEARNER"} />
+            <div className="row between">
+              <span className="muted" style={{ fontSize: 12 }}>{parsed.length} apprenant(s) détecté(s) · mots de passe générés côté serveur · 500 max par import</span>
+              <button className="btn btn--primary" disabled={running || parsed.length === 0 || parsed.length > 500} onClick={() => void runBulk()}>{running ? "Import en cours…" : `Importer${target ? " & inscrire" : ""}`}</button>
+            </div>
+            {bulkErr && <div className="card" style={{ background: "var(--danger-tint)", border: "none", padding: "11px 13px", fontSize: 13, color: "var(--danger)" }}>✗ {bulkErr}</div>}
 
-            {results && (
+            {report && (
               <div className="card" style={{ border: "1px solid var(--line)" }}>
-                <div className="card-h" style={{ paddingBottom: 8 }}>
-                  <span className="pill pill--green">{okCount} inscrits</span>
-                  {okCount > 0 && <button className="btn btn--sm" onClick={downloadCreds}>⤓ Télécharger les identifiants</button>}
+                <div className="card-h" style={{ paddingBottom: 8, gap: 6, flexWrap: "wrap" }}>
+                  <span className="pill pill--green">{report.created} créé(s)</span>
+                  <span className="pill pill--soft">{report.existing} déjà existant(s)</span>
+                  <span className="pill pill--info">{report.enrolled} inscrit(s) au parcours</span>
+                  {invite && <span className="pill pill--soft">{report.invited} invitation(s) délivrée(s)</span>}
+                  {report.errors.length > 0 && <span className="pill pill--red">{report.errors.length} erreur(s)</span>}
+                  {report.credentials.length > 0 && <button className="btn btn--sm" onClick={downloadCreds}>⤓ Télécharger les identifiants</button>}
                 </div>
-                <div style={{ maxHeight: 260, overflow: "auto" }}>
-                  <table className="table">
-                    <thead><tr><th>Apprenant</th><th>Mot de passe</th><th>Statut</th></tr></thead>
-                    <tbody>
-                      {results.map((r, i) => (
-                        <tr key={i} style={{ cursor: "default" }}>
-                          <td><div className="who"><b style={{ fontSize: 13 }}>{r.name}</b><span style={{ fontSize: 11.5, color: "var(--fg-3)" }}>{r.email}</span></div></td>
-                          <td><code style={{ fontFamily: "monospace", fontSize: 12 }}>{r.status === "ok" ? r.password : "—"}</code></td>
-                          <td>{r.status === "ok" ? <span className="pill pill--green">Inscrit</span> : r.status === "exists" ? <span className="pill pill--warn">Existe déjà</span> : <span className="pill pill--red" title={r.detail}>Erreur</span>}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                {report.errors.length > 0 && (
+                  <div style={{ maxHeight: 180, overflow: "auto" }}>
+                    <table className="table">
+                      <thead><tr><th>Ligne</th><th>E-mail</th><th>Erreur</th></tr></thead>
+                      <tbody>
+                        {report.errors.map((e, i) => (
+                          <tr key={i} style={{ cursor: "default" }}>
+                            <td><span className="num">{e.line}</span></td>
+                            <td><span style={{ fontSize: 12.5 }}>{e.email || "—"}</span></td>
+                            <td><span style={{ fontSize: 12.5, color: "var(--danger)" }}>{e.error}</span></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {report.credentials.length > 0 && (
+                  <div style={{ maxHeight: 220, overflow: "auto" }}>
+                    <table className="table">
+                      <thead><tr><th>E-mail</th><th>Mot de passe initial</th></tr></thead>
+                      <tbody>
+                        {report.credentials.map((c) => (
+                          <tr key={c.email} style={{ cursor: "default" }}>
+                            <td><span style={{ fontSize: 12.5 }}>{c.email}</span></td>
+                            <td><code style={{ fontFamily: "monospace", fontSize: 12 }}>{c.password}</code></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
           </div>
