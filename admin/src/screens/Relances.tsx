@@ -1,7 +1,14 @@
-import { useMemo, useState } from "react";
-import { api, courseTitle, type LearnerRow, type ReEngagementResult } from "../lib/api";
+import { useEffect, useMemo, useState } from "react";
+import { api, courseTitle, type LearnerRow, type ReEngagementResult, type RelanceRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import { Pager } from "../lib/widgets";
 import type { CourseCtx } from "../App";
+
+const STAGE_FR: Record<string, { label: string; cls: string }> = {
+  J3: { label: "J+3", cls: "pill--warn" },
+  J7: { label: "J+7", cls: "pill--orange" },
+  J14: { label: "J+14", cls: "pill--red" },
+};
 
 const daysSince = (iso: string | null) => iso ? Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000) : 999;
 
@@ -24,6 +31,19 @@ export function Relances({ ctx }: { ctx: CourseCtx }) {
     const dormant = (data ?? []).filter((l) => l.status !== "CERTIFIED" && daysSince(l.lastActivity) >= 3).map((l) => ({ l, d: daysSince(l.lastActivity) }));
     return TIERS.map((t) => ({ ...t, rows: dormant.filter((x) => x.d >= t.min && x.d <= t.max).sort((a, b) => b.d - a.d) }));
   }, [data]);
+
+  // History of every re-engagement message sent for this course (audit trail).
+  const [hist, setHist] = useState<RelanceRow[] | null>(null);
+  const [histTotal, setHistTotal] = useState(0);
+  const [histPage, setHistPage] = useState(1);
+  const [openId, setOpenId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!courseId) return;
+    api.relancesHistory(courseId, { page: histPage, pageSize: 15 })
+      .then((r) => { setHist(r.data); setHistTotal(r.total); })
+      .catch(() => { setHist([]); setHistTotal(0); });
+  }, [courseId, histPage, result]);
+  useEffect(() => { setHistPage(1); }, [courseId]);
 
   async function runCycle() {
     setBusy(true); setErr(null); setResult(null);
@@ -50,7 +70,7 @@ export function Relances({ ctx }: { ctx: CourseCtx }) {
         <div className="card" style={{ marginBottom: 16, background: err ? "var(--danger-tint)" : "var(--success-tint)", border: "none" }}>
           <div className="card-b" style={{ fontSize: 13.5 }}>
             {err ? <span style={{ color: "var(--danger)" }}>✗ {err}</span>
-              : <span>✅ Cycle de relances exécuté. <b>{result?.sent ?? result?.processed ?? 0}</b> relance(s) traitée(s). Les apprenants concernés recevront un message (email / SMS / push) selon le palier.</span>}
+              : <span>✅ Cycle exécuté : <b>{result?.created.length ?? 0}</b> relance(s) envoyée(s) sur {result?.scanned ?? 0} inscription(s) analysée(s). Les paliers déjà relancés ne sont jamais redéclenchés (idempotent).</span>}
           </div>
         </div>
       )}
@@ -77,6 +97,36 @@ export function Relances({ ctx }: { ctx: CourseCtx }) {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <div className="card-h" style={{ paddingBottom: 12, borderBottom: "1px solid var(--line)" }}>
+          <b style={{ fontSize: 13.5 }}>Historique des relances envoyées</b>
+          <span className="muted" style={{ fontSize: 12 }}>{histTotal} message(s) · cliquez une ligne pour lire le message</span>
+        </div>
+        <div style={{ overflowX: "auto" }}>
+          <table className="table">
+            <thead><tr><th>Quand</th><th>Apprenant</th><th>Palier</th><th>Canal</th><th>Message</th></tr></thead>
+            <tbody>
+              {(hist ?? []).map((r) => (
+                <tr key={r.id} onClick={() => setOpenId(openId === r.id ? null : r.id)} style={{ cursor: "pointer" }}>
+                  <td><span style={{ fontSize: 12.5 }}>{ago(r.sentAt)}</span><div className="muted" style={{ fontSize: 11 }}>{new Date(r.sentAt).toLocaleString("fr-FR")}</div></td>
+                  <td><div className="uitem"><span className="av" style={{ background: avatarColor(r.learner.name), width: 28, height: 28, fontSize: 10.5 }}>{initials(r.learner.name)}</span><div className="who"><b style={{ fontSize: 12.5 }}>{r.learner.name}</b><span>{r.learner.email}</span></div></div></td>
+                  <td><span className={`pill ${STAGE_FR[r.stage]?.cls ?? "pill--soft"}`}>{STAGE_FR[r.stage]?.label ?? r.stage}</span></td>
+                  <td><span className="muted" style={{ fontSize: 12 }}>{r.channel === "ADMIN" ? "alerte admin" : "apprenant"}</span></td>
+                  <td style={{ maxWidth: 420 }}>
+                    {openId === r.id
+                      ? <div style={{ fontSize: 12.5, whiteSpace: "pre-wrap" }}>{r.body}</div>
+                      : <span className="muted" style={{ fontSize: 12, display: "inline-block", maxWidth: 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.body}</span>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {hist == null && <div className="empty">Chargement de l'historique…</div>}
+          {hist != null && hist.length === 0 && <div className="empty"><div className="big">📣</div>Aucune relance envoyée pour ce parcours pour l'instant.</div>}
+          {hist != null && <Pager page={histPage} pageSize={15} total={histTotal} onPage={setHistPage} />}
+        </div>
       </div>
     </div>
   );

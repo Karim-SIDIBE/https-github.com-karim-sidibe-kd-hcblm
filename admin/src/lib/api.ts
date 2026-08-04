@@ -182,7 +182,17 @@ export type ImportDocResult = { content: any; blockNotes: Record<number, string>
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
 export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string; meta?: Record<string, unknown> | null; actor?: { name: string; email: string } | null };
-export type ReEngagementResult = { processed?: number; sent?: number; byTier?: Record<string, number>; [k: string]: unknown };
+export type ReEngagementResult = { scanned: number; created: { enrollmentId: string; stage: string; channel: string; body: string; aiGenerated: boolean }[] };
+export type RelanceRow = { id: string; stage: string; channel: string; sentAt: string; body: string; enrollmentId: string; learner: { id: string; name: string; email: string } };
+export type ForumThreadRow = { id: string; title: string; locked: boolean; pinned: boolean; createdAt: string; updatedAt: string; author: { id: string; name: string } | null; _count?: { posts: number } };
+export type ForumPostRow = { id: string; body: string; createdAt: string; editedAt: string | null; deletedAt: string | null; author: { id: string; name: string } | null };
+export type ThreadDetail = ForumThreadRow & { posts: ForumPostRow[] };
+export type IntegrationsStatus = {
+  saml: { enabled: boolean; issuer: string; jitProvision: boolean; entryPointConfigured: boolean; certConfigured: boolean; metadataUrl: string; loginUrl: string; acsUrl: string };
+  oidc: { enabled: boolean; issuer: string | null; audience: string | null; jitProvision: boolean };
+  lti: { configUrl: string; jwksUrl: string; oidcInitiationUrl: string; targetLinkUri: string; platforms: { id: string; name: string | null; issuer: string; clientId: string; deploymentId: string | null; createdAt: string }[] };
+  scim: { baseUrl: string; organizations: { id: string; name: string; slug: string; tokenProvisioned: boolean }[] };
+};
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; joinUrl?: string | null; _count?: { registrations: number } };
@@ -224,7 +234,12 @@ export type ProjectDetail = {
 export const api = {
   me: () => req<Principal>("GET", "/auth/me"),
   courses: () => req<CourseSummary[]>("GET", "/courses"),
-  courseReport: (courseId: string) => req<CourseReport>("GET", `/analytics/courses/${courseId}`),
+  courseReport: (courseId: string, range: { since?: string; until?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (range.since) qs.set("since", range.since);
+    if (range.until) qs.set("until", range.until);
+    return req<CourseReport>("GET", `/analytics/courses/${courseId}${qs.toString() ? `?${qs}` : ""}`);
+  },
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
   // UI texts — super-admin overrides of the learner-app interface copy.
@@ -391,6 +406,15 @@ export const api = {
   // --- platform settings (M3) ---
   settings: () => req<Record<string, unknown>>("GET", "/settings"),
   setSetting: (key: string, value: unknown) => req<{ key: string; value: unknown }>("PUT", `/settings/${key}`, { value }),
+  // --- M4: relances history, forum moderation, integrations ---
+  relancesHistory: (courseId: string, p: { page?: number; pageSize?: number }) => reqPaged<Paged<RelanceRow>>(`/analytics/courses/${courseId}/relances`, p),
+  threads: (cohortId: string) => req<ForumThreadRow[]>("GET", `/cohorts/${cohortId}/threads`),
+  thread: (id: string) => req<ThreadDetail>("GET", `/threads/${id}`),
+  deleteForumPost: (id: string) => req<unknown>("DELETE", `/posts/${id}`),
+  setThreadFlags: (id: string, b: { locked?: boolean; pinned?: boolean }) => req<ForumThreadRow>("POST", `/threads/${id}/flags`, b),
+  integrationsStatus: () => req<IntegrationsStatus>("GET", "/integrations/status"),
+  addLtiPlatform: (b: { name?: string; issuer: string; clientId: string; deploymentId?: string; authLoginUrl: string; jwksUrl: string; tokenUrl?: string }) => req<unknown>("POST", "/lti/platforms", b),
+  scimToken: (orgId: string) => req<{ token: string; endpoint: string }>("POST", `/organizations/${orgId}/scim/token`, {}),
   // --- bulk user import (M3) ---
   importUsers: (rows: { name?: string; email?: string; role?: string }[], opts: { courseId?: string; invite?: boolean } = {}) =>
     req<ImportReport>("POST", "/users/import", { rows, ...opts }),

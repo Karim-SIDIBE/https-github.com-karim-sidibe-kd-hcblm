@@ -7,6 +7,7 @@ import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { scopeParam } from "../../lib/security/tenant-scope.js";
 import { envelope, pageQuery, sortSpec } from "../../lib/paging.js";
+import { prisma } from "../../db/prisma.js";
 
 const owned = [authenticate, requireEnrollmentAccess];
 // analytics:read + confine non-staff customer roles to their own org's data.
@@ -47,6 +48,29 @@ export async function analyticsRoutes(app: FastifyInstance) {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     const q = rangeQuery.parse(req.query ?? {});
     try { return { data: await courseReport(courseId, toRange(q)) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Re-engagement history of a course (M4): every J+3/7/14 message sent, with
+  // the learner it went to — the Relances screen's audit trail.
+  app.get("/analytics/courses/:courseId/relances", { preHandler: courseScoped }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    const query = pageQuery.parse(req.query ?? {});
+    try {
+      const where = { enrollment: { courseId } };
+      const [total, rows] = await Promise.all([
+        prisma.reEngagementMessage.count({ where }),
+        prisma.reEngagementMessage.findMany({
+          where, orderBy: { sentAt: "desc" },
+          skip: (query.page - 1) * query.pageSize, take: query.pageSize,
+          include: { enrollment: { select: { id: true, user: { select: { id: true, name: true, email: true } } } } },
+        }),
+      ]);
+      const data = rows.map((r) => ({
+        id: r.id, stage: r.stage, channel: r.channel, sentAt: r.sentAt, body: r.body,
+        enrollmentId: r.enrollmentId, learner: r.enrollment.user,
+      }));
+      return envelope(data, total, query.page, query.pageSize);
+    } catch (err) { return handle(reply, err); }
   });
 
   // Per-learner course rows (JSON or CSV export).

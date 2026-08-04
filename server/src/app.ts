@@ -38,6 +38,7 @@ import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 import { uiTextRoutes } from "./modules/uitexts/uitexts.routes.js";
 import { viewsRoutes } from "./modules/views/views.routes.js";
 import { settingsRoutes } from "./modules/settings/settings.routes.js";
+import { integrationsRoutes } from "./modules/integrations/integrations.routes.js";
 import { render as renderMetrics, recordHttp, requestStarted, requestEnded } from "./lib/metrics.js";
 import { getRedis } from "./lib/redis.js";
 
@@ -160,6 +161,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await userRoutes(api);
       await viewsRoutes(api);
       await settingsRoutes(api);
+      await integrationsRoutes(api);
       await rgpdRoutes(api);
       await meRoutes(api);
       await organizationRoutes(api);
