@@ -60,6 +60,11 @@ export type Member = {
 };
 export type CourseSummary = { id: string; slug: string; versions: { version: number; status: string; title: string; level: string }[] };
 export type NewLearner = { id: string; name: string; email: string; role: string; phone: string | null; createdAt: string; invited: boolean };
+export type OrgImportReport = {
+  total: number; created: number; enrolled: number; invited: number;
+  errors: { line: number; email: string; error: string }[];
+  credentials: { email: string; password: string }[];
+};
 export type ProgressRow = {
   userId: string; name: string; email: string; disabled: boolean; active7d: boolean;
   enrollments: { courseTitle: string; progressPercent: number; status: string; lastActivity: string | null; startedAt: string }[];
@@ -78,6 +83,12 @@ export const api = {
   courses: () => req<CourseSummary[]>("GET", "/courses"),
   progress: (orgId: string) => req<ProgressRow[]>("GET", `/organizations/${orgId}/progress`),
   resendInvite: (orgId: string, userId: string) => req<{ delivered: boolean; tempPassword: string }>("POST", `/organizations/${orgId}/learners/${userId}/invite`, {}),
+  importLearners: (orgId: string, rows: { name?: string; email?: string }[], opts: { courseId?: string; invite?: boolean } = {}) =>
+    req<OrgImportReport>("POST", `/organizations/${orgId}/learners/import`, { rows, ...opts }),
+  addTeamMember: (orgId: string, email: string, orgRole: "ADMIN" | "OWNER") =>
+    req<{ userId: string; orgRole: string }>("POST", `/organizations/${orgId}/members`, { email, orgRole }),
+  removeTeamMember: (orgId: string, userId: string) =>
+    req<{ ok: boolean }>("DELETE", `/organizations/${orgId}/members/${userId}`),
   async progressCsv(orgId: string): Promise<Blob> {
     const t = auth.token();
     const res = await fetch(`${BASE}/organizations/${orgId}/progress?format=csv`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
