@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  api, auth, login as apiLogin, genPassword, publishedCourse, ApiError,
+  api, auth, login as apiLogin, verify2fa, genPassword, publishedCourse, ApiError,
   type Org, type Seats, type Member, type CourseSummary, type Principal,
 } from "./api";
 
@@ -8,15 +8,47 @@ import {
 function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // 2FA step: the API answered « code required » — ask for the TOTP/backup code.
+  const [challenge, setChallenge] = useState<string | null>(null);
+  const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null);
-    try { const r = await apiLogin(email, password); auth.set(r.accessToken, r.user); onLogin(r.user); }
+    try {
+      const r = await apiLogin(email, password);
+      if ("twoFactorRequired" in r) { setChallenge(r.challenge); return; }
+      auth.set(r.accessToken, r.user); onLogin(r.user);
+    }
     catch (err) { setError(err instanceof Error ? err.message : "Identifiants invalides"); }
     finally { setBusy(false); }
+  }
+
+  async function submitCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!challenge) return;
+    setBusy(true); setError(null);
+    try { const r = await verify2fa(challenge, code.trim()); auth.set(r.accessToken, r.user); onLogin(r.user); }
+    catch (err) { setError(err instanceof Error ? err.message : "Code invalide"); }
+    finally { setBusy(false); }
+  }
+
+  if (challenge) {
+    return (
+      <div className="login-wrap">
+        <form className="card login-card" onSubmit={submitCode}>
+          <div className="brandline"><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
+          <div className="eyebrow" style={{ marginBottom: 14 }}>Double authentification</div>
+          <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Saisissez le code de votre application d'authentification (ou un code de secours).</p>
+          <label className="lbl">Code<input className="field" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus required /></label>
+          {error && <p className="ko">{error}</p>}
+          <button className="btn btn--primary" disabled={busy || code.trim().length < 6} style={{ justifyContent: "center", padding: 11, marginTop: 6 }}>{busy ? "…" : "Valider"}</button>
+          <button type="button" className="btn" style={{ justifyContent: "center", padding: 9, marginTop: 8 }} onClick={() => { setChallenge(null); setCode(""); setError(null); }}>← Retour</button>
+        </form>
+      </div>
+    );
   }
 
   return (

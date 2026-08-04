@@ -77,11 +77,12 @@ function useHash() {
   return h;
 }
 
-function Brand() {
+function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
     <div className="brand">
       <img src="/logo-icon.png" alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
       <span className="wm">DECLICK <b>DIGITAL</b><span className="sub">ADMINISTRATION</span></span>
+      <button className="navtoggle" title={collapsed ? "Déployer le menu" : "Réduire le menu"} onClick={onToggle}>{collapsed ? "»" : "«"}</button>
     </div>
   );
 }
@@ -144,7 +145,7 @@ export function App() {
     <div className={`app${collapsed ? " nav-collapsed" : ""}`}>
       <ModalHost />
       <aside className="sidebar">
-        <Brand />
+        <Brand collapsed={collapsed} onToggle={toggleNav} />
         <nav>
           {nav.map((g) => (
             <div className="navgroup" key={g.group}>
@@ -157,9 +158,6 @@ export function App() {
             </div>
           ))}
         </nav>
-        <button className="navcollapse" title={collapsed ? "Déployer le menu" : "Réduire le menu"} onClick={toggleNav}>
-          {collapsed ? "»" : "« Réduire le menu"}
-        </button>
         <div className="userbox">
           <div className="av">{initials(user.name)}</div>
           <div className="who"><b>{user.name}</b><span>{user.role.replace(/_/g, " ").toLowerCase()}</span></div>
