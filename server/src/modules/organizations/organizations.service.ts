@@ -7,6 +7,8 @@ import type { Principal } from "../../lib/auth.js";
 import { hashPassword } from "../../lib/auth/password.js";
 import { seatAvailable, remainingSeats } from "../../domain/org/seats.js";
 import { enroll } from "../enrollments/enrollments.service.js";
+import { CourseContent } from "../../domain/content-model.js";
+import { computeProgress } from "../../domain/engine/progress.js";
 
 export class OrgError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -152,4 +154,56 @@ export async function enrollOrgLearner(organizationId: string, userId: string, c
     throw new OrgError(403, "course_forbidden", "Parcours non disponible pour cette organisation");
   }
   return enroll(userId, courseId, true); // isEnterprise = true
+}
+
+// --- learner progress across the organization (ENT lot) ----------------------
+
+/**
+ * Progress of every MEMBER of the organization, across ALL their enrolments —
+ * independent of who owns the course (shared-catalog courses included). This
+ * is the B2B client's core question: "where are my people?".
+ */
+export async function orgProgress(organizationId: string) {
+  const memberships = await prisma.organizationMembership.findMany({
+    where: { organizationId, orgRole: "MEMBER" },
+    include: { user: { select: { id: true, name: true, email: true, disabledAt: true } } },
+  });
+  const userIds = memberships.map((m) => m.userId);
+  if (userIds.length === 0) return [];
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId: { in: userIds } },
+    include: { courseVersion: true, completions: true },
+  });
+  const now = Date.now();
+  const byUser = new Map<string, { courseTitle: string; progressPercent: number; status: string; lastActivity: Date | null; startedAt: Date }[]>();
+  for (const e of enrollments) {
+    let progressPercent = 0;
+    try {
+      const content = CourseContent.parse(e.courseVersion.content);
+      const progress = computeProgress(
+        content,
+        e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
+        Boolean(e.momentAncrage),
+      );
+      progressPercent = Math.round((progress.completedBlockIndexes.length / content.blocks.length) * 100);
+    } catch { /* unparseable legacy content → 0% rather than a 500 */ }
+    const row = {
+      courseTitle: (e.courseVersion as { title: string }).title,
+      progressPercent,
+      status: e.status,
+      lastActivity: e.lastSeenAt,
+      startedAt: e.startedAt,
+    };
+    const list = byUser.get(e.userId) ?? [];
+    list.push(row);
+    byUser.set(e.userId, list);
+  }
+  return memberships.map((m) => ({
+    userId: m.userId,
+    name: m.user.name,
+    email: m.user.email,
+    disabled: m.user.disabledAt != null,
+    active7d: (byUser.get(m.userId) ?? []).some((r) => r.lastActivity && now - r.lastActivity.getTime() <= 7 * 86_400_000),
+    enrollments: byUser.get(m.userId) ?? [],
+  }));
 }

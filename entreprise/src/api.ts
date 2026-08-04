@@ -60,6 +60,10 @@ export type Member = {
 };
 export type CourseSummary = { id: string; slug: string; versions: { version: number; status: string; title: string; level: string }[] };
 export type NewLearner = { id: string; name: string; email: string; role: string; phone: string | null; createdAt: string; invited: boolean };
+export type ProgressRow = {
+  userId: string; name: string; email: string; disabled: boolean; active7d: boolean;
+  enrollments: { courseTitle: string; progressPercent: number; status: string; lastActivity: string | null; startedAt: string }[];
+};
 
 export const api = {
   myOrgs: () => req<Org[]>("GET", "/organizations"),
@@ -72,6 +76,14 @@ export const api = {
   enroll: (orgId: string, userId: string, courseId: string) =>
     req<{ id: string }>("POST", `/organizations/${orgId}/enrollments`, { userId, courseId }),
   courses: () => req<CourseSummary[]>("GET", "/courses"),
+  progress: (orgId: string) => req<ProgressRow[]>("GET", `/organizations/${orgId}/progress`),
+  resendInvite: (orgId: string, userId: string) => req<{ delivered: boolean; tempPassword: string }>("POST", `/organizations/${orgId}/learners/${userId}/invite`, {}),
+  async progressCsv(orgId: string): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/organizations/${orgId}/progress?format=csv`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Export échoué");
+    return res.blob();
+  },
 };
 
 // --- helpers ---
