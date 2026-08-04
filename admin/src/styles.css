@@ -197,6 +197,7 @@ button { font-family:inherit; cursor:pointer; }
 .app.nav-collapsed .navitem svg{width:20px;height:20px}
 .app.nav-collapsed .userbox{justify-content:center;padding:12px 6px}
 .app.nav-collapsed .userbox .logout{margin-left:0}
-.navcollapse{background:none;border:0;color:var(--navy-100);font-size:12.5px;font-weight:600;cursor:pointer;padding:9px 24px;text-align:left;opacity:.65;transition:opacity .12s;font-family:inherit}
-.navcollapse:hover{opacity:1}
-.app.nav-collapsed .navcollapse{text-align:center;padding:9px 0}
+.navtoggle{margin-left:auto;background:none;border:0;color:var(--navy-100);font-size:17px;font-weight:800;line-height:1;cursor:pointer;padding:4px 8px;border-radius:8px;opacity:.65;transition:opacity .12s,background .12s;font-family:inherit}
+.navtoggle:hover{opacity:1;background:rgba(255,255,255,.1)}
+.app.nav-collapsed .brand{flex-direction:column;gap:8px;padding:14px 8px 8px}
+.app.nav-collapsed .navtoggle{margin-left:0}

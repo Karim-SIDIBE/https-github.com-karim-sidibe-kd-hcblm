@@ -31,10 +31,23 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   return (json.data ?? json) as T;
 }
 
-export async function login(email: string, password: string): Promise<{ accessToken: string; user: Principal }> {
+export type LoginResult =
+  | { accessToken: string; user: Principal }
+  | { twoFactorRequired: true; challenge: string };
+
+export async function login(email: string, password: string): Promise<LoginResult> {
   const res = await fetch(`${BASE}/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email, password }) });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Identifiants invalides");
+  if (j.twoFactorRequired) return { twoFactorRequired: true, challenge: j.challenge };
+  return { accessToken: j.accessToken, user: j.user };
+}
+
+/** Complete a 2FA login with a TOTP or backup code. */
+export async function verify2fa(challenge: string, code: string): Promise<{ accessToken: string; user: Principal }> {
+  const res = await fetch(`${BASE}/auth/2fa/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ challenge, code }) });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Code invalide");
   return { accessToken: j.accessToken, user: j.user };
 }
 
