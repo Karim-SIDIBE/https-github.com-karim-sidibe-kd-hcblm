@@ -9,6 +9,7 @@ import { navigate, routes } from "../lib/router";
 import { Breadcrumb } from "./Breadcrumb";
 import { VideoPlayer } from "./VideoPlayer";
 import { Exercise, type ExerciseMeta, type ExerciseSpec } from "./Exercise";
+import { answerOf, useAnswers } from "../lib/answers";
 import { useT } from "../lib/i18n";
 
 type Session = { id: string; title: string; video: any; exercise?: ExerciseSpec; summaryPoints?: string[]; durationEstimate?: string };
@@ -24,6 +25,11 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
   const [tqAnswers, setTqAnswers] = useState<Record<string, string>>({});
   const [tqBusy, setTqBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Frozen results: the video is always rewatchable, but a completed exercise
+  // or trigger quiz shows the recorded answers read-only (no re-submission).
+  const answers = useAnswers(eid);
+  const doneItem = answerOf(answers, block, item);
+  const doneTrigger = answerOf(answers, 0, "trigger");
 
   const blk = useMemo(() => bundle?.content.blocks.find((b: any) => b.index === block), [bundle, block]);
   // The Bloc 0 trigger QUIZ plays right AFTER the trigger video, inside this
@@ -137,16 +143,16 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
           )}
           {/* Always offer a way forward so a missing/failing video never blocks progression. */}
           {session.exercise
-            ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>{t("sess.skipExercise")}</button>
+            ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("exercise")}>{doneItem ? t("frz.viewAnswer") : t("sess.skipExercise")}</button>
             : triggerQuiz
-              ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("tquiz")}>{t("sess.toTriggerQuiz")}</button>
+              ? <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => setPhase("tquiz")}>{doneTrigger ? t("frz.viewAnswer") : t("sess.toTriggerQuiz")}</button>
               : <button className="hf-btn hf-btn--outline hf-btn--block" onClick={() => void completeSession({ watched: true })}>{t("sess.finishSession")}</button>}
         </>
       )}
 
       {phase === "exercise" && session.exercise && (
-        <Exercise exercise={session.exercise} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
-          aiFeedback={session.exercise.type === "multi" ? undefined : async () => {
+        <Exercise exercise={session.exercise} frozen={doneItem?.data} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
+          aiFeedback={doneItem || session.exercise.type === "multi" ? undefined : async () => {
             // Personalised formative feedback on the saved answer (AI when a key
             // is configured server-side, deterministic heuristic otherwise).
             const r = await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey: item });
@@ -154,24 +160,35 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
           }} />
       )}
 
-      {phase === "tquiz" && triggerQuiz && (
-        <div className="stack">
-          <div className="hf-card hf-card--icy"><strong className="h4">{t("sess.triggerQuizTitle", { n: triggerQuiz.questions.length })}</strong></div>
-          {triggerQuiz.questions.map((q: any) => (
-            <div key={q.id} className="hf-card stack">
-              <strong className="h4">{q.text}</strong>
-              {q.options.map((o: any) => (
-                <div key={o.key} className={`pt-opt ${tqAnswers[q.id] === o.key ? "sel" : ""}`} role="button" onClick={() => setTqAnswers((a) => ({ ...a, [q.id]: o.key }))}>
-                  <span className="body" style={{ color: "var(--fg-1)" }}>{o.label}</span>
-                </div>
-              ))}
-            </div>
-          ))}
-          <button className="hf-btn hf-btn--primary hf-btn--block" disabled={tqBusy || !triggerQuiz.questions.every((q: any) => tqAnswers[q.id])} onClick={() => void submitTriggerQuiz()}>
-            {tqBusy ? "…" : t("sess.triggerQuizGo")}
-          </button>
-        </div>
-      )}
+      {phase === "tquiz" && triggerQuiz && (() => {
+        // Already answered → read-only recap of the recorded choices.
+        const rec = (doneTrigger?.data as { answers?: Record<string, string> } | undefined)?.answers;
+        const shown = rec ?? tqAnswers;
+        const frozenTq = Boolean(rec);
+        return (
+          <div className="stack">
+            <div className="hf-card hf-card--icy"><strong className="h4">{t("sess.triggerQuizTitle", { n: triggerQuiz.questions.length })}</strong></div>
+            {frozenTq && <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>🔒 {t("frz.note")}</p></div>}
+            {triggerQuiz.questions.map((q: any) => (
+              <div key={q.id} className="hf-card stack">
+                <strong className="h4">{q.text}</strong>
+                {q.options.map((o: any) => (
+                  <div key={o.key} className={`pt-opt ${shown[q.id] === o.key ? "sel" : ""}`} role="button"
+                    style={{ cursor: frozenTq ? "default" : "pointer" }}
+                    onClick={() => { if (!frozenTq) setTqAnswers((a) => ({ ...a, [q.id]: o.key })); }}>
+                    <span className="body" style={{ color: "var(--fg-1)" }}>{o.label}</span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {frozenTq
+              ? <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => goToNext()}>{t("common.continue")}</button>
+              : <button className="hf-btn hf-btn--primary hf-btn--block" disabled={tqBusy || !triggerQuiz.questions.every((q: any) => tqAnswers[q.id])} onClick={() => void submitTriggerQuiz()}>
+                  {tqBusy ? "…" : t("sess.triggerQuizGo")}
+                </button>}
+          </div>
+        );
+      })()}
     </div>
   );
 }

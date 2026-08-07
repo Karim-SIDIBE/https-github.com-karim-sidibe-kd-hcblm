@@ -4,6 +4,7 @@ import { getCachedProgress, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
+import { answerOf, useAnswers } from "../lib/answers";
 import { Breadcrumb } from "./Breadcrumb";
 import { useT, useI18n } from "../lib/i18n";
 
@@ -56,8 +57,12 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
       } : null;
     }
     const entry = (blk?.payload?.journal?.entries ?? []).find((e: any) => `J+${e.day}` === itemKey);
-    return entry ? { kind: "journal" as const, eyebrow: t("jr.eyebrow"), title: t("dl.journalTitle", { key: itemKey }), brief: entry.prompt, steps: [] as StepSpec[], min: entry.minWords ?? 50, unit: "mots", itemType: "JOURNAL_ENTRY" } : null;
+    return entry ? { kind: "journal" as const, eyebrow: t("jr.eyebrow"), title: t("dl.journalTitle", { key: itemKey }), brief: entry.prompt, steps: [] as StepSpec[], min: entry.minWords ?? 50, unit: "mots", itemType: "JOURNAL_ENTRY", placeholder: (entry.placeholder as string) || "" } : null;
   }, [blk, itemKey, t]);
+
+  // Frozen results: a submitted deliverable is consultable, not re-editable.
+  const answersMap = useAnswers(eid);
+  const doneRow = answerOf(answersMap, block, itemKey);
 
   const structured = (spec?.steps?.length ?? 0) > 0;
   const count = spec?.unit === "mots" ? words(text) : text.trim().length;
@@ -107,8 +112,28 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
   }
 
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>{t("nav.backCourse")}</button>;
-  if (!bundle || (isJournal && journal === null)) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+  if (!bundle || answersMap === null || (isJournal && journal === null)) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
   if (!spec) return <div className="stack"><Back /><p className="banner offline">{t("dl.notFound")}</p></div>;
+
+  if (doneRow && !after) {
+    const d = (doneRow.data ?? {}) as { fields?: Record<string, string>; text?: string };
+    return (
+      <div className="stack">
+        <Breadcrumb eid={eid} block={blk} itemKey={itemKey} />
+        <div><div className="eyebrow">{spec.eyebrow}</div><h1 style={{ marginTop: 6 }}>{spec.title}</h1></div>
+        <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>🔒 {t("frz.note")}</p></div>
+        <div className="hf-card stack" style={{ gap: 8 }}>
+          <div className="eyebrow">{t("frz.yourAnswer")}</div>
+          {d.fields && Object.keys(d.fields).length > 0
+            ? Object.entries(d.fields).map(([label, v]) => (
+                <div key={label}><span className="meta">{label}</span><p className="body" style={{ margin: "2px 0 0", whiteSpace: "pre-wrap" }}>{v || "—"}</p></div>
+              ))
+            : <p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{d.text || "—"}</p>}
+        </div>
+        <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => goNext(eid, nextTarget(bundle?.content, getCachedProgress(eid), block, itemKey, t))}>{t("common.continue")}</button>
+      </div>
+    );
+  }
 
   if (lockedEntry) {
     const when = lockedEntry.unlocksAt ? new Date(lockedEntry.unlocksAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR") : null;
@@ -170,7 +195,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
           </>
         ) : (
           <div className="hf-textwrap">
-            <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 180 }}
+            <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={("placeholder" in spec && spec.placeholder) || t("answerPlaceholder")} style={{ minHeight: 180 }}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{count} / {spec.min} {spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars")}</span>
           </div>

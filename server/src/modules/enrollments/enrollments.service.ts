@@ -256,6 +256,37 @@ async function upsertCompletion(
 /** Exercise interaction metadata for granular xAPI (§5.3 / §5.4). */
 export type ExerciseMeta = { timeMs?: number; feedbackViewed?: boolean; response?: string; correct?: boolean };
 
+// --- frozen results (première soumission = définitive) -----------------------
+// Once completed, an exercise/quiz shows its recorded answers read-only: a
+// re-submission would bias the course outcome after the feedback was seen.
+// The rule is enforced HERE (not only in the UI) so the offline queue cannot
+// bypass it; frozen re-submissions are idempotent no-ops (never errors), so a
+// replayed queue entry resolves normally instead of sticking in retry.
+// Deliberately NOT frozen:
+//  - PROJECT sections (progressive Bloc 4: sections stay editable until the
+//    final section assembles the whole project);
+//  - the FINAL quiz while below its pass threshold (the learner MUST retake
+//    it to unlock Bloc 4 — freezing a failed attempt would block the course);
+//  - PEER / PROFILE / PAM (idempotent identity data), video positions.
+const FROZEN_ITEM_TYPES: ItemType[] = [
+  "MICRO_SESSION", "CASE_STUDY", "GUIDED_SCENARIOS", "FIELD_APPLICATION",
+  "SELF_ASSESSMENT", "ACTION_PLAN", "JOURNAL_ENTRY",
+];
+
+function completionOf(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, itemKey: string) {
+  return ctx.enrollment.completions.find((c) => c.blockIndex === blockIndex && c.itemKey === itemKey);
+}
+
+/** Every stored completion with its raw answers — powers the read-only recap
+ *  screens (frozen results) in the learner PWA. */
+export async function listAnswers(enrollmentId: string) {
+  return prisma.itemCompletion.findMany({
+    where: { enrollmentId },
+    orderBy: [{ blockIndex: "asc" }, { completedAt: "asc" }],
+    select: { blockIndex: true, itemType: true, itemKey: true, scorePct: true, completedAt: true, data: true },
+  });
+}
+
 /** Plain text of a stored section/deliverable payload. */
 function textOfData(data: unknown): string {
   if (typeof data === "string") return data.trim();
@@ -328,6 +359,12 @@ export async function completeItem(
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
   assertBloc4ItemUnlocked(ctx, blockIndex, itemType, itemKey);
+  // Frozen: the first submission is final — a revisit is a no-op that leaves
+  // the recorded answers untouched (results stay consultable, never rewritten).
+  if (FROZEN_ITEM_TYPES.includes(itemType) && completionOf(ctx, blockIndex, itemKey)) {
+    await touch(enrollmentId, blockIndex, itemKey);
+    return reconcile(enrollmentId);
+  }
   const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
   await upsertCompletion(enrollmentId, blockIndex, itemType, itemKey, null, data ?? null);
   // Bloc 4 project (progressive): sections 1–3 and 5 are their own completions;
@@ -456,6 +493,9 @@ export async function submitTriggerQuiz(enrollmentId: string, answers: Record<st
   // Profile choice and trigger quiz are now two distinct learner moments (the
   // quiz plays AFTER the trigger video, inside the Bloc 0 second session): each
   // completion is recorded only when its data is actually present.
+  // Frozen: an already-recorded trigger quiz / profile is never overwritten.
+  if (completionOf(ctx, 0, "trigger")) answers = {};
+  if (profileKey && completionOf(ctx, 0, "profile")) profileKey = undefined;
   if (Object.keys(answers).length > 0) {
     await upsertCompletion(enrollmentId, 0, "TRIGGER_QUIZ", "trigger", null, { answers, profileKey: profileKey ?? null });
     await touch(enrollmentId, 0, "trigger");
@@ -476,6 +516,12 @@ export async function submitInterBlockQuiz(enrollmentId: string, answers: Record
     throw new EngineError(409, "no_quiz", "Ce parcours n'a pas de quiz interbloc");
   }
   assertUnlocked(ctx, block.index);
+  // Frozen: already submitted — return the recorded result, never re-score.
+  const doneIb = completionOf(ctx, block.index, "interblock");
+  if (doneIb) {
+    const d = doneIb.data as { correct?: number; total?: number } | null;
+    return { ...(await reconcile(enrollmentId)), quiz: { correct: d?.correct ?? 0, total: d?.total ?? 0, scored: false, frozen: true } };
+  }
   const qs = await materializeQuiz(enrollmentId, "interblock", block.payload.interBlockQuiz) as ScoredQuestion[];
   const { correct, total } = scoreQuiz(qs, answers); // for feedback only — not gated
   await upsertCompletion(enrollmentId, block.index, "INTER_BLOCK_QUIZ", "interblock", null, { answers, correct, total });
@@ -491,6 +537,20 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
   const block = ctx.content.blocks.find((b) => b.type === "COMPREHENSION");
   if (block?.type !== "COMPREHENSION") throw new EngineError(409, "no_block", "Bloc 1 absent");
   assertUnlocked(ctx, block.index);
+  // Frozen: the diagnostic is a one-shot photograph of the entry level — a
+  // retake after seeing the answers would bias the whole course reporting.
+  const doneDg = completionOf(ctx, block.index, "diagnostic");
+  if (doneDg) {
+    const d = (doneDg.data ?? {}) as Record<string, unknown>;
+    return {
+      ...(await reconcile(enrollmentId)),
+      quiz: {
+        scorePct: doneDg.scorePct ?? 0, correct: (d.correct as number) ?? 0, total: (d.total as number) ?? 0,
+        profile: (d.profile as string | null) ?? null, subAreaScores: d.subAreaScores ?? [], priorities: (d.priorities as string[]) ?? [],
+        frozen: true,
+      },
+    };
+  }
   const qs = await materializeQuiz(enrollmentId, "diagnostic", block.payload.diagnosticQuiz) as ScoredQuestion[];
   const { scorePct, correct, total, subAreaScores, priorities } = diagnosticProfile(qs, answers);
   const band = block.payload.diagnosticQuiz.profiles.find(
@@ -515,9 +575,20 @@ export async function submitFinalQuiz(enrollmentId: string, answers: Record<stri
   const block = ctx.content.blocks.find((b) => b.type === "ANCHORING");
   if (block?.type !== "ANCHORING") throw new EngineError(409, "no_block", "Bloc 3 absent");
   assertUnlocked(ctx, block.index);
+  const threshold0 = block.payload.finalQuiz.passThreshold;
+  // Frozen ONLY once passed: a failed attempt (below threshold) must stay
+  // retakable, otherwise Bloc 4 would be locked forever.
+  const doneFq = completionOf(ctx, block.index, "final");
+  if (doneFq && (doneFq.scorePct ?? 0) >= threshold0) {
+    const d = (doneFq.data ?? {}) as Record<string, unknown>;
+    return {
+      ...(await reconcile(enrollmentId)),
+      quiz: { scorePct: doneFq.scorePct ?? 0, correct: (d.correct as number) ?? 0, total: (d.total as number) ?? 0, passed: true, threshold: threshold0, frozen: true },
+    };
+  }
   const qs = await materializeQuiz(enrollmentId, "final", block.payload.finalQuiz) as ScoredQuestion[];
   const { scorePct, correct, total } = scoreQuiz(qs, answers);
-  const threshold = block.payload.finalQuiz.passThreshold;
+  const threshold = threshold0;
   await upsertCompletion(enrollmentId, block.index, "FINAL_QUIZ", "final", scorePct, { answers, correct, total });
   await touch(enrollmentId, block.index, "final");
   await emitQuestionStatements(ctx, block.index, "final", qs, answers, meta);

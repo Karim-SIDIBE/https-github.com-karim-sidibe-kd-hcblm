@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { isAnswerCorrect } from "@kd/shared/scoring";
 import { engine, store } from "../lib/app";
 import { getCachedProgress, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
@@ -6,6 +7,7 @@ import { diagnosticProfile, scoreQuiz, type ScoredQuestion } from "../lib/quiz";
 import { navigate, routes, type QuizKind } from "../lib/router";
 import { Breadcrumb } from "./Breadcrumb";
 import { Quiz, type QuizQuestion, type QuestionMeta } from "./Quiz";
+import { useAnswers } from "../lib/answers";
 import { useT } from "../lib/i18n";
 
 const CFG: Record<QuizKind, { blockType: string; source: string; action: string; title: string }> = {
@@ -35,12 +37,22 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
     const questions: QuizQuestion[] = raw.map((q: any) => ({
       id: q.id, prompt: q.scenarioText ?? q.text, feedbackText: q.feedbackText,
       type: q.type, profiling: (q as any).profiling, options: q.options, correctKey: q.correctKey, correctKeys: q.correctKeys,
-      correctBool: q.correctBool, answerNumber: q.answerNumber, tolerance: q.tolerance, accepted: q.accepted,
+      correctBool: q.correctBool, answerNumber: q.answerNumber, tolerance: q.tolerance, accepted: q.accepted, placeholder: (q as any).placeholder,
     }));
     return { block, src, raw, questions, threshold: block?.payload?.finalQuiz?.passThreshold as number | undefined, profiles: src.profiles as any[] | undefined };
   }, [bundle, cfg]);
 
   const [progressAfter, setProgressAfter] = useState<any>(null);
+
+  // Frozen results: a submitted quiz is consultable but not retakable — the
+  // ONLY exception is a final quiz below its pass threshold (must be retaken).
+  const answersMap = useAnswers(eid);
+  const recorded = useMemo(() => {
+    if (!answersMap) return undefined;
+    return Object.values(answersMap).find((r) => r.itemKey === kind);
+  }, [answersMap, kind]);
+  const failedFinal = kind === "final" && recorded != null && (recorded.scorePct ?? 0) < (data?.threshold ?? 70);
+  const isFrozen = recorded != null && !failedFinal;
 
   async function onSubmit(answers: Record<string, string>, meta: QuestionMeta) {
     const r = await engine.commit(eid, cfg.action, { answers, meta });
@@ -91,7 +103,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
   }
 
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.cours(eid))}>{t("nav.backCourse")}</button>;
-  if (!bundle) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+  if (!bundle || answersMap === null) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
   if (!data) return <div className="stack"><Back /><p className="banner offline">{t("qz.unavailable")}</p></div>;
 
   // « Continuer » after the result launches the NEXT element of the parcours
@@ -101,10 +113,58 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
     goNext(eid, nextTarget(bundle?.content, prog, data.block?.index ?? 0, kind, t));
   };
 
+  // Read-only recap of an already-submitted quiz: recorded score/profile plus
+  // the per-question review (learner answer vs. correct), nothing editable.
+  if (isFrozen && !result) {
+    const d = (recorded!.data ?? {}) as { answers?: Record<string, string>; correct?: number; total?: number; profile?: string | null; priorities?: string[] };
+    const stored = d.answers ?? {};
+    return (
+      <div className="stack">
+        <Breadcrumb eid={eid} block={data.block} itemKey={kind} />
+        <h1>{(data.src.title as string) || t(cfg.title)}</h1>
+        <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>🔒 {t("frz.note")}</p></div>
+        <div className="hf-card hf-card--stripe-orange stack">
+          <div className="eyebrow">{t("frz.resultTitle")}</div>
+          {kind === "final" && (
+            <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{t("qz.thresholdPill", { pct: recorded!.scorePct ?? 0, threshold: data.threshold ?? 70 })}</span>
+          )}
+          {kind === "diagnostic" && (
+            <>
+              {d.profile && <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{d.profile}</span>}
+              {(d.priorities?.length ?? 0) > 0 && <p className="body" style={{ margin: 0 }}>{t(d.priorities!.length > 1 ? "qz.priorities" : "qz.priority1")} : {d.priorities!.join(" · ")}</p>}
+            </>
+          )}
+          <p className="meta" style={{ margin: 0 }}>{t("qz.correctCount", { correct: d.correct ?? 0, total: d.total ?? data.questions.length })}</p>
+        </div>
+        {data.questions.map((q, i) => {
+          const a = stored[q.id] ?? "";
+          const good = q.profiling ? null : isAnswerCorrect(q as never, a);
+          const label = (key: string) => (q.options ?? []).find((o) => o.key === key)?.label ?? key;
+          const shownAnswer = q.type === "multiple" ? a.split(",").filter(Boolean).map(label).join(" · ") : (q.type === "numeric" || q.type === "short") ? a : q.type === "truefalse" ? t(a === "true" ? "quiz.true" : "quiz.false") : label(a);
+          return (
+            <div key={q.id} className="hf-card stack" style={{ gap: 6 }}>
+              <div className="eyebrow">{t("quiz.q", { n: i + 1, total: data.questions.length })}</div>
+              <p className="h4" style={{ whiteSpace: "pre-wrap", margin: 0 }}>{q.prompt}</p>
+              <p className="body" style={{ margin: 0 }}>
+                {t("frz.yourAnswer")} : <strong>{shownAnswer || "—"}</strong>{good == null ? "" : good ? " ✅" : " ❌"}
+              </p>
+            </div>
+          );
+        })}
+        <button className="hf-btn hf-btn--primary hf-btn--block" onClick={continueNext}>{t("common.continue")}</button>
+      </div>
+    );
+  }
+
   return (
     <div className="stack">
       <Breadcrumb eid={eid} block={data.block} itemKey={kind} />
       <h1>{(data.src.title as string) || t(cfg.title)}</h1>
+      {failedFinal && !result && (
+        <div className="hf-card hf-card--peach"><p className="body" style={{ margin: 0 }}>
+          {t("frz.retake", { pct: recorded!.scorePct ?? 0, threshold: data.threshold ?? 70 })}
+        </p></div>
+      )}
       {result ? (
         <>
           {result.node}

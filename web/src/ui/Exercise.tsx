@@ -12,20 +12,24 @@ export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?:
  * green feedback). It is the completion gate: the learner cannot advance until
  * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
-export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
+export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
   exercise: ExerciseSpec;
   onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void>;
   onNext: () => void;
   /** Optional: fetch a personalised (AI) feedback on the saved answer — shown
    *  in addition to the static feedback, silently skipped offline/on error. */
   aiFeedback?: () => Promise<string | null>;
+  /** Recorded answer of an already-completed exercise: render it read-only
+   *  (first submission is final — server-enforced). */
+  frozen?: unknown;
 }) {
   const t = useT();
   const start = useRef(Date.now());
-  const [phase, setPhase] = useState<"answer" | "feedback">("answer");
-  const [choice, setChoice] = useState<string>("");
-  const [text, setText] = useState("");
-  const [values, setValues] = useState<Record<string, string>>({});
+  const fz = frozen as { choice?: string; text?: string; fields?: Record<string, string> } | undefined;
+  const [phase, setPhase] = useState<"answer" | "feedback">(fz ? "feedback" : "answer");
+  const [choice, setChoice] = useState<string>(fz?.choice ?? "");
+  const [text, setText] = useState(fz?.text ?? "");
+  const [values, setValues] = useState<Record<string, string>>(fz?.fields ?? {});
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
@@ -94,7 +98,7 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
 
           {exercise.type === "written" && (
             <div className="hf-textwrap">
-              <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 150 }}
+              <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={exercise.placeholder || t("answerPlaceholder")} style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
               <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars}</span>
             </div>
@@ -114,8 +118,27 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback }: {
 
       {phase === "feedback" && (
         <div className="stack pt-reveal">
+          {fz && <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>🔒 {t("frz.note")}</p></div>}
           {exercise.type === "multi" && (
             <span className={`hf-pill ${isCorrect ? "hf-pill--mint" : "hf-pill--orange"}`} style={{ alignSelf: "flex-start" }}>{isCorrect ? t("ex.correct") : t("ex.review")}</span>
+          )}
+          {/* The recorded answer stays visible on every revisit. */}
+          {exercise.type === "multi" && choice && (
+            <div className="hf-card"><div className="eyebrow">{t("frz.yourAnswer")}</div><p className="body" style={{ margin: "6px 0 0" }}>
+              <span className="hf-pill hf-pill--soft hf-pill--sm" style={{ marginRight: 8 }}>{choice}</span>
+              {(exercise.options ?? []).find((o) => o.key === choice)?.label ?? ""}
+            </p></div>
+          )}
+          {exercise.type === "written" && text && (
+            <div className="hf-card"><div className="eyebrow">{t("frz.yourAnswer")}</div><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{text}</p></div>
+          )}
+          {exercise.type === "guidedForm" && Object.keys(values).length > 0 && (
+            <div className="hf-card stack" style={{ gap: 8 }}>
+              <div className="eyebrow">{t("frz.yourAnswer")}</div>
+              {(exercise.fields ?? []).map((f) => (
+                <div key={f.label}><span className="meta">{f.label}</span><p className="body" style={{ margin: "2px 0 0" }}>{values[f.label] ?? "—"}</p></div>
+              ))}
+            </div>
           )}
           <div className="hf-card hf-card--mint">
             <strong className="ok">{t("ex.feedback")}</strong>

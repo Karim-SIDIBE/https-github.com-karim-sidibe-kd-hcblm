@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
-  getPosition, getProjectSubmission, getResume, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
   projectState,
 } from "./enrollments.service.js";
@@ -90,6 +90,12 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   app.get("/enrollments/:id", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await getEnrollment(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Every recorded answer (frozen results) — powers the read-only recap views.
+  app.get("/enrollments/:id/answers", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await listAnswers(id) }; } catch (err) { return handle(reply, err); }
   });
 
   // Auto-resume target (Pilier 6.2)

@@ -783,7 +783,19 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
                 <div key={i} style={{ border: "1px solid var(--line)", borderRadius: 8, padding: 10 }}>
                   <div className="row between"><b style={{ fontSize: 12.5 }}>Habitude {i + 1}</b><button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.actionPlan30d.habits.splice(i, 1); })}>✕</button></div>
                   <input style={{ ...field, margin: "6px 0" }} value={h.title ?? ""} placeholder="Titre de l'habitude" onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.habits[i].title = e.target.value; })} />
-                  <label style={lbl}>Champs</label><StringList items={h.fields ?? []} path={(c) => c.blocks[ri].payload.actionPlan30d.habits[i].fields} set={set} ph="Champ" />
+                  <label style={lbl}>Champs (intitulé + suggestion affichée dans le champ vide)</label>
+                  {(h.fields ?? []).map((f: any, fi: number) => {
+                    const label = typeof f === "string" ? f : (f?.label ?? "");
+                    const phv = typeof f === "string" ? "" : (f?.placeholder ?? "");
+                    return (
+                      <div className="row" key={fi} style={{ gap: 6, marginBottom: 5 }}>
+                        <input style={{ ...field, flex: 2 }} value={label} placeholder={`Champ ${fi + 1}`} onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.habits[i].fields[fi] = { label: e.target.value, placeholder: phv }; })} />
+                        <input style={{ ...field, flex: 1 }} value={phv} placeholder="ex. …" onChange={(e) => set((c) => { c.blocks[ri].payload.actionPlan30d.habits[i].fields[fi] = { label, placeholder: e.target.value }; })} />
+                        <button type="button" className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.actionPlan30d.habits[i].fields.splice(fi, 1); })}>✕</button>
+                      </div>
+                    );
+                  })}
+                  <button type="button" className="btn btn--sm" onClick={() => set((c) => { (c.blocks[ri].payload.actionPlan30d.habits[i].fields ??= []).push({ label: "", placeholder: "" }); })}>+ Ajouter</button>
                 </div>
               ))}
               <button type="button" className="btn btn--sm" onClick={() => set((c) => { (c.blocks[ri].payload.actionPlan30d.habits ??= []).push({ title: "", fields: [""] }); })}>+ Habitude</button>
