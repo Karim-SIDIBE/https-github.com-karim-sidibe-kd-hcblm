@@ -210,6 +210,13 @@ const fr: UiDict = {
   "quiz.seeResult": "Voir mon résultat →", "quiz.nextQuestion": "Question suivante →",
   "quiz.multiHint": "Plusieurs réponses possibles", "quiz.true": "Vrai", "quiz.false": "Faux",
   "quiz.numPlaceholder": "Votre réponse (nombre)", "quiz.expected": "Réponse attendue : {n}",
+  // frozen results (première soumission définitive)
+  "frz.note": "Réponses enregistrées lors de votre première tentative — consultables mais non modifiables.",
+  "frz.yourAnswer": "Votre réponse",
+  "frz.viewAnswer": "Voir ma réponse",
+  "frz.resultTitle": "Vos résultats",
+  "frz.retake": "Tentative précédente : {pct} % (seuil : {threshold} %). Ce quiz doit être repassé pour débloquer la suite.",
+  "course.retakeFinal": "À repasser",
   "quiz.shortPlaceholder": "Votre réponse", "quiz.accepted": "Réponses acceptées : {list}",
 };
 
@@ -379,6 +386,13 @@ const en: UiDict = {
   "quiz.seeResult": "See my result →", "quiz.nextQuestion": "Next question →",
   "quiz.multiHint": "Multiple answers possible", "quiz.true": "True", "quiz.false": "False",
   "quiz.numPlaceholder": "Your answer (a number)", "quiz.expected": "Expected answer: {n}",
+  // frozen results (first submission is final)
+  "frz.note": "Answers recorded on your first attempt — viewable but no longer editable.",
+  "frz.yourAnswer": "Your answer",
+  "frz.viewAnswer": "View my answer",
+  "frz.resultTitle": "Your results",
+  "frz.retake": "Previous attempt: {pct}% (threshold: {threshold}%). Retake this quiz to unlock what follows.",
+  "course.retakeFinal": "To retake",
   "quiz.shortPlaceholder": "Your answer", "quiz.accepted": "Accepted answers: {list}",
 };
 

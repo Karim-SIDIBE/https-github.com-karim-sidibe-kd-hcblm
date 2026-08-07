@@ -95,6 +95,8 @@ export const Exercise = z
     correctKey: OptionKey.optional(),
     // written:
     minChars: z.number().int().positive().optional(),
+    /// Suggestion affichée dans le champ vide (« ex. … ») — première tentative.
+    placeholder: z.string().optional(),
     // guidedForm:
     fields: z
       .array(
@@ -171,6 +173,8 @@ const CaseQuestion = z.object({
   feedback: z.string().default(""),
   // open:
   minChars: z.number().int().positive().optional(),
+  /** Suggestion affichée dans la zone de réponse vide (« ex. … »). */
+  placeholder: z.string().optional(),
   /** Open answer re-used in the Bloc 4 certification project. */
   savedForProject: z.boolean().default(false),
 });
@@ -255,6 +259,8 @@ export const ScoredQuestion = z
     answerNumber: z.number().optional(), // numeric
     tolerance: z.number().nonnegative().optional(), // numeric (± accepted, default 0)
     accepted: z.array(z.string().trim().min(1)).min(1).optional(), // short (accepted answers)
+    /// numeric | short : suggestion affichée dans le champ de saisie vide.
+    placeholder: z.string().optional(),
   })
   .superRefine((q, ctx) => {
     const ty = q.type ?? "single"; // absent ⇒ single
@@ -417,7 +423,11 @@ const AnchoringPayload = z.object({
       .array(
         z.object({
           title: nonEmpty("titre d'habitude"),
-          fields: z.array(nonEmpty("champ")).min(1),
+          /// Chaîne simple (historique) OU { label, placeholder } pour porter la
+          /// suggestion affichée dans le champ vide — rétro-compatible.
+          fields: z
+            .array(z.union([nonEmpty("champ"), z.object({ label: nonEmpty("champ"), placeholder: z.string().default("") })]))
+            .min(1),
         }),
       )
       .min(1),
@@ -454,6 +464,8 @@ const CertificationPayload = z.object({
           day: z.number().int().min(1).max(60),
           prompt: injectable, // {{moment_ancrage}}
           minWords: z.number().int().min(1).default(50),
+          /// Suggestion affichée dans la zone de réponse vide.
+          placeholder: z.string().optional(),
         }),
       )
       .length(6, "exactement 6 micro-entrées de journal (2 semaines)")

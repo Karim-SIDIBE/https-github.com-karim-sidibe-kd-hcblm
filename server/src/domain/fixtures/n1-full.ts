@@ -337,6 +337,7 @@ const ms31: MicroSession = {
     feedbackText:
       "Évaluez votre rituel avec les 4 critères d'installation durable : (1) UN seul rituel — si vous en avez décrit plusieurs, gardez le premier, les autres viendront aux semaines 3 et 5 ; (2) accroché à un déclencheur existant (« après mon café », « en arrivant au bureau ») ; (3) assez petit pour survivre à une mauvaise semaine (15–20 min maximum) ; (4) protégé des imprévus de votre contexte (coupures, transport, sollicitations). Un rituel raté 3 jours de suite n'est pas un échec de volonté : c'est un rituel trop gros — réduisez-le.",
     minChars: 200,
+    placeholder: "ex. Chaque matin après mon café, avant d'ouvrir WhatsApp, je passe 10 minutes à écrire ma priorité du jour. Je le protège des coupures en…",
   },
 };
 
@@ -927,28 +928,28 @@ export const n1Full: CourseContent = {
           intro: "Transformez vos apprentissages en engagements concrets. Repartez de vos exercices précédents (rituel du Cas Sylvie, temps protégé du micro-exercice 1.5) — complétez et ajustez selon votre réalité africaine actuelle.",
           habits: [
             { title: "Habitude 1 — Semaines 1 et 2 : le rituel de lancement de journée", fields: [
-              "L'habitude concrète : chaque matin, avant d'ouvrir WhatsApp et mes emails, je passe … minutes à identifier ma seule priorité de la journée",
-              "Le moment précis · la durée (min)",
-              "Mon indicateur de réussite",
-              "L'obstacle africain que j'anticipe",
-              "Ma stratégie pour maintenir ce rituel malgré les imprévus",
+              { label: "L'habitude concrète : chaque matin, avant d'ouvrir WhatsApp et mes emails, je passe … minutes à identifier ma seule priorité de la journée", placeholder: "ex. 10 minutes, cahier fermé, avant le premier appel" },
+              { label: "Le moment précis · la durée (min)", placeholder: "ex. 7 h 45, 10 min" },
+              { label: "Mon indicateur de réussite", placeholder: "ex. 5 matins sur 5 avec ma priorité écrite avant 8 h" },
+              { label: "L'obstacle africain que j'anticipe", placeholder: "ex. les visites imprévues dès l'ouverture du bureau" },
+              { label: "Ma stratégie pour maintenir ce rituel malgré les imprévus", placeholder: "ex. arriver 15 min avant l'ouverture, porte fermée" },
             ] },
             { title: "Habitude 2 — Semaines 2 et 3 : le système de temps protégé", fields: [
-              "L'habitude concrète : chaque semaine, je protège … plage(s) de … minutes de travail concentré, communiquées à ma hiérarchie et mes collègues",
-              "Ma formulation de communication",
-              "Mon signal de concentration adapté à mon bureau africain",
+              { label: "L'habitude concrète : chaque semaine, je protège … plage(s) de … minutes de travail concentré, communiquées à ma hiérarchie et mes collègues", placeholder: "ex. 3 plages de 90 minutes" },
+              { label: "Ma formulation de communication", placeholder: "ex. « De 9 h à 10 h 30 je suis en travail concentré, je reviens vers vous à 11 h »" },
+              { label: "Mon signal de concentration adapté à mon bureau africain", placeholder: "ex. casque sur les oreilles + panneau « disponible à 11 h »" },
             ] },
             { title: "Habitude 3 — Semaines 3 et 4 : le rituel de planification hebdomadaire", fields: [
-              "L'habitude concrète : chaque … (jour), à … h, je consacre … minutes à identifier mes 3 résultats prioritaires et planifier mon buffer africain",
-              "Mon résultat prioritaire n° 1 de la semaine prochaine (à faire maintenant)",
-              "Mon résultat prioritaire n° 2",
-              "Mon résultat prioritaire n° 3",
+              { label: "L'habitude concrète : chaque … (jour), à … h, je consacre … minutes à identifier mes 3 résultats prioritaires et planifier mon buffer africain", placeholder: "ex. chaque vendredi, à 16 h, 30 minutes" },
+              { label: "Mon résultat prioritaire n° 1 de la semaine prochaine (à faire maintenant)", placeholder: "ex. finaliser le rapport trimestriel avant mercredi midi" },
+              { label: "Mon résultat prioritaire n° 2", placeholder: "ex. préparer la réunion budget avec les 3 chiffres clés" },
+              { label: "Mon résultat prioritaire n° 3", placeholder: "ex. former mon adjoint au suivi des dossiers clients" },
             ] },
             { title: "Mon signal de progression en 30 jours", fields: [
-              "D'ici 30 jours, le signe concret et observable qui me dira que ma gestion du temps s'est vraiment améliorée",
+              { label: "D'ici 30 jours, le signe concret et observable qui me dira que ma gestion du temps s'est vraiment améliorée", placeholder: "ex. je pars du bureau avant 18 h 3 jours sur 5, priorité du jour terminée" },
             ] },
             { title: "Mon pair de progression", fields: [
-              "Ce que je vais partager avec lui cette semaine",
+              { label: "Ce que je vais partager avec lui cette semaine", placeholder: "ex. mon rituel du matin et mon premier obstacle rencontré" },
             ] },
           ],
         },
@@ -1053,12 +1054,12 @@ export const n1Full: CourseContent = {
           // Cadence J+2 → J+15 avec la question spécifique de chaque micro-entrée
           // (énoncé « Journal des 2 semaines », réponses 50 à 100 mots).
           entries: [
-            { day: 2, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé à mettre en œuvre votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement — verbale, comportementale ou intérieure.", minWords: 50 },
-            { day: 4, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50 },
-            { day: 6, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre propre façon de répondre aux sollicitations depuis que vous avez commencé ? Donnez un exemple concret.", minWords: 50 },
-            { day: 9, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression ? Quelle a été sa perspective sur votre démarche dans votre contexte ?", minWords: 50 },
-            { day: 11, prompt: "En repartant de {{moment_ancrage}}, quelle est la micro-victoire de productivité la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50 },
-            { day: 15, prompt: "Par rapport à {{moment_ancrage}}, ce que ce parcours a transformé dans votre relation au temps dans votre organisation, et les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50 },
+            { day: 2, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé à mettre en œuvre votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement — verbale, comportementale ou intérieure.", minWords: 50, placeholder: "ex. Ce matin, quand j'ai annoncé ma plage de travail concentré, mon collègue a d'abord souri, puis…" },
+            { day: 4, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50, placeholder: "ex. Mardi, une visite surprise de 45 minutes a cassé ma plage protégée. J'ai décidé de…" },
+            { day: 6, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre propre façon de répondre aux sollicitations depuis que vous avez commencé ? Donnez un exemple concret.", minWords: 50, placeholder: "ex. Hier, au lieu de répondre immédiatement au message, j'ai noté la demande et proposé un créneau…" },
+            { day: 9, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression ? Quelle a été sa perspective sur votre démarche dans votre contexte ?", minWords: 50, placeholder: "ex. J'ai montré mon rituel du matin à Aïcha ; elle m'a fait remarquer que…" },
+            { day: 11, prompt: "En repartant de {{moment_ancrage}}, quelle est la micro-victoire de productivité la plus significative de ces 10 premiers jours ? Soyez précis et concret.", minWords: 50, placeholder: "ex. Vendredi, j'ai rendu le rapport avec un jour d'avance parce que mes deux plages protégées…" },
+            { day: 15, prompt: "Par rapport à {{moment_ancrage}}, ce que ce parcours a transformé dans votre relation au temps dans votre organisation, et les 3 prochaines occasions de reprendre du contrôle que vous avez identifiées.", minWords: 50, placeholder: "ex. Je ne subis plus mes matinées : je choisis. Mes 3 prochaines occasions : la réunion du lundi, …" },
           ],
         },
         rubric: {

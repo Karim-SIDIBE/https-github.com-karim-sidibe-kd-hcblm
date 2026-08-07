@@ -17,6 +17,8 @@ export type QuizQuestion = {
   tolerance?: number;
   accepted?: string[];
   feedbackText?: string;
+  /** In-field suggestion for numeric/short inputs (content-authored). */
+  placeholder?: string;
 };
 export type QuestionMeta = Record<string, { timeMs: number; feedbackViewed: boolean }>;
 
@@ -127,12 +129,12 @@ export function Quiz({ questions, onSubmit, draft }: {
       )}
 
       {type === "numeric" && (
-        <input className="hf-field" inputMode="decimal" type="text" placeholder={t("quiz.numPlaceholder")} value={chosen}
+        <input className="hf-field" inputMode="decimal" type="text" placeholder={q.placeholder || t("quiz.numPlaceholder")} value={chosen}
           disabled={!answered} onChange={(e) => set(e.target.value)} />
       )}
 
       {type === "short" && (
-        <input className="hf-field" type="text" placeholder={t("quiz.shortPlaceholder")} value={chosen}
+        <input className="hf-field" type="text" placeholder={q.placeholder || t("quiz.shortPlaceholder")} value={chosen}
           disabled={!answered} onChange={(e) => set(e.target.value)} />
       )}
 

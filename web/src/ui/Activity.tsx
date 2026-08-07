@@ -5,6 +5,7 @@ import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
 import { api } from "../lib/app";
+import { answerOf, useAnswers } from "../lib/answers";
 import { Breadcrumb } from "./Breadcrumb";
 import { useT, type TFn } from "../lib/i18n";
 
@@ -14,7 +15,7 @@ type Scenario = { title: string; contextAfricain?: string; steps: ScenarioStep[]
 type CaseQuestion = {
   id: string; kind: "mcq" | "open"; prompt: string;
   options?: Opt[]; correctKey?: string; allValid?: boolean; feedback?: string;
-  minChars?: number; savedForProject?: boolean;
+  minChars?: number; placeholder?: string; savedForProject?: boolean;
 };
 type CaseStep = { title: string; durationEstimate?: string; intro?: string; questions: CaseQuestion[] };
 type CaseSpec = {
@@ -39,6 +40,9 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   }, [eid]);
 
   const blk = useMemo(() => bundle?.content?.blocks?.find((x: any) => x.index === block), [bundle, block]);
+  // Frozen results: a completed activity is consultable, never redoable.
+  const answers = useAnswers(eid);
+  const done = answerOf(answers, block, itemKey);
 
   async function complete(itemType: string, data: unknown): Promise<unknown> {
     const r = await engine.commit(eid, "complete_item", { blockIndex: block, itemType, itemKey, data });
@@ -52,7 +56,16 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   const backToCourse = () => navigate(routes.cours(eid));
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={backToCourse}>{t("nav.backCourse")}</button>;
 
-  if (!bundle) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+  if (!bundle || answers === null) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
+
+  if (done) {
+    return (
+      <div className="stack">
+        <Breadcrumb eid={eid} block={blk} itemKey={itemKey} />
+        <FrozenActivity t={t} data={done.data} onContinue={() => advance()} />
+      </div>
+    );
+  }
 
   const p = blk?.payload ?? {};
   // The "case" key resolves to the Bloc 1 study OR the Bloc 3 transversal case.
@@ -74,6 +87,65 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
 
   if (!body) return <div className="stack"><Back /><p className="banner offline">{t("dl.notFound")}</p></div>;
   return <div className="stack"><Breadcrumb eid={eid} block={blk} itemKey={itemKey} />{body}</div>;
+}
+
+/**
+ * FrozenActivity — read-only recap of an already-completed activity, rendered
+ * from the RECORDED payload (whatever its shape: ratings, habits, mcq counts,
+ * open answers or free text). First submission is final (server-enforced).
+ */
+function FrozenActivity({ t, data, onContinue }: { t: TFn; data: unknown; onContinue: () => void }) {
+  const d = (data ?? {}) as {
+    ratings?: { criterion: string; level: string }[];
+    habits?: { title: string; values: Record<string, string> }[];
+    open?: Record<string, string>;
+    correct?: number; total?: number;
+    text?: string;
+  };
+  return (
+    <div className="stack">
+      <div className="hf-card hf-card--icy"><p className="body" style={{ margin: 0 }}>🔒 {t("frz.note")}</p></div>
+      {d.total != null && d.total > 0 && (
+        <div className="hf-card center stack">
+          <span className="hf-pill hf-pill--mint" style={{ alignSelf: "center" }}>{t("qz.correctCount", { correct: d.correct ?? 0, total: d.total })}</span>
+        </div>
+      )}
+      {(d.ratings?.length ?? 0) > 0 && (
+        <div className="hf-card stack" style={{ gap: 8 }}>
+          <div className="eyebrow">{t("frz.yourAnswer")}</div>
+          {d.ratings!.map((r) => (
+            <div key={r.criterion} className="row between" style={{ gap: 10 }}>
+              <span className="body">{r.criterion}</span>
+              <span className="hf-pill hf-pill--soft hf-pill--sm" style={{ whiteSpace: "nowrap" }}>{r.level}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {(d.habits?.length ?? 0) > 0 && d.habits!.map((h) => (
+        <div key={h.title} className="hf-card hf-card--stripe-orange stack" style={{ gap: 8 }}>
+          <strong className="h4">{h.title}</strong>
+          {Object.entries(h.values ?? {}).map(([label, v]) => (
+            <div key={label}><span className="meta">{label}</span><p className="body" style={{ margin: "2px 0 0", whiteSpace: "pre-wrap" }}>{v || "—"}</p></div>
+          ))}
+        </div>
+      ))}
+      {d.open && Object.values(d.open).some((v) => v) && (
+        <div className="hf-card stack" style={{ gap: 8 }}>
+          <div className="eyebrow">{t("frz.yourAnswer")}</div>
+          {Object.entries(d.open).filter(([, v]) => v).map(([k, v]) => (
+            <p key={k} className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{v}</p>
+          ))}
+        </div>
+      )}
+      {d.text && (
+        <div className="hf-card stack" style={{ gap: 6 }}>
+          <div className="eyebrow">{t("frz.yourAnswer")}</div>
+          <p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{d.text}</p>
+        </div>
+      )}
+      <button className="hf-btn hf-btn--primary hf-btn--block" onClick={onContinue}>{t("common.continue")}</button>
+    </div>
+  );
 }
 
 /** Guided scenarios: one situation at a time, immediate feedback per step. */
@@ -193,29 +265,34 @@ function SelfAssessment({ t, title, criteria, scale, onFinish }: {
   );
 }
 
-/** 30-day action plan: the learner writes each habit's concrete anchoring. */
+/** 30-day action plan: the learner writes each habit's concrete anchoring.
+ *  Fields come as plain strings (legacy) or { label, placeholder } — the
+ *  placeholder is the in-field suggestion shown on the first attempt. */
+type PlanField = string | { label: string; placeholder?: string };
+const planField = (f: PlanField) => (typeof f === "string" ? { label: f, placeholder: "" } : { label: f.label, placeholder: f.placeholder ?? "" });
+
 function ActionPlan({ t, title, intro, habits, onFinish }: {
-  t: TFn; title: string; intro?: string; habits: { title: string; fields: string[] }[];
+  t: TFn; title: string; intro?: string; habits: { title: string; fields: PlanField[] }[];
   onFinish: (data: unknown) => Promise<void>;
 }) {
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const vkey = (hi: number, f: string) => `${hi}:${f}`;
+  const vkey = (hi: number, label: string) => `${hi}:${label}`;
   const quality: string | null = (() => {
-    for (const [hi, h] of habits.entries()) for (const f of h.fields) {
-      const v = (values[vkey(hi, f)] ?? "").trim();
+    for (const [hi, h] of habits.entries()) for (const f of h.fields.map(planField)) {
+      const v = (values[vkey(hi, f.label)] ?? "").trim();
       if (!v) continue;
-      const r = assessmentReason(assessText(v, { requireNumber: fieldExpectsNumber(f) }), t);
-      if (r) return `${f} — ${r}`;
+      const r = assessmentReason(assessText(v, { requireNumber: fieldExpectsNumber(f.label, f.placeholder) }), t);
+      if (r) return `${f.label} — ${r}`;
     }
     return null;
   })();
-  const allDone = quality == null && habits.every((h, hi) => h.fields.every((f) => (values[vkey(hi, f)] ?? "").trim().length > 0));
+  const allDone = quality == null && habits.every((h, hi) => h.fields.map(planField).every((f) => (values[vkey(hi, f.label)] ?? "").trim().length > 0));
 
   async function submit() {
     setBusy(true);
     try {
-      const data = { habits: habits.map((h, hi) => ({ title: h.title, values: Object.fromEntries(h.fields.map((f) => [f, (values[vkey(hi, f)] ?? "").trim()])) })) };
+      const data = { habits: habits.map((h, hi) => ({ title: h.title, values: Object.fromEntries(h.fields.map(planField).map((f) => [f.label, (values[vkey(hi, f.label)] ?? "").trim()])) })) };
       await onFinish(data);
     } finally { setBusy(false); }
   }
@@ -227,9 +304,9 @@ function ActionPlan({ t, title, intro, habits, onFinish }: {
       {habits.map((h, hi) => (
         <div key={h.title} className="hf-card hf-card--stripe-orange stack">
           <strong className="h4">{h.title}</strong>
-          {h.fields.map((f) => (
-            <label key={f}>{f}
-              <input className="hf-field" value={values[vkey(hi, f)] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [vkey(hi, f)]: e.target.value }))}
+          {h.fields.map(planField).map((f) => (
+            <label key={f.label}>{f.label}
+              <input className="hf-field" value={values[vkey(hi, f.label)] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [vkey(hi, f.label)]: e.target.value }))}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             </label>
           ))}
@@ -376,7 +453,7 @@ function StructuredCase({ t, caseStudy, draft, aiFeedback, onFinish, onClose }: 
 
         {cur!.q.kind === "open" && (
           <div className="hf-textwrap">
-            <textarea className="hf-field" spellCheck lang="fr" value={chosen} disabled={phase !== "answer"} placeholder={t("act.openAnswerPh")} style={{ minHeight: 130 }}
+            <textarea className="hf-field" spellCheck lang="fr" value={chosen} disabled={phase !== "answer"} placeholder={cur!.q.placeholder || t("act.openAnswerPh")} style={{ minHeight: 130 }}
               onChange={(e) => setAnswers((a) => ({ ...a, [cur!.q.id]: e.target.value }))}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length} / {cur!.q.minChars ?? 20}</span>

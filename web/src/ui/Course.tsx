@@ -112,6 +112,8 @@ export function Course({ eid }: { eid: string }) {
 
   const stateOf = (i: number) => progress?.blocks.find((b) => b.index === i)?.state ?? (i === 0 ? "available" : "locked");
   const doneKeys = (i: number) => new Set(progress?.blocks.find((b) => b.index === i)?.completedKeys ?? []);
+  // Final quiz submitted but below its pass threshold: NOT done — must be retaken.
+  const failedFinal = (i: number) => Boolean((progress?.blocks.find((b) => b.index === i) as { failedThreshold?: boolean } | undefined)?.failedThreshold);
 
   // Progressive Bloc 4 : each journal micro-entry unlocks J+n days after the
   // completion of 4.3 ; Section 5 unlocks after sections 1–3 + the 6 entries.
@@ -184,7 +186,8 @@ export function Course({ eid }: { eid: string }) {
             })()}
             <div className="stack" style={{ marginTop: 12 }}>
               {items.map((it) => {
-                const isDone = isItemDone(it, done) || (it.kind === "onboarding" && st === "completed");
+                const retake = it.key === "final" && failedFinal(b.index);
+                const isDone = !retake && (isItemDone(it, done) || (it.kind === "onboarding" && st === "completed"));
                 const k = akey(b.index, it.key);
                 const av = avail[k];
                 const lock = itemLock(b as never, it, done, items);
@@ -204,9 +207,10 @@ export function Course({ eid }: { eid: string }) {
                     <div className="hf-rowtap row between" style={{ padding: "11px 13px", border: "1px solid var(--line)", borderRadius: "var(--r-md)", cursor: locked ? "default" : "pointer", ...(it.groupTitle ? { marginLeft: 16, borderLeft: "3px solid var(--line)" } : {}) }}
                       onClick={() => { if (!locked) onItem(b.index, it); }}>
                       <span className="row" style={{ gap: 11 }}>
-                        <span style={{ fontSize: 18 }}>{isDone ? "✅" : ICON[it.kind]}</span>
+                        <span style={{ fontSize: 18 }}>{retake ? "🔁" : isDone ? "✅" : ICON[it.kind]}</span>
                         <span>
                           <strong className="h4" style={{ fontWeight: 600 }}>{it.label}</strong>
+                          {retake ? <div className="meta" style={{ marginTop: 2, color: "var(--orange-600, #c2570f)" }}>{t("course.retakeFinal")}</div> : null}
                           {it.durationSec ? <div className="meta">{formatDuration(it.durationSec)}</div> : null}
                           {it.sublabel ? <div className="meta" style={{ marginTop: 2 }}>{it.sublabel}</div> : null}
                           {lock ? <div className="meta" style={{ marginTop: 2 }}>🔒 {lock}</div> : null}
