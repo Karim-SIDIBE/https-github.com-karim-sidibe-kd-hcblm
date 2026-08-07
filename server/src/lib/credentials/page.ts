@@ -8,8 +8,20 @@
  * the route fetches, this formats.
  */
 
+/** Platform branding shown in the page header (mirrors the PWA appbar:
+ *  logo icon + two-tone wordmark + "Opéré par …" attribution). */
+export type PageBrand = {
+  /** Public platform name, e.g. "DECLICK DIGITAL" (BRAND_NAME). */
+  name: string;
+  /** Operating department shown as attribution, e.g. "KOMPETENCES DECLICK". */
+  operator: string;
+  /** Logo icon as a data: URI (page must stay self-contained), or null. */
+  logoDataUri: string | null;
+};
+
 export type CredentialPageData = {
   id: string;
+  brand: PageBrand;
   /** Certificate issuer (CREDENTIAL_ISSUER_NAME — same name as in the Open
    *  Badge issuer document, e.g. "KOMPETENCES SOFT SKILLS"). The certification
    *  is issued by KOMPETENCES; DECLICK DIGITAL is the verifying platform. */
@@ -29,7 +41,31 @@ const esc = (s: string) =>
   s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
 const BLUE = "#1E5AA6";
-const ORANGE = "#F36F21";
+// PWA appbar palette (web/src/styles.css): navy wordmark, green second word,
+// muted attribution — the header must look like the app the learner knows.
+const NAVY = "#0B2455";
+const GREEN = "#2DAA4F";
+const MUTED = "#7C8AA3";
+
+/** Header identical in spirit to the PWA appbar: logo + "DECLICK DIGITAL"
+ *  (second word green) + "Opéré par KOMPETENCES DECLICK". Falls back to a
+ *  text-only wordmark when no logo is available. */
+function brandHeader(b: PageBrand, subtitle: string): string {
+  const words = b.name.trim().split(/\s+/);
+  const head = esc(words[0] ?? b.name);
+  const accent = esc(words.slice(1).join(" "));
+  const wordmark =
+    `<div style="font-weight:800;font-size:19px;letter-spacing:.3px;color:${NAVY};text-transform:uppercase;line-height:1">` +
+    `${head}${accent ? ` <span style="color:${GREEN}">${accent}</span>` : ""}</div>` +
+    `<div style="font-size:11px;color:${MUTED};font-weight:700;margin-top:3px">Opéré par ${esc(b.operator)}</div>`;
+  const logo = b.logoDataUri
+    ? `<img src="${b.logoDataUri}" alt="${esc(b.operator)}" style="width:44px;height:44px;object-fit:contain;flex:0 0 auto">`
+    : "";
+  return `<div style="padding:18px 0 14px">
+    <div style="display:flex;align-items:center;justify-content:center;gap:10px;text-align:left">${logo}<div>${wordmark}</div></div>
+    <div style="font-size:12px;color:#888;margin-top:8px;text-align:center">${esc(subtitle)}</div>
+  </div>`;
+}
 
 type Status = { badge: string; color: string; bg: string; note: string };
 
@@ -70,14 +106,11 @@ export function renderCredentialPage(d: CredentialPageData): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Vérification de certificat — DECLICK DIGITAL</title>
+<title>Vérification de certificat — ${esc(d.brand.name)}</title>
 </head>
 <body style="margin:0;background:#f4f6f9;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1b1b1b">
 <div style="max-width:640px;margin:0 auto;padding:24px 16px">
-  <div style="text-align:center;padding:18px 0 14px">
-    <div style="font-size:20px;font-weight:800;letter-spacing:.4px;color:${BLUE}">DECLICK <span style="color:${ORANGE}">DIGITAL</span></div>
-    <div style="font-size:12px;color:#888;margin-top:2px">Vérification de certificat</div>
-  </div>
+  ${brandHeader(d.brand, "Vérification de certificat")}
   <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(20,40,80,.08);overflow:hidden">
     <div style="background:${s.bg};padding:18px 22px;border-bottom:1px solid rgba(0,0,0,.05)">
       <div style="font-size:19px;font-weight:800;color:${s.color}">${s.badge}</div>
@@ -108,15 +141,15 @@ export function renderCredentialPage(d: CredentialPageData): string {
 }
 
 /** Browser-facing 404 (unknown or deleted credential id). */
-export function renderNotFoundPage(): string {
+export function renderNotFoundPage(brand: PageBrand): string {
   return `<!doctype html>
 <html lang="fr">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex">
-<title>Certificat introuvable — DECLICK DIGITAL</title></head>
+<title>Certificat introuvable — ${esc(brand.name)}</title></head>
 <body style="margin:0;background:#f4f6f9;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1b1b1b">
-<div style="max-width:640px;margin:0 auto;padding:48px 16px;text-align:center">
-  <div style="font-size:20px;font-weight:800;color:${BLUE}">DECLICK <span style="color:${ORANGE}">DIGITAL</span></div>
-  <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(20,40,80,.08);padding:32px 24px;margin-top:20px">
+<div style="max-width:640px;margin:0 auto;padding:24px 16px">
+  ${brandHeader(brand, "Vérification de certificat")}
+  <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(20,40,80,.08);padding:32px 24px;text-align:center">
     <div style="font-size:19px;font-weight:800;color:#b3261e">❌ Certificat introuvable</div>
     <div style="font-size:14px;color:#444;margin-top:10px;line-height:1.6">
       Aucun certificat ne correspond à cet identifiant. Vérifiez le lien ou le QR code,

@@ -4,6 +4,7 @@ import { renderCredentialPage, renderNotFoundPage, type CredentialPageData } fro
 
 const base: CredentialPageData = {
   id: "cred123",
+  brand: { name: "DECLICK DIGITAL", operator: "KOMPETENCES DECLICK", logoDataUri: "data:image/png;base64,AAAA" },
   issuerName: "KOMPETENCES SOFT SKILLS",
   holderName: "Awa Diallo",
   courseTitle: "Gestion du Temps & Productivité",
@@ -53,8 +54,22 @@ test("revocation wins over an invalid signature in the verdict", () => {
   assert.match(html, /Certificat révoqué/);
 });
 
-test("not-found page is standalone French HTML", () => {
-  const html = renderNotFoundPage();
+test("header mirrors the PWA appbar: logo + two-tone wordmark + operator", () => {
+  const html = renderCredentialPage(base);
+  assert.match(html, /<img src="data:image\/png;base64,AAAA"/);
+  assert.match(html, /DECLICK <span style="color:#2DAA4F">DIGITAL<\/span>/);
+  assert.match(html, /Opéré par KOMPETENCES DECLICK/);
+});
+
+test("missing logo falls back to the text wordmark", () => {
+  const html = renderCredentialPage({ ...base, brand: { ...base.brand, logoDataUri: null } });
+  assert.doesNotMatch(html, /<img /);
+  assert.match(html, /DECLICK <span/);
+});
+
+test("not-found page is standalone French HTML with the brand header", () => {
+  const html = renderNotFoundPage(base.brand);
   assert.match(html, /Certificat introuvable/);
   assert.match(html, /lang="fr"/);
+  assert.match(html, /Opéré par KOMPETENCES DECLICK/);
 });

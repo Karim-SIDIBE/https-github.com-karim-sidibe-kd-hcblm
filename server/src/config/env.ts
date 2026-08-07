@@ -37,6 +37,8 @@ const EnvSchema = z.object({
   APP_BASE_URL: z.string().url().optional(),
   /// Brand name used in transactional messages. Optional.
   BRAND_NAME: z.string().default("DECLICK DIGITAL"),
+  /// Operating department shown as attribution (« Opéré par … ») on public pages.
+  BRAND_OPERATOR: z.string().default("KOMPETENCES DECLICK"),
 
   // --- Moment d'Ancrage (PAM) capture policy (§6.1). ---
   /// Minimum PAM length enforced server-side (badge condition floor is 50;
