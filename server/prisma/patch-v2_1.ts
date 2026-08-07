@@ -15,6 +15,7 @@ import { PrismaClient, CourseStatus } from "@prisma/client";
 import { validateShape, validatePolicy } from "../src/domain/validation.js";
 import { indexCourseVersion } from "../src/modules/search/search.service.js";
 import { courseUnitTotals } from "../src/domain/content-model.js";
+import { applyMediaBindings, collectMediaBindings, mergeBindings, unboundSlots } from "../src/domain/media-bindings.js";
 import { n1Full } from "../src/domain/fixtures/n1-full.js";
 
 const prisma = new PrismaClient();
@@ -51,6 +52,19 @@ async function main() {
     process.exit(1);
   }
 
+  // 2 bis. PRÉSERVER les liaisons vidéo ↔ média (video.mediaId/url), configurées
+  // par l'admin dans l'éditeur et ABSENTES du fixture : sans ça, réécrire le
+  // contenu depuis le fixture rendrait toutes les vidéos « indisponibles ».
+  // On récupère les liaisons de TOUTES les versions du cours (la version publiée
+  // en cours, mais aussi le brouillon/archives — la plus récente non vide gagne),
+  // puis on les ré-applique sur le nouveau contenu.
+  const allVersions = await prisma.courseVersion.findMany({
+    where: { courseId: course.id }, orderBy: { version: "desc" }, select: { content: true },
+  });
+  const bindings = mergeBindings(allVersions.map((row) => collectMediaBindings(row.content as object)));
+  const rebound = applyMediaBindings(c as unknown as object, bindings);
+  const stillEmpty = unboundSlots(c as unknown as object);
+
   // 3. Mettre à jour EN PLACE le contenu de cette version (même id → FKs intactes).
   const before = await prisma.enrollment.count({ where: { courseId: course.id } });
   await prisma.courseVersion.update({
@@ -74,6 +88,7 @@ async function main() {
   console.log(`  Objectif     : ${c.objective ? "présent" : "ABSENT"}`);
   console.log(`  Unités       : ${totals.microSessions} micro-sessions · ${totals.longActivities} activités longues · ${totals.microTasks} micro-tâches`);
   console.log(`  Index        : ${idx.chunks} chunks (${idx.model})`);
+  console.log(`  Vidéos liées : ${rebound} liaison(s) média préservée(s)${stillEmpty.length ? ` · ${stillEmpty.length} sans source : ${stillEmpty.join(", ")}` : " · toutes les vidéos ont une source"}`);
   console.log(`  Inscriptions : ${before} avant → ${after} après (préservées)`);
 }
 
