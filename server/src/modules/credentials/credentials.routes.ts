@@ -1,9 +1,10 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, unrevoke, vcJwt, verify,
+  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, unrevoke, vcJwt, verificationData, verify,
 } from "./credentials.service.js";
 import { issuerDocument } from "../../lib/credentials/openbadge.js";
+import { renderCredentialPage, renderNotFoundPage } from "../../lib/credentials/page.js";
 import { audit } from "../../lib/audit.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
@@ -31,9 +32,26 @@ export async function credentialRoutes(app: FastifyInstance) {
   // --- public (verifiers / anyone): issuer, badge class, hosted assertion, VC, verify ---
   app.get("/credentials/issuer", async () => issuerDocument());
 
+  // The URL printed in every certificate's QR code. Content-negotiated:
+  // browsers (someone scanning the QR) get a human verification page; API
+  // clients and Open Badge validators keep the assertion JSON at the exact
+  // hosted URL the spec requires. `?format=json` forces JSON from a browser.
   app.get("/credentials/:id", async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    try { return await hostedAssertionDoc(id); } catch (err) { return handle(reply, err); }
+    const { format } = z.object({ format: z.enum(["json"]).optional() }).parse(req.query ?? {});
+    const wantsHtml = !format && (req.headers.accept ?? "").includes("text/html");
+    if (!wantsHtml) {
+      try { return await hostedAssertionDoc(id); } catch (err) { return handle(reply, err); }
+    }
+    try {
+      const page = renderCredentialPage(await verificationData(id));
+      return reply.header("content-type", "text/html; charset=utf-8").send(page);
+    } catch (err) {
+      if (err instanceof CredentialError && err.statusCode === 404) {
+        return reply.status(404).header("content-type", "text/html; charset=utf-8").send(renderNotFoundPage());
+      }
+      throw err;
+    }
   });
 
   app.get("/credentials/:id/vc", async (req, reply) => {
@@ -46,9 +64,10 @@ export async function credentialRoutes(app: FastifyInstance) {
     try { return await verify(body); } catch (err) { return handle(reply, err); }
   });
 
-  // Convenience GET verify for QR/links.
+  // Convenience GET verify for QR/links. Browsers are sent to the human page.
   app.get("/credentials/:id/verify", async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
+    if ((req.headers.accept ?? "").includes("text/html")) return reply.redirect(`/api/v1/credentials/${encodeURIComponent(id)}`);
     try { return await verify({ credentialId: id }); } catch (err) { return handle(reply, err); }
   });
 

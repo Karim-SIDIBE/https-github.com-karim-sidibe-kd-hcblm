@@ -207,6 +207,30 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
   return { rows, total, valid, revoked };
 }
 
+/** Data for the human verification page (the URL the certificate QR encodes).
+ *  Live: revocation and the VC signature are checked at request time. */
+export async function verificationData(id: string) {
+  const c = await prisma.credential.findUnique({
+    where: { id }, include: { enrollment: { include: { user: { select: { name: true } }, courseVersion: { select: { title: true, level: true, content: true } } } } },
+  });
+  if (!c) throw new CredentialError(404, "not_found", "Credential introuvable");
+  const a = c.assertion as { badge?: { name?: string } };
+  const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3 } | null;
+  const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
+  const v = await verify({ credentialId: id });
+  return {
+    id: c.id,
+    holderName: c.enrollment.user.name,
+    courseTitle: c.enrollment.courseVersion.title,
+    achievementName: a.badge?.name ?? c.achievementType,
+    level,
+    issuedOn: c.issuedAt,
+    revoked: Boolean(c.revokedAt),
+    revocationReason: c.revocationReason ?? null,
+    signatureValid: !("error" in v),
+  };
+}
+
 /** Certificate PDF for a credential. */
 export async function certificate(id: string): Promise<Buffer> {
   const c = await prisma.credential.findUnique({
