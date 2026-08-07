@@ -15,6 +15,7 @@ import {
   hostedAssertion, verifiableCredential, issuerId, credentialUrl, type AchievementInput,
 } from "../../lib/credentials/openbadge.js";
 import { certificatePdf } from "../../lib/credentials/pdf.js";
+import { env } from "../../config/env.js";
 import { badgeTypeForBlock } from "../../domain/engine/badges.js";
 import type { CourseContent, Block } from "../../domain/content-model.js";
 
@@ -220,6 +221,7 @@ export async function verificationData(id: string) {
   const v = await verify({ credentialId: id });
   return {
     id: c.id,
+    issuerName: env.CREDENTIAL_ISSUER_NAME,
     holderName: c.enrollment.user.name,
     courseTitle: c.enrollment.courseVersion.title,
     achievementName: a.badge?.name ?? c.achievementType,

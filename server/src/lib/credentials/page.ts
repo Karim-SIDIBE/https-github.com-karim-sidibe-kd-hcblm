@@ -10,6 +10,10 @@
 
 export type CredentialPageData = {
   id: string;
+  /** Certificate issuer (CREDENTIAL_ISSUER_NAME — same name as in the Open
+   *  Badge issuer document, e.g. "KOMPETENCES SOFT SKILLS"). The certification
+   *  is issued by KOMPETENCES; DECLICK DIGITAL is the verifying platform. */
+  issuerName: string;
   holderName: string;
   courseTitle: string;
   achievementName: string;
@@ -49,7 +53,7 @@ function status(d: CredentialPageData): Status {
   return {
     badge: "✅ Certificat valide",
     color: "#1e7e34", bg: "#e8f5e9",
-    note: "Ce certificat a été émis par DECLICK DIGITAL et sa signature électronique a été vérifiée à l'instant.",
+    note: `Ce certificat a été émis par ${d.issuerName} et sa signature électronique a été vérifiée à l'instant.`,
   };
 }
 

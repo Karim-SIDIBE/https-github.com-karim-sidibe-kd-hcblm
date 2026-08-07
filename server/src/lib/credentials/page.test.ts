@@ -4,6 +4,7 @@ import { renderCredentialPage, renderNotFoundPage, type CredentialPageData } fro
 
 const base: CredentialPageData = {
   id: "cred123",
+  issuerName: "KOMPETENCES SOFT SKILLS",
   holderName: "Awa Diallo",
   courseTitle: "Gestion du Temps & Productivité",
   achievementName: "Certificat de Compétences — Niveau 1",
@@ -17,6 +18,8 @@ const base: CredentialPageData = {
 test("valid credential renders a green verdict with holder and course", () => {
   const html = renderCredentialPage(base);
   assert.match(html, /Certificat valide/);
+  assert.match(html, /émis par KOMPETENCES SOFT SKILLS/); // issuer ≠ platform
+  assert.doesNotMatch(html, /émis par DECLICK/);
   assert.match(html, /Awa Diallo/);
   assert.match(html, /Gestion du Temps &amp; Productivité/);
   assert.match(html, /Niveau 1/);
