@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, revoke, unrevoke, vcJwt, verificationData, verify,
+  CredentialError, certificate, hostedAssertionDoc, listAllCredentials, listForEnrollment, pageBrand, revoke, unrevoke, vcJwt, verificationData, verify,
 } from "./credentials.service.js";
 import { issuerDocument } from "../../lib/credentials/openbadge.js";
 import { renderCredentialPage, renderNotFoundPage } from "../../lib/credentials/page.js";
@@ -48,7 +48,7 @@ export async function credentialRoutes(app: FastifyInstance) {
       return reply.header("content-type", "text/html; charset=utf-8").send(page);
     } catch (err) {
       if (err instanceof CredentialError && err.statusCode === 404) {
-        return reply.status(404).header("content-type", "text/html; charset=utf-8").send(renderNotFoundPage());
+        return reply.status(404).header("content-type", "text/html; charset=utf-8").send(renderNotFoundPage(pageBrand()));
       }
       throw err;
     }

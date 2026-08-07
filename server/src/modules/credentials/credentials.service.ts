@@ -15,6 +15,10 @@ import {
   hostedAssertion, verifiableCredential, issuerId, credentialUrl, type AchievementInput,
 } from "../../lib/credentials/openbadge.js";
 import { certificatePdf } from "../../lib/credentials/pdf.js";
+import type { PageBrand } from "../../lib/credentials/page.js";
+import { env } from "../../config/env.js";
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { badgeTypeForBlock } from "../../domain/engine/badges.js";
 import type { CourseContent, Block } from "../../domain/content-model.js";
 
@@ -207,6 +211,22 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
   return { rows, total, valid, revoked };
 }
 
+// Header logo for the verification page, inlined so the page stays
+// self-contained. Read once (or null when the asset is absent).
+let logoCache: string | null | undefined;
+function logoDataUri(): string | null {
+  if (logoCache === undefined) {
+    const p = resolve("assets/brand/logo-icon.png");
+    logoCache = existsSync(p) ? `data:image/png;base64,${readFileSync(p).toString("base64")}` : null;
+  }
+  return logoCache;
+}
+
+/** Platform branding for the public pages (same model as the PWA appbar). */
+export function pageBrand(): PageBrand {
+  return { name: env.BRAND_NAME, operator: env.BRAND_OPERATOR, logoDataUri: logoDataUri() };
+}
+
 /** Data for the human verification page (the URL the certificate QR encodes).
  *  Live: revocation and the VC signature are checked at request time. */
 export async function verificationData(id: string) {
@@ -220,6 +240,8 @@ export async function verificationData(id: string) {
   const v = await verify({ credentialId: id });
   return {
     id: c.id,
+    brand: pageBrand(),
+    issuerName: env.CREDENTIAL_ISSUER_NAME,
     holderName: c.enrollment.user.name,
     courseTitle: c.enrollment.courseVersion.title,
     achievementName: a.badge?.name ?? c.achievementType,

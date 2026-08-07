@@ -37,6 +37,8 @@ const EnvSchema = z.object({
   APP_BASE_URL: z.string().url().optional(),
   /// Brand name used in transactional messages. Optional.
   BRAND_NAME: z.string().default("DECLICK DIGITAL"),
+  /// Operating department shown as attribution (« Opéré par … ») on public pages.
+  BRAND_OPERATOR: z.string().default("KOMPETENCES DECLICK"),
 
   // --- Moment d'Ancrage (PAM) capture policy (§6.1). ---
   /// Minimum PAM length enforced server-side (badge condition floor is 50;
@@ -70,7 +72,7 @@ const EnvSchema = z.object({
 
   // --- public base + verifiable credentials (Open Badges 2.0 / 3.0) ---
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
-  CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES AFRICA"),
+  CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES SOFT SKILLS"),
   CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
 
   // --- authentication (first-party JWT, OAuth 2.1 / OIDC) ---
