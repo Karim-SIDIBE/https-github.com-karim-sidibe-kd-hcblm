@@ -25,7 +25,12 @@ type Bundle = {
   mediaAssets?: { mediaId: string; renditions: Rendition[] }[];
 };
 
-const MEDIA_CACHE = "klms-media";
+// Must match the service worker's media runtimeCaching cacheName (vite.config.ts).
+// Bumped to -v2 to abandon the legacy "klms-media" cache, which the old
+// NetworkFirst+[200,206] rule could poison with 206 byte-range partials that
+// broke playback on flaky networks. The legacy cache is purged on startup.
+const MEDIA_CACHE = "klms-media-v2";
+const LEGACY_MEDIA_CACHES = ["klms-media"];
 const TTL_DAYS = 7;
 const TTL_MS = TTL_DAYS * 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,6 +73,17 @@ function videoUrls(bundle: Bundle, blockIndex: number, sessionId: string, video:
 }
 
 /** URLs to cache for offline use of ONE element. Light-only elements return []. */
+/** Drop the legacy media cache(s) that the old NetworkFirst rule could poison
+ *  with 206 partials. Fire-and-forget at startup — safe if already gone. */
+export function purgeLegacyMediaCaches(): void {
+  if (typeof caches === "undefined") return;
+  void (async () => {
+    for (const name of LEGACY_MEDIA_CACHES) {
+      try { await caches.delete(name); } catch { /* no storage */ }
+    }
+  })();
+}
+
 export function itemMediaUrls(bundle: Bundle, blockIndex: number, itemKey: string): string[] {
   const block = bundle.content.blocks.find((b) => b.index === blockIndex);
   if (!block) return [];

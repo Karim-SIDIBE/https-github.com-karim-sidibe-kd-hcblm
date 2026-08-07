@@ -31,20 +31,26 @@ export default defineConfig({
         runtimeCaching: [
           {
             // Media (video/captions). NetworkFirst so ONLINE playback always
-            // streams from the API (range/seek honoured server-side, never blocked
-            // by a stale/partial cache entry), while OFFLINE falls back to whatever
-            // the per-element "Rendre disponible hors ligne" action cached.
-            // CacheFirst here was a trap: a single opaque/partial response would
-            // poison playback indefinitely (the SW never re-hit the network).
-            // Only full/range 200/206 are cacheable — never opaque (0).
+            // streams from the network (range/seek honoured server-side); OFFLINE
+            // falls back to whatever the per-element "Rendre disponible hors ligne"
+            // action stored (always a FULL 200, fetched without a Range header).
+            //
+            // Only status 200 is cacheable — NEVER 206. A cached 206 is a single
+            // byte-range; when RangeRequestsPlugin later slices a *different* range
+            // out of it the <video> receives the wrong bytes and refuses to play.
+            // On a slow/flaky connection NetworkFirst's timeout used to fall back
+            // to exactly such a poisoned partial, so videos stopped playing until
+            // the cache expired. Capping to 200 keeps the fallback correct
+            // (a full file can always be range-sliced); the cache name is bumped
+            // so any partials already stored on a device are abandoned, not read.
             urlPattern: ({ request, url }) =>
               request.destination === "video" || request.destination === "track" || /\/media\//.test(url.pathname),
             handler: "NetworkFirst",
             options: {
-              cacheName: "klms-media",
+              cacheName: "klms-media-v2",
               rangeRequests: true,
               networkTimeoutSeconds: 10,
-              cacheableResponse: { statuses: [200, 206] },
+              cacheableResponse: { statuses: [200] },
               expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 7 },
             },
           },
