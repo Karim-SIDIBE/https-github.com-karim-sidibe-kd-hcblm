@@ -448,6 +448,52 @@ const AnchoringPayload = z.object({
   }),
 });
 
+// ---------------------------------------------------------------------------
+// Grille certifiante — socle commun d'évaluation v1.1 + annexe de parcours.
+// « Noter par bande, jamais par points libres » : chaque critère porte 4
+// descripteurs de bande à plages contiguës couvrant toute la pondération, un
+// minimum éventuel (non-compensation) et la ligne « où chercher la preuve »
+// (reprise mot pour mot par la déclaration d'absence de la suggestion IA).
+// Tous les nouveaux champs sont OPTIONNELS : une grille plate antérieure reste
+// valide — la notation par bande ne s'active que si les bandes sont déclarées.
+// ---------------------------------------------------------------------------
+
+export const RubricBand = z.object({
+  /** 4 = bande haute … 1 = bande basse. */
+  band: z.number().int().min(1).max(4),
+  /** Plage de points de la bande, bornes incluses. */
+  scoreRange: z.tuple([z.number().int().min(0), z.number().int().min(0)]),
+  /** Ce que le dossier doit montrer — éléments observables et citables. */
+  descriptor: nonEmpty("descripteur de bande"),
+});
+export type RubricBand = z.infer<typeof RubricBand>;
+
+export const RubricCriterion = z.object({
+  label: nonEmpty("intitulé du critère"),
+  competencyCode: z.string().default(""),
+  weightPoints: z.number().int().positive(),
+  /** Origine du critère : `annexe` (compétences du domaine) ou `socle`
+   *  (S1-S4, identiques dans tous les parcours). */
+  origin: z.enum(["annexe", "socle"]).optional(),
+  /** Minimum de non-compensation (socle §6 : 50 % arrondi au supérieur).
+   *  Absent = critère du bloc libre. */
+  minPoints: z.number().int().min(0).optional(),
+  /** « Où chercher la preuve » — sections du dossier, ligne reprise par la
+   *  déclaration d'absence. */
+  whereToLook: z.string().optional(),
+  /** Les 4 descripteurs de bande (bande 4 → 1). Présents = notation par bande
+   *  et preuve obligatoire par critère. */
+  bands: z.array(RubricBand).length(4, "exactement 4 bandes").optional(),
+});
+export type RubricCriterion = z.infer<typeof RubricCriterion>;
+
+export const RubricSchema = z.object({
+  criteria: z.array(RubricCriterion).min(1),
+  totalPoints: z.literal(100),
+  threshold: z.number().int().min(0).max(100),
+});
+export type Rubric = z.infer<typeof RubricSchema>;
+
 const CertificationPayload = z.object({
   projectBrief: injectable, // {{moment_ancrage}}
   sections: z
@@ -482,19 +528,7 @@ const CertificationPayload = z.object({
         }
       }),
   }),
-  rubric: z.object({
-    criteria: z
-      .array(
-        z.object({
-          label: nonEmpty("intitulé du critère"),
-          competencyCode: z.string().default(""),
-          weightPoints: z.number().int().positive(),
-        }),
-      )
-      .min(1),
-    totalPoints: z.literal(100),
-    threshold: z.number().int().min(0).max(100),
-  }),
+  rubric: RubricSchema,
   evaluation: z.object({
     humanEvaluator: z.literal(true).default(true),
     turnaroundDays: z.number().int().positive().default(5),

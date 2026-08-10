@@ -103,3 +103,47 @@ test("v2.2 : une vidéo de plus de 10 minutes lève un avertissement", () => {
   assert.equal(p.publishable, true);
   assert.ok(p.issues.some((i) => i.rule === "video.max10min"));
 });
+
+// --- Socle d'évaluation v1.1 — grille à bandes -------------------------------
+
+test("socle §1 : un seuil de grille ≠ 70 bloque la publication (70 à tous les niveaux)", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone(s.ok && s.content);
+  c.blocks[4].payload.rubric.threshold = 80;
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "threshold.rubric"));
+});
+
+test("gabarit §4 : un trou entre deux bandes bloque la publication", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone(s.ok && s.content);
+  c.blocks[4].payload.rubric.criteria[0].bands[1].scoreRange = [12, 15]; // 11 orphelin
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.bands"));
+});
+
+test("socle §2.3 : une répartition qui casse la non-compensation bloque la publication", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone(s.ok && s.content);
+  // Relever les minimums : 15+15+15+8 = 53 + bloc libre 25 = 78 ≥ 70.
+  for (const cr of c.blocks[4].payload.rubric.criteria.slice(0, 3)) cr.minPoints = 15;
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.nonCompensation"));
+});
+
+test("la grille officielle annexe v1.1 + socle v1.1 du canonique est publiable", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const p = validatePolicy((s as any).content);
+  assert.equal(p.publishable, true);
+  const crits = (s as any).content.blocks[4].payload.rubric.criteria;
+  assert.equal(crits.length, 6);
+  assert.ok(crits.every((cr: any) => cr.bands?.length === 4));
+  assert.deepEqual(crits.map((cr: any) => cr.minPoints ?? null), [10, 10, 10, 8, null, null]);
+});

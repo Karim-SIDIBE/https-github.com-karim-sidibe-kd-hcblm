@@ -12,13 +12,14 @@ test("scaffold for a Niveau 2 course is shape- and policy-valid", () => {
   assert.equal(p.publishable, true, JSON.stringify(p.issues.filter((i) => i.level === "error")));
 });
 
-test("scaffold thresholds follow the level", () => {
+test("scaffold : quiz final au seuil du niveau, grille certifiante à 70 partout (socle §1)", () => {
   const c2: any = buildScaffold({ domainCode: "D5", domainLabel: "X", level: 2 });
   assert.equal(c2.passThreshold, 75);
   assert.equal(c2.blocks[3].payload.finalQuiz.passThreshold, 75);
-  assert.equal(c2.blocks[4].payload.rubric.threshold, 75);
+  assert.equal(c2.blocks[4].payload.rubric.threshold, 70);
   const sum = c2.blocks[4].payload.rubric.criteria.reduce((a: number, x: any) => a + x.weightPoints, 0);
   assert.equal(sum, 100);
   const c3: any = buildScaffold({ domainCode: "D5", domainLabel: "X", level: 3 });
   assert.equal(c3.passThreshold, 80);
+  assert.equal(c3.blocks[4].payload.rubric.threshold, 70);
 });

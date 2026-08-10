@@ -67,7 +67,7 @@ export function Project({ eid }: { eid: string }) {
 
   // --- already submitted → lifecycle status ---
   if (status) {
-    const STATUS_FR: Record<string, string> = { SUBMITTED: t("pj.st.submitted"), ASSIGNED: t("pj.st.assigned"), PASSED: t("pj.st.passed"), REVISION_REQUESTED: t("pj.st.revision") };
+    const STATUS_FR: Record<string, string> = { SUBMITTED: t("pj.st.submitted"), ASSIGNED: t("pj.st.assigned"), PASSED: t("pj.st.passed"), REVISION_REQUESTED: t("pj.st.revision"), NOT_CERTIFIED: t("pj.st.notCertified") };
     const pillCls = status.result === "PASS" ? "hf-pill--mint" : status.result === "FAIL" ? "hf-pill--orange" : "hf-pill--soft";
     return (
       <div className="stack">

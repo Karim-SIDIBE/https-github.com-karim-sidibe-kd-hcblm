@@ -20,6 +20,7 @@ import {
   type Block,
   type CourseContent as CourseContentT,
 } from "./content-model.js";
+import { bandContiguityIssues, nonCompensationCheck } from "./engine/certification.js";
 
 export type ValidationIssue = {
   level: "error" | "warning";
@@ -146,6 +147,25 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
     const sum = certification.payload.rubric.criteria.reduce((a, c) => a + c.weightPoints, 0);
     if (sum !== 100)
       err("rubric.total", "blocks[4].payload.rubric.criteria", `la somme des points de la grille doit faire 100 (actuel : ${sum})`);
+
+    // --- Gabarit d'annexe §4 (contrôles avant chargement) — grille à bandes ---
+    const criteria = certification.payload.rubric.criteria;
+    criteria.forEach((c, i) => {
+      if (c.minPoints != null && c.minPoints > c.weightPoints)
+        err("rubric.minPoints", `blocks[4].payload.rubric.criteria[${i}]`, `minimum (${c.minPoints}) supérieur à la pondération (${c.weightPoints})`);
+      if (c.bands?.length) {
+        for (const issue of bandContiguityIssues(c))
+          err("rubric.bands", `blocks[4].payload.rubric.criteria[${i}].bands`, `« ${c.label} » : ${issue}`);
+      }
+    });
+    // Non-compensation (socle §2.3) : le maximum atteignable au strict minimum
+    // doit rester SOUS le seuil, sinon la certification attesterait d'une
+    // compétence non démontrée.
+    if (criteria.some((c) => c.minPoints != null)) {
+      const nc = nonCompensationCheck(criteria, certification.payload.rubric.threshold);
+      if (!nc.ok)
+        err("rubric.nonCompensation", "blocks[4].payload.rubric.criteria", `non-compensation : ${nc.minimumsSum} (minimums) + ${nc.freeSum} (bloc libre) = ${nc.maxAtStrictMinimums} ≥ seuil ${certification.payload.rubric.threshold} — répartition à revoir`);
+    }
   }
 
   // --- thresholds consistent with level ---
@@ -154,8 +174,12 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
     err("threshold.level", "passThreshold", `seuil attendu ${expected}% pour le Niveau ${content.level} (reçu ${content.passThreshold}%)`);
   if (anchoring && anchoring.payload.finalQuiz.passThreshold !== content.passThreshold)
     err("threshold.finalQuiz", "blocks[3].payload.finalQuiz.passThreshold", `le seuil du quiz final doit valoir ${content.passThreshold}%`);
-  if (certification && certification.payload.rubric.threshold !== expected)
-    err("threshold.rubric", "blocks[4].payload.rubric.threshold", `le seuil de la grille doit valoir ${expected}% pour le Niveau ${content.level}`);
+  // Socle commun d'évaluation v1.1 (§1) : le seuil de certification est de
+  // 70 points À TOUS LES NIVEAUX — l'exigence monte par les descripteurs et
+  // les minimums, pas par le seuil. (Le 70/75/80 par niveau ne s'applique
+  // qu'au quiz final du Bloc 3, ci-dessus.)
+  if (certification && certification.payload.rubric.threshold !== 70)
+    err("threshold.rubric", "blocks[4].payload.rubric.threshold", `le seuil de la grille certifiante est de 70 points à tous les niveaux (socle §1 — reçu ${certification.payload.rubric.threshold})`);
 
   // --- every badge has at least one completion condition (shape guarantees ≥1;
   //     this guards against whitespace-only conditions) ---
