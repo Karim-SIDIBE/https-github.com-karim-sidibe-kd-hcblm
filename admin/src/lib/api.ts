@@ -198,7 +198,33 @@ export type Cohort = { id: string; name: string; courseId: string | null; create
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; joinUrl?: string | null; _count?: { registrations: number } };
 export type SessionRegistrant = { userId: string; attended: boolean; attendanceMinutes: number | null; registeredAt: string; user: { id: string; name: string; email: string } };
 export type CohortDetail = { id: string; name: string; courseId: string | null; courseSlug: string | null; createdAt: string; threads: number; members: { id: string; name: string; email: string; role: string; since: string }[] };
-export type RubricSuggestion = { perCriterion: { label: string; weightPoints: number; suggested: number; comment: string }[]; suggestedTotal: number; summary: string; aiGenerated: boolean; provider: string };
+/** Suggestion §8 : preuve par critère (citations vérifiées par la plateforme
+ *  ou déclaration d'absence) + verdict de vérification. */
+export type SuggestedCriterion = {
+  label: string; weightPoints: number; suggested: number; comment: string;
+  citations?: string[]; absence?: string;
+  verification?: { label: string; ok: boolean; issues: string[] };
+};
+export type RubricSuggestion = {
+  id?: string;
+  feedback?: string; criteria?: SuggestedCriterion[]; suggestedScore?: number | null;
+  aiGenerated?: boolean; provider?: string; gridVersion?: string; blocked?: boolean;
+};
+/** Calibration de la suggestion (§8.8) — clé (parcours, modèle, version de grille). */
+export type AiCalibrationStatus = {
+  active: boolean; provider: string; gridVersion: string | null;
+  latest: { id: string; passed: boolean; createdAt: string; results: { label: string; referenceTotal: number; proposedTotal: number; totalGap: number; maxBandDeviation: number; evidenceOk: boolean; ok: boolean }[] } | null;
+};
+/** Indicateurs de surveillance §8.10. */
+export type AiComplianceIndicators = {
+  totals: { suggestions: number; blocked: number; displayed: number; linkedToFinal: number };
+  criteria: {
+    label: string; requests: number;
+    blockRatePct: number | null; blockAlert: boolean;
+    concordancePct: number | null; concordanceAlert: boolean;
+    evidenceIdentityPct: number | null; identityAlert: boolean;
+  }[];
+};
 export type CredentialRow = {
   id: string; achievementType: string; badgeLabel: string; issuedAt: string;
   revoked: boolean; revocationReason: string | null;
@@ -224,8 +250,9 @@ export type RubricCriterion = {
   minPoints?: number; origin?: "annexe" | "socle"; whereToLook?: string; bands?: RubricBand[];
 };
 export type EvalQueueItem = {
-  enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
+  enrollmentId: string; learner: { name: string; email: string }; courseId: string; courseTitle: string;
   submittedAt: string; revisionStatus: string; scoreTotal: number | null;
+  draftAt: string | null; appealStage: number;
   evaluator: { id: string; name: string } | null;
   rubric: { criteria: RubricCriterion[]; threshold: number } | null;
   /** Part calculée par la plateforme du critère S1 (socle §3) : décompte des
@@ -395,6 +422,13 @@ export const api = {
     return res.blob();
   },
   rubricSuggestion: (enrollmentId: string) => req<RubricSuggestion>("POST", `/enrollments/${enrollmentId}/rubric-suggestion`, {}),
+  saveEvaluationDraft: (enrollmentId: string, criteria: { index: number; points: number; evidence?: string }[]) =>
+    req<{ draft: unknown; draftAt: string }>("PUT", `/enrollments/${enrollmentId}/evaluation/draft`, { criteria }),
+  aiCalibrationStatus: (courseId: string) => req<AiCalibrationStatus>("GET", `/ai-calibration/${courseId}`),
+  runAiCalibration: (courseId: string, runs: { label: string; text: string; reference: number[] }[]) =>
+    req<AiCalibrationStatus["latest"]>("POST", "/ai-calibration", { courseId, runs }),
+  aiCompliance: (courseId?: string) =>
+    req<AiComplianceIndicators>("GET", `/analytics/ai-compliance${courseId ? `?courseId=${encodeURIComponent(courseId)}` : ""}`),
   updateBankQuestion: (id: string, b: { question?: unknown; subArea?: string; level?: string }) => req<BankQuestion>("PATCH", `/bank/questions/${id}`, b),
   // --- paged lists (M2: real server-side pagination/sort/search) ---
   usersPaged: (p: { q?: string; page?: number; pageSize?: number; sort?: string }) => reqPaged<Paged<UserRow>>("/users", p),

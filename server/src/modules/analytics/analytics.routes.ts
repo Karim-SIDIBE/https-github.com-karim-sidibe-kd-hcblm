@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, compareInsights, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, exploreStatements, khcblmTargets, learnerDiagnostic, overview, pamExport, toCsv, transcript,
+  AnalyticsError, aiComplianceIndicators, atRiskLearners, cohortReport, compareInsights, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, exploreStatements, khcblmTargets, learnerDiagnostic, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
@@ -47,6 +47,12 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get("/analytics/khcblm-targets", { preHandler: guard("analytics:read") }, async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string().optional() }).parse(req.query ?? {});
     try { return { data: await khcblmTargets(courseId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Indicateurs de surveillance de la suggestion automatisée (socle §8.10).
+  app.get("/analytics/ai-compliance", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string().optional() }).parse(req.query ?? {});
+    try { return { data: await aiComplianceIndicators(courseId) }; } catch (err) { return handle(reply, err); }
   });
 
   // Course aggregates + funnel + Block 4 completion forecast (optional date range).

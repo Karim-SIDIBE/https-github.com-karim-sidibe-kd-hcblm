@@ -8,8 +8,13 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type Block, type CourseContent as CourseContentT } from "../../domain/content-model.js";
+import { checkCalibration, verifyEvidence } from "../../domain/engine/ai-compliance.js";
+import { hasPermission } from "../../domain/auth/permissions.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { env } from "../../config/env.js";
+import { aiAvailable } from "../../lib/ai/client.js";
 import { generateFormativeFeedback, suggestRubricScores } from "../../lib/ai/feedback.js";
+import type { Principal } from "../../lib/auth.js";
 
 export class FeedbackError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -110,7 +115,24 @@ function resolveItemContext(block: Block | undefined, itemKey: string): { itemLa
   return { itemLabel: itemKey, promptContext: "" };
 }
 
-export async function requestRubricSuggestion(enrollmentId: string) {
+/** Identifiant du moteur de suggestion courant — clé de calibration §8.8. */
+export function currentAiProvider(): string {
+  return aiAvailable() ? env.AI_MODEL : "heuristic";
+}
+
+const gridVersionOf = (v: { version: number; id: string }) => `v${v.version} (${v.id})`;
+
+/**
+ * Suggestion de notation (socle §8). Gardes, DANS L'ORDRE :
+ *   §8.2 — réservée à l'évaluateur ASSIGNÉ au dossier ou à un administrateur ;
+ *   §8.7 — indisponible en procédure de recours (notation à l'aveugle) ;
+ *   §8.8 — indisponible tant que la calibration (parcours + modèle + version
+ *          de grille) n'est pas passée ;
+ *   §8.6 — ne s'affiche qu'APRÈS saisie et enregistrement du score humain ;
+ *   §8.4/§8.5 — preuve vérifiée par la plateforme, tout-ou-rien : un critère
+ *          en échec → aucune suggestion (l'échec est journalisé, §8.10).
+ */
+export async function requestRubricSuggestion(enrollmentId: string, principal?: Principal) {
   const { enrollment, content } = await load(enrollmentId);
   const cert = content.blocks.find((b) => b.type === "CERTIFICATION");
   if (cert?.type !== "CERTIFICATION") throw new FeedbackError(409, "no_block", "Bloc 4 absent");
@@ -119,25 +141,139 @@ export async function requestRubricSuggestion(enrollmentId: string) {
   const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
   const project = enrollment.completions.find((c) => c.blockIndex === cert.index && c.itemKey === "project");
   if (!submission && !project) throw new FeedbackError(404, "no_submission", "Aucun projet soumis");
+
+  if (principal) {
+    const isAdmin = hasPermission(principal.role, "user:manage");
+    if (!isAdmin && submission?.evaluatorId !== principal.id) {
+      throw new FeedbackError(403, "not_assigned", "Suggestion réservée à l'évaluateur assigné au dossier ou à un administrateur (§8.2)");
+    }
+  }
+  if ((submission?.appealStage ?? 0) > 0) {
+    throw new FeedbackError(409, "ai_unavailable_recours", "Suggestion indisponible en procédure de recours : la notation du 2e/3e évaluateur est à l'aveugle (§8.7)");
+  }
+
+  const rubric = cert.payload.rubric;
+  const gridVersion = gridVersionOf(enrollment.courseVersion);
+  const provider = currentAiProvider();
+  const calibration = await prisma.aiCalibration.findFirst({
+    where: { courseId: enrollment.courseId, provider, gridVersion },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!calibration?.passed) {
+    throw new FeedbackError(409, "ai_not_calibrated", `Suggestion désactivée sur ce parcours : calibration non passée pour ${provider} / ${gridVersion} (5 dossiers de référence, écart ≤ 8 pts, ≤ 1 bande — §8.8)`);
+  }
+
+  // §8.6 — prévention de l'ancrage : le score humain d'ABORD.
+  const draft = (submission?.draftScores ?? null) as { points?: unknown }[] | null;
+  const draftComplete = Array.isArray(draft) && draft.length === rubric.criteria.length
+    && draft.every((d) => typeof d?.points === "number");
+  if (!draftComplete) {
+    throw new FeedbackError(409, "human_score_required", "La suggestion ne s'affiche qu'après saisie et enregistrement du score humain pour chaque critère (§8.6)");
+  }
+
   const text = submissionText(submission?.content ?? project?.data);
   if (!text) throw new FeedbackError(422, "empty_submission", "Le projet ne contient pas de texte à évaluer");
 
-  const suggestion = await suggestRubricScores({
-    projectText: text,
-    criteria: cert.payload.rubric.criteria,
-    threshold: cert.payload.rubric.threshold,
-    momentAncrage: enrollment.momentAncrage,
-  });
+  // §8.3 : grille complète + livrable intégral — rien d'autre.
+  const suggestion = await suggestRubricScores({ projectText: text, criteria: rubric.criteria, threshold: rubric.threshold });
 
-  return prisma.aiAssessment.create({
+  // §8.4 : la vérification de la preuve appartient à la plateforme.
+  const verdict = verifyEvidence(rubric.criteria, suggestion.perCriterion, text);
+  const criteriaWithVerification = suggestion.perCriterion.map((c, i) => ({
+    ...c, verification: verdict.perCriterion[i] ?? { label: c.label, ok: false, issues: ["missing"] },
+  }));
+
+  const stored = await prisma.aiAssessment.create({
     data: {
       enrollmentId, blockIndex: cert.index, itemKey: "project", kind: "RUBRIC_SUGGESTION",
-      feedback: suggestion.summary,
-      criteria: suggestion.perCriterion as unknown as Prisma.InputJsonValue,
-      suggestedScore: suggestion.suggestedTotal,
+      feedback: verdict.ok ? suggestion.summary : "Suggestion bloquée (§8.5) : la preuve d'au moins un critère n'a pas pu être vérifiée. L'évaluateur note sans assistance.",
+      criteria: criteriaWithVerification as unknown as Prisma.InputJsonValue,
+      suggestedScore: verdict.ok ? suggestion.suggestedTotal : null,
       aiGenerated: suggestion.aiGenerated, provider: suggestion.provider,
+      gridVersion, blocked: !verdict.ok,
     },
   });
+  if (!verdict.ok) {
+    // §8.5 tout-ou-rien : rien ne s'affiche ; l'enregistrement bloqué reste
+    // pour le taux de blocage par critère (§8.10).
+    throw new FeedbackError(409, "suggestion_blocked", "Aucune suggestion pour ce dossier : preuve non vérifiable sur au moins un critère (§8.5). Notez sans assistance.");
+  }
+  return stored;
+}
+
+// ---------------------------------------------------------------------------
+// Calibration de la suggestion (§8.8)
+// ---------------------------------------------------------------------------
+
+export type CalibrationRunInput = { label: string; text: string; reference: number[] };
+
+/**
+ * Passe la suggestion sur les 5 dossiers de référence du parcours et archive
+ * le verdict. Les scores de référence ne sont JAMAIS fournis au modèle (§8.3) —
+ * ils ne servent qu'à mesurer l'écart. Un dossier dont la preuve échoue au
+ * §8.4 échoue la calibration : un moteur incapable de citer ne s'active pas.
+ */
+export async function runAiCalibration(courseId: string, runsInput: CalibrationRunInput[], createdById?: string) {
+  const version = await prisma.courseVersion.findFirst({
+    where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" },
+  });
+  if (!version) throw new FeedbackError(404, "no_published_version", "Aucune version publiée pour ce parcours");
+  const content = CourseContent.parse(version.content);
+  const cert = content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert?.type !== "CERTIFICATION") throw new FeedbackError(409, "no_block", "Bloc 4 absent du parcours");
+  const rubric = cert.payload.rubric;
+
+  for (const run of runsInput) {
+    if (run.reference.length !== rubric.criteria.length) {
+      throw new FeedbackError(422, "reference_misaligned", `« ${run.label} » : ${rubric.criteria.length} scores de référence attendus (un par critère)`);
+    }
+    run.reference.forEach((pts, i) => {
+      const c = rubric.criteria[i]!;
+      if (!Number.isInteger(pts) || pts < 0 || pts > c.weightPoints) {
+        throw new FeedbackError(422, "reference_out_of_range", `« ${run.label} » : score de référence invalide pour « ${c.label} » (${pts}, attendu 0..${c.weightPoints})`);
+      }
+    });
+  }
+
+  const evaluated: { label: string; reference: number[]; proposed: number[]; evidenceOk: boolean }[] = [];
+  for (const run of runsInput) {
+    const suggestion = await suggestRubricScores({ projectText: run.text, criteria: rubric.criteria, threshold: rubric.threshold });
+    const evidence = verifyEvidence(rubric.criteria, suggestion.perCriterion, run.text);
+    evaluated.push({
+      label: run.label, reference: run.reference,
+      proposed: suggestion.perCriterion.map((c) => c.suggested),
+      evidenceOk: evidence.ok,
+    });
+  }
+  const verdict = checkCalibration(rubric.criteria, evaluated);
+  const results = verdict.runs.map((r, i) => ({
+    ...r, evidenceOk: evaluated[i]?.evidenceOk ?? false, ok: r.ok && (evaluated[i]?.evidenceOk ?? false),
+  }));
+  const passed = verdict.issues.length === 0 && results.length > 0 && results.every((r) => r.ok);
+
+  return prisma.aiCalibration.create({
+    data: {
+      courseId, provider: currentAiProvider(), gridVersion: gridVersionOf(version),
+      results: results as unknown as Prisma.InputJsonValue, passed, createdById: createdById ?? null,
+    },
+  });
+}
+
+/** Statut d'activation de la suggestion sur un parcours : le DERNIER passage
+ *  pour (parcours, modèle courant, version de grille courante) doit être
+ *  `passed`. Changement de modèle ou révision de grille → nouvelle clé →
+ *  recalibration exigée (§8.8). */
+export async function aiCalibrationStatus(courseId: string) {
+  const version = await prisma.courseVersion.findFirst({
+    where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" },
+  });
+  const provider = currentAiProvider();
+  if (!version) return { active: false, provider, gridVersion: null, latest: null };
+  const gridVersion = gridVersionOf(version);
+  const latest = await prisma.aiCalibration.findFirst({
+    where: { courseId, provider, gridVersion }, orderBy: { createdAt: "desc" },
+  });
+  return { active: Boolean(latest?.passed), provider, gridVersion, latest };
 }
 
 export async function listAssessments(enrollmentId: string) {

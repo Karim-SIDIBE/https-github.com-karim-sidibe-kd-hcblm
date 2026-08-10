@@ -350,6 +350,7 @@ model Course {
   versions     CourseVersion[]
   enrollments  Enrollment[]
   accreditations EvaluatorAccreditation[]
+  aiCalibrations AiCalibration[]
   liveSessions LiveSession[]
   cohorts      Cohort[]
 
@@ -899,6 +900,13 @@ model ProjectSubmission {
   gridVersion    String?
   /// Day+5 SLA: set once the admin alert has fired (idempotent).
   slaAlertedAt   DateTime?
+  /// Brouillon de notation de l'évaluateur (socle §8.6) : la suggestion IA ne
+  /// s'affiche qu'APRÈS saisie et enregistrement du score humain.
+  draftScores    Json?
+  draftAt        DateTime?
+  /// Étage de recours (socle §10) : 0 = aucun. > 0 → suggestion IA
+  /// indisponible (§8.7, notation à l'aveugle du 2e/3e évaluateur).
+  appealStage    Int            @default(0)
 
   @@index([evaluatorId])
 }
@@ -1149,15 +1157,52 @@ model AiAssessment {
   itemKey        String
   kind           AiAssessmentKind
   feedback       String // overall text / summary
-  /// For RUBRIC_SUGGESTION: [{label, weightPoints, suggested, comment}].
+  /// For RUBRIC_SUGGESTION: [{label, weightPoints, suggested, comment,
+  /// citations?, absence?, verification?}] — preuve §8.4 incluse.
   criteria       Json?
   /// For RUBRIC_SUGGESTION: provisional total /100 (advisory only).
   suggestedScore Int?
   aiGenerated    Boolean          @default(false)
   provider       String?
+  /// Journalisation §8.9 : version de la grille appliquée au moment de la
+  /// suggestion (sans elle, les décisions passées deviennent inauditables).
+  gridVersion    String?
+  /// §8.5 : la preuve d'au moins un critère a échoué → AUCUNE suggestion
+  /// affichée ; l'enregistrement reste pour le taux de blocage (§8.10).
+  blocked        Boolean          @default(false)
+  /// §8.9 : score humain final par critère ([{label, points}]), lié à la
+  /// notation. §8.10 : concordance IA/humain.
+  finalScores    Json?
+  /// §8.9 : indicateur de copie de la preuve par critère ([bool]), calculé
+  /// côté serveur (preuve humaine ≡ preuve IA après normalisation).
+  copyFlags      Json?
   createdAt      DateTime         @default(now())
 
   @@index([enrollmentId])
+}
+
+/// Calibration de la suggestion automatisée sur UN parcours (socle §8.8) :
+/// passée sur les 5 dossiers de référence, écart de total ≤ 8 points sur
+/// chacun et aucun critère à plus d'une bande. Tant que le dernier passage
+/// pour (parcours, modèle, version de grille) n'est pas `passed`, le bouton
+/// de suggestion reste désactivé. Le test est refait à chaque changement de
+/// modèle et à chaque révision de la grille — la clé inclut les deux.
+model AiCalibration {
+  id          String   @id @default(cuid())
+  courseId    String
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// Identifiant du modèle testé (env.AI_MODEL, ou "heuristic" hors ligne).
+  provider    String
+  /// Version de la grille au moment du test — "v1 (cvId)".
+  gridVersion String
+  /// Résultats par dossier : [{label, referenceTotal, proposedTotal,
+  /// totalGap, maxBandDeviation, ok}].
+  results     Json
+  passed      Boolean
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([courseId])
 }
 
 /// Outbound notification (peer congratulations, re-engagement nudges, admin signals).

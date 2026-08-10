@@ -11,6 +11,7 @@
  */
 import { z } from "zod";
 import { env } from "../../config/env.js";
+import { normalizeWhitespace } from "../../domain/engine/ai-compliance.js";
 import { aiAvailable, callClaudeText, extractJson, stripMarkdown, type ClaudeRequest } from "./client.js";
 
 // ---------------------------------------------------------------------------
@@ -107,20 +108,41 @@ export async function generateFormativeFeedback(input: FormativeInput): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// Rubric score suggestion (evaluator-facing, advisory)
+// Rubric score suggestion (evaluator-facing, advisory) — socle §8.
+// Le modèle reçoit la grille COMPLÈTE (descripteurs de bande, minimums,
+// « Où chercher la preuve ») et le livrable intégral — RIEN d'autre (§8.3) :
+// ni identité du candidat, ni historique, ni Moment d'Ancrage. Il produit pour
+// chaque critère une preuve (§8.4) : citations littérales OU déclaration
+// d'absence. La vérification des citations appartient à la plateforme, jamais
+// au modèle.
 // ---------------------------------------------------------------------------
 
-export type RubricCriterion = { label: string; competencyCode: string; weightPoints: number };
+export type RubricCriterion = {
+  label: string;
+  competencyCode?: string;
+  weightPoints: number;
+  minPoints?: number;
+  whereToLook?: string;
+  bands?: { band: number; scoreRange: [number, number]; descriptor: string }[];
+};
 
 export type RubricInput = {
   projectText: string;
   criteria: RubricCriterion[];
   threshold: number;
-  momentAncrage?: string | null;
+};
+
+export type SuggestedCriterionScore = {
+  label: string;
+  weightPoints: number;
+  suggested: number;
+  comment: string;
+  citations?: string[];
+  absence?: string;
 };
 
 export type RubricSuggestion = {
-  perCriterion: { label: string; weightPoints: number; suggested: number; comment: string }[];
+  perCriterion: SuggestedCriterionScore[];
   suggestedTotal: number;
   summary: string;
   aiGenerated: boolean;
@@ -128,57 +150,95 @@ export type RubricSuggestion = {
 };
 
 const RUBRIC_SYSTEM =
-  "Tu es un assistant d'évaluation pour une certification professionnelle (gestion du temps, contexte " +
-  "africain). Tu proposes une notation INDICATIVE par critère, destinée à un évaluateur humain qui tranchera. " +
-  "Tu es rigoureux mais juste, et tu justifies chaque score en une phrase. Tu réponds UNIQUEMENT en JSON.";
+  "Tu es un assistant d'évaluation pour une certification professionnelle. Tu proposes une notation " +
+  "INDICATIVE par critère, destinée à un évaluateur humain qui tranchera. Pour CHAQUE critère tu fournis " +
+  "exactement UNE des deux preuves : (a) \"citations\" — 1 à 3 extraits du livrable d'AU MOINS 8 mots " +
+  "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) ; ou " +
+  "(b) \"absence\" — uniquement si le score proposé est en bande basse (bandes 1-2) : une phrase indiquant " +
+  "les sections parcourues, reprenant les mots de la ligne « Où chercher la preuve » du critère, et ce qui " +
+  "n'y figure pas. Tu réponds UNIQUEMENT en JSON.";
 
 const SuggestionSchema = z.object({
   perCriterion: z.array(z.object({
     label: z.string(),
     suggested: z.number(),
-    comment: z.string(),
+    comment: z.string().default(""),
+    citations: z.array(z.string()).optional(),
+    absence: z.string().optional(),
   })).min(1),
   summary: z.string(),
 });
 
 export function buildRubricRequest(input: RubricInput): ClaudeRequest {
-  const crit = input.criteria.map((c) => `- "${c.label}" (max ${c.weightPoints} pts${c.competencyCode ? `, ${c.competencyCode}` : ""})`).join("\n");
+  const crit = input.criteria.map((c) => {
+    const bands = (c.bands ?? [])
+      .slice().sort((a, b) => b.band - a.band)
+      .map((b) => `    bande ${b.band} (${b.scoreRange[0]}-${b.scoreRange[1]} pts) : ${b.descriptor}`)
+      .join("\n");
+    return [
+      `- "${c.label}" (max ${c.weightPoints} pts${c.minPoints != null ? `, minimum ${c.minPoints}` : ""}${c.competencyCode ? `, ${c.competencyCode}` : ""})`,
+      bands,
+      c.whereToLook ? `    Où chercher la preuve : ${c.whereToLook}` : "",
+    ].filter(Boolean).join("\n");
+  }).join("\n");
   const user = [
-    `Projet certifiant soumis :`,
+    `Livrable soumis (intégral) :`,
     `"""${input.projectText}"""`,
-    `Grille (somme = 100, seuil de certification = ${input.threshold}/100) :`,
+    `Grille du parcours (somme = 100, seuil de certification = ${input.threshold}/100) :`,
     crit,
-    input.momentAncrage ? `Moment d'Ancrage : « ${input.momentAncrage} ».` : "",
-    `Réponds en JSON: {"perCriterion":[{"label":"...","suggested":<int ≤ max>,"comment":"..."}],"summary":"..."}.`,
-  ].filter(Boolean).join("\n");
+    `Réponds en JSON: {"perCriterion":[{"label":"...","suggested":<int ≤ max>,"comment":"...",` +
+    `"citations":["extrait exact ≥ 8 mots", ...] OU "absence":"..."}],"summary":"..."}.`,
+  ].join("\n");
 
   return {
     model: env.AI_MODEL,
-    max_tokens: 1000,
+    max_tokens: 2000,
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
 }
 
 /** Clamp suggested points to [0, weight] and align to the rubric order. */
-function normalize(criteria: RubricCriterion[], suggested: { label: string; suggested: number; comment: string }[]) {
+function normalize(
+  criteria: RubricCriterion[],
+  suggested: z.infer<typeof SuggestionSchema>["perCriterion"],
+): SuggestedCriterionScore[] {
   return criteria.map((c) => {
     const match = suggested.find((s) => s.label.trim().toLowerCase() === c.label.trim().toLowerCase());
     const raw = match?.suggested ?? 0;
     const clamped = Math.max(0, Math.min(c.weightPoints, Math.round(raw)));
-    return { label: c.label, weightPoints: c.weightPoints, suggested: clamped, comment: match?.comment ?? "Aucun commentaire." };
+    return {
+      label: c.label, weightPoints: c.weightPoints, suggested: clamped,
+      comment: match?.comment || "Aucun commentaire.",
+      citations: match?.citations?.length ? match.citations : undefined,
+      absence: match?.absence || undefined,
+    };
   });
 }
 
+/** Fallback hors-ligne déterministe : score de complétude + VRAIES citations
+ *  extraites du livrable (fenêtres de 12 mots), pour que la vérification §8.4
+ *  passe sans réseau. Sans 8 mots disponibles : déclaration d'absence. */
 function fallbackRubric(input: RubricInput): RubricSuggestion {
+  const words = normalizeWhitespace(input.projectText).split(" ").filter(Boolean);
   const len = input.projectText.trim().length;
   const factor = len >= 600 ? 0.75 : len >= 300 ? 0.6 : 0.45;
-  const perCriterion = input.criteria.map((c) => ({
-    label: c.label,
-    weightPoints: c.weightPoints,
-    suggested: Math.round(c.weightPoints * factor),
-    comment: "Suggestion indicative basée sur la complétude — relecture humaine requise.",
-  }));
+  const perCriterion = input.criteria.map((c, i): SuggestedCriterionScore => {
+    const suggested = Math.round(c.weightPoints * factor);
+    const base = {
+      label: c.label, weightPoints: c.weightPoints, suggested,
+      comment: "Suggestion indicative basée sur la complétude — relecture humaine requise.",
+    };
+    if (words.length >= 8) {
+      const size = Math.min(12, words.length);
+      const start = Math.min(i * 8, Math.max(0, words.length - size));
+      return { ...base, citations: [words.slice(start, start + size).join(" ")] };
+    }
+    return {
+      ...base,
+      absence: `Livrable presque vide — sections parcourues sans résultat. ${c.whereToLook ?? ""} : rien de tel n'y figure.`.trim(),
+    };
+  });
   const suggestedTotal = perCriterion.reduce((a, x) => a + x.suggested, 0);
   return {
     perCriterion, suggestedTotal,

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, auth, type Accreditation, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
+import { api, auth, type Accreditation, type AiCalibrationStatus, type AiComplianceIndicators, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 import { modal } from "../lib/modal";
 
@@ -19,13 +19,19 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [points, setPoints] = useState<number[]>(() => (item.rubric?.criteria ?? []).map(() => 0));
   const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai">("");
+  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai" | "draft">("");
   const [msg, setMsg] = useState<string | null>(null);
   const [evaluators, setEvaluators] = useState<UserRow[]>([]);
   const [pick, setPick] = useState("");
   const [ai, setAi] = useState<RubricSuggestion | null>(null);
+  // §8.8 : le bouton de suggestion reste désactivé tant que la calibration du
+  // couple (parcours, modèle, version de grille) n'est pas passée.
+  const [calib, setCalib] = useState<AiCalibrationStatus | null>(null);
+  // §8.6 : la suggestion ne s'affiche qu'après ENREGISTREMENT du score humain.
+  const [draftSaved, setDraftSaved] = useState(Boolean(item.draftAt));
 
   useEffect(() => { api.project(item.enrollmentId).then(setDetail).catch(() => setDetail(null)); }, [item.enrollmentId]);
+  useEffect(() => { api.aiCalibrationStatus(item.courseId).then(setCalib).catch(() => setCalib(null)); }, [item.courseId]);
   useEffect(() => {
     api.users().then((us) => setEvaluators(us.filter((u) => EVALUATOR_ROLES.has(u.role) && !u.disabled))).catch(() => {});
   }, []);
@@ -49,6 +55,14 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
     // le serveur refuse et le dossier doit partir à un autre évaluateur.
     try { await api.assignEvaluator(item.enrollmentId, evaluatorId, f2f); setMsg("Projet attribué (déclaration FACE2FACE : aucun lien)."); onDone(); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
   }
+  async function saveDraft() {
+    setBusy("draft"); setMsg(null);
+    try {
+      await api.saveEvaluationDraft(item.enrollmentId, points.map((p, i) => ({ index: i, points: p, evidence: evidence[i]?.trim() || undefined })));
+      setDraftSaved(true);
+      setMsg("Scores enregistrés (brouillon §8.6) — la suggestion est maintenant consultable.");
+    } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
+  }
   async function suggest() {
     setBusy("ai"); setMsg(null);
     try {
@@ -58,9 +72,14 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
     finally { setBusy(""); }
   }
   function applySuggestion() {
-    if (!ai) return;
+    if (!ai?.criteria) return;
     // Align by label (the service returns the rubric's own labels, clamped).
-    setPoints(crit.map((c) => ai.perCriterion.find((s) => s.label === c.label)?.suggested ?? 0));
+    setPoints(crit.map((c) => ai.criteria!.find((s) => s.label === c.label)?.suggested ?? 0));
+  }
+  /** §8.6 : le champ de preuve démarre vide — toute copie depuis la suggestion
+   *  est une ACTION EXPLICITE ; le serveur journalise l'identité des preuves. */
+  function copyEvidence(i: number, text: string) {
+    setEvidence((ev) => ev.map((v, j) => (j === i ? text : v)));
   }
   async function grade() {
     if (banded && evidence.some((e) => !e.trim())) { setMsg("Preuve manquante : chaque critère exige une citation exacte ou une déclaration d'absence (règle 3 du socle)."); return; }
@@ -129,19 +148,46 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
 
           <div className="eyebrow" style={{ margin: "20px 0 6px" }}>Grille d'évaluation</div>
           {crit.length > 0 && !ai && (
-            <button className="btn btn--sm btn--ghost" disabled={busy === "ai"} onClick={suggest} style={{ marginBottom: 8 }}>
-              {busy === "ai" ? "Analyse du projet…" : "✨ Suggestion de note (IA, indicative)"}
-            </button>
+            <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
+              <button className="btn btn--sm" disabled={busy === "draft"} onClick={saveDraft}>
+                {busy === "draft" ? "…" : draftSaved ? "Ré-enregistrer mes scores" : "Enregistrer mes scores (brouillon)"}
+              </button>
+              <button className="btn btn--sm btn--ghost" disabled={busy === "ai" || !calib?.active || !draftSaved || item.appealStage > 0}
+                title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
+                  : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8) — panneau « Suggestion automatisée » ci-dessous"
+                  : !draftSaved ? "Enregistrez d'abord vos scores : la suggestion ne s'affiche qu'après le score humain (§8.6)" : undefined}
+                onClick={suggest}>
+                {busy === "ai" ? "Analyse du dossier…" : "✨ Suggestion de note (IA, indicative)"}
+              </button>
+              {!calib?.active && <span className="muted" style={{ fontSize: 11.5 }}>Suggestion désactivée : calibration §8.8 non passée{calib ? ` (${calib.provider})` : ""}.</span>}
+              {calib?.active && !draftSaved && <span className="muted" style={{ fontSize: 11.5 }}>Saisissez et enregistrez VOS scores avant de consulter la suggestion (§8.6).</span>}
+            </div>
           )}
           {ai && (
             <div className="card" style={{ marginBottom: 10, background: "var(--bg)" }}>
               <div className="card-b" style={{ fontSize: 12.5 }}>
-                <b>✨ Suggestion {ai.aiGenerated ? "IA" : "automatique"} : {ai.suggestedTotal}/100</b> — {ai.summary}
-                <ul style={{ margin: "6px 0 8px", paddingLeft: 18 }}>
-                  {ai.perCriterion.map((s) => <li key={s.label}>{s.label} : <b>{s.suggested}/{s.weightPoints}</b> — {s.comment}</li>)}
-                </ul>
+                <b>✨ Suggestion {ai.aiGenerated ? "IA" : "automatique"} : {ai.suggestedScore}/100</b> — {ai.feedback}
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, margin: "8px 0" }}>
+                  {(ai.criteria ?? []).map((s, i) => (
+                    <div key={s.label} style={{ borderLeft: "3px solid var(--line)", paddingLeft: 8 }}>
+                      <div>{s.label} : <b>{s.suggested}/{s.weightPoints}</b> — {s.comment}</div>
+                      {(s.citations ?? []).map((c, k) => (
+                        <div key={k} className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
+                          <span className="muted" style={{ fontSize: 12, fontStyle: "italic", flex: 1 }}>« {c} » <span style={{ fontStyle: "normal" }}>✓ vérifiée dans le dossier</span></span>
+                          <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — l'identité des preuves est journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, c)}>Reprendre</button>
+                        </div>
+                      ))}
+                      {s.absence && (
+                        <div className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
+                          <span className="muted" style={{ fontSize: 12, fontStyle: "italic", flex: 1 }}>Déclaration d'absence : {s.absence}</span>
+                          <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, s.absence!)}>Reprendre</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
                 <button className="btn btn--sm" onClick={applySuggestion}>Préremplir la grille avec ces notes</button>
-                <span className="muted" style={{ marginLeft: 8 }}>La décision reste humaine : ajustez avant d'enregistrer.</span>
+                <span className="muted" style={{ marginLeft: 8 }}>La décision reste humaine : ajustez avant d'enregistrer. Votre preuve doit démontrer VOTRE lecture du dossier.</span>
               </div>
             </div>
           )}
@@ -261,8 +307,122 @@ export function Evaluation() {
       </div>
 
       <AccreditationPanel />
+      <AiGovernancePanel />
 
       {sel && <GradeDrawer item={sel} onClose={() => setSel(null)} onDone={() => { reload(); }} />}
+    </div>
+  );
+}
+
+/** Gouvernance de la suggestion automatisée (socle §8.8 et §8.10) :
+ *  calibration sur les 5 dossiers de référence + indicateurs de surveillance. */
+function AiGovernancePanel() {
+  const [courses, setCourses] = useState<{ id: string; slug?: string; title?: string }[]>([]);
+  const [courseId, setCourseId] = useState("");
+  const [status, setStatus] = useState<AiCalibrationStatus | null>(null);
+  const [indicators, setIndicators] = useState<AiComplianceIndicators | null>(null);
+  const [runs, setRuns] = useState(() => ["A", "B", "C", "D", "E"].map((l) => ({ label: `Dossier ${l}`, text: "", reference: "" })));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => { api.courses().then((cs: any[]) => { setCourses(cs); if (cs[0] && !courseId) setCourseId(cs[0].id); }).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!courseId) return;
+    api.aiCalibrationStatus(courseId).then(setStatus).catch(() => setStatus(null));
+    api.aiCompliance(courseId).then(setIndicators).catch(() => setIndicators(null));
+  }, [courseId]);
+
+  async function runCalibration() {
+    const parsed = runs.map((r) => ({
+      label: r.label, text: r.text.trim(),
+      reference: r.reference.split(/[,;\s]+/).filter(Boolean).map(Number),
+    }));
+    if (parsed.some((r) => !r.text || r.reference.some((n) => !Number.isInteger(n)))) {
+      setMsg("Chaque dossier exige son texte et ses scores de référence (entiers, un par critère, séparés par des virgules)."); return;
+    }
+    setBusy(true); setMsg(null);
+    try {
+      const rec = await api.runAiCalibration(courseId, parsed);
+      setMsg(rec?.passed ? "Calibration PASSÉE — la suggestion est activée sur ce parcours." : "Calibration REFUSÉE — le bouton de suggestion reste désactivé (§8.8).");
+      api.aiCalibrationStatus(courseId).then(setStatus).catch(() => {});
+    } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-h">
+        <h3>Suggestion automatisée <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(socle §8 — calibration sur 5 dossiers de référence, écart ≤ 8 pts et ≤ 1 bande ; à refaire à chaque changement de modèle ou de grille)</span></h3>
+        <span className={`pill ${status?.active ? "pill--green" : "pill--warn"}`}>{status?.active ? "Activée" : "Désactivée"}{status ? ` · ${status.provider}` : ""}</span>
+      </div>
+      <div className="card-b">
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <select className="select" value={courseId} onChange={(e) => setCourseId(e.target.value)}>
+            {courses.map((c: any) => <option key={c.id} value={c.id}>{c.title ?? c.slug ?? c.id}</option>)}
+          </select>
+          {status?.gridVersion && <span className="muted" style={{ fontSize: 12, alignSelf: "center" }}>Grille {status.gridVersion}</span>}
+        </div>
+
+        {status?.latest && (
+          <table className="table" style={{ marginBottom: 12 }}>
+            <thead><tr><th>Dossier</th><th>Référence</th><th>Proposé</th><th>Écart (≤ 8)</th><th>Bandes (≤ 1)</th><th>Preuve §8.4</th><th>Verdict</th></tr></thead>
+            <tbody>
+              {status.latest.results.map((r) => (
+                <tr key={r.label}>
+                  <td style={{ fontSize: 12.5 }}>{r.label}</td>
+                  <td style={{ fontSize: 12.5 }}>{r.referenceTotal}/100</td>
+                  <td style={{ fontSize: 12.5 }}>{r.proposedTotal}/100</td>
+                  <td style={{ fontSize: 12.5 }}>{r.totalGap}</td>
+                  <td style={{ fontSize: 12.5 }}>{r.maxBandDeviation}</td>
+                  <td><span className={`pill pill--sm ${r.evidenceOk ? "pill--green" : "pill--red"}`}>{r.evidenceOk ? "vérifiée" : "échec"}</span></td>
+                  <td><span className={`pill pill--sm ${r.ok ? "pill--green" : "pill--red"}`}>{r.ok ? "OK" : "hors seuil"}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+
+        <details style={{ marginBottom: 12 }}>
+          <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Lancer une calibration (5 dossiers de référence — les scores de référence ne sont jamais transmis au modèle)</summary>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>
+            {runs.map((r, i) => (
+              <div key={i} className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+                <input className="select" style={{ width: 110 }} value={r.label} onChange={(e) => setRuns((rs) => rs.map((x, j) => j === i ? { ...x, label: e.target.value } : x))} />
+                <textarea placeholder="Texte intégral du dossier de référence…" value={r.text}
+                  onChange={(e) => setRuns((rs) => rs.map((x, j) => j === i ? { ...x, text: e.target.value } : x))}
+                  style={{ flex: 1, minWidth: 240, minHeight: 40, padding: "8px 10px", border: "1px solid var(--line-strong)", borderRadius: 8, fontFamily: "inherit", fontSize: 12, resize: "vertical" }} />
+                <input className="select" style={{ width: 190 }} placeholder="Réf. par critère : 15,14,10,12,12,8" value={r.reference}
+                  onChange={(e) => setRuns((rs) => rs.map((x, j) => j === i ? { ...x, reference: e.target.value } : x))} />
+              </div>
+            ))}
+            <div><button className="btn btn--primary btn--sm" disabled={busy || !courseId} onClick={runCalibration}>{busy ? "Passage en cours…" : "Passer la calibration"}</button></div>
+            {msg && <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--navy-600)", margin: 0 }}>{msg}</p>}
+          </div>
+        </details>
+
+        <div className="eyebrow" style={{ margin: "4px 0 6px" }}>Indicateurs de surveillance (§8.10)</div>
+        {!indicators || indicators.totals.suggestions === 0 ? (
+          <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucune suggestion émise sur ce parcours pour l'instant.</p>
+        ) : (
+          <>
+            <p className="muted" style={{ fontSize: 12.5, margin: "0 0 8px" }}>
+              {indicators.totals.suggestions} suggestion(s) · {indicators.totals.blocked} bloquée(s) (§8.5) · {indicators.totals.linkedToFinal} liée(s) à une notation finale
+            </p>
+            <table className="table">
+              <thead><tr><th>Critère</th><th>Taux de blocage (alerte &gt; 20 %)</th><th>Concordance IA/humain (alerte &gt; 90 %)</th><th>Identité des preuves (alerte = 100 %)</th></tr></thead>
+              <tbody>
+                {indicators.criteria.map((c) => (
+                  <tr key={c.label}>
+                    <td style={{ fontSize: 12.5 }}>{c.label} <span className="muted">({c.requests})</span></td>
+                    <td><span className={`pill pill--sm ${c.blockAlert ? "pill--red" : "pill--soft"}`}>{c.blockRatePct ?? "—"}{c.blockRatePct != null ? " %" : ""}</span>{c.blockAlert && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>réviser le descripteur, pas le modèle</span>}</td>
+                    <td><span className={`pill pill--sm ${c.concordanceAlert ? "pill--red" : "pill--soft"}`}>{c.concordancePct ?? "—"}{c.concordancePct != null ? " %" : ""}</span>{c.concordanceAlert && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>l'évaluateur valide sans évaluer</span>}</td>
+                    <td><span className={`pill pill--sm ${c.identityAlert ? "pill--red" : "pill--soft"}`}>{c.evidenceIdentityPct ?? "—"}{c.evidenceIdentityPct != null ? " %" : ""}</span>{c.identityAlert && <span className="muted" style={{ fontSize: 11, marginLeft: 6 }}>copie systématique</span>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </>
+        )}
+      </div>
     </div>
   );
 }

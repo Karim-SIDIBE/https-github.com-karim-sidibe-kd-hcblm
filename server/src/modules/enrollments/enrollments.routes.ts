@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
   EngineError, assignEvaluator, captureMomentAncrage, cohortBoard, completeItem, designatePeer, enroll, getEnrollment,
-  getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
+  getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition, saveRubricDraft,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
   projectState,
 } from "./enrollments.service.js";
@@ -229,6 +229,17 @@ export async function enrollmentRoutes(app: FastifyInstance) {
       await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct, decision: (data as any).evaluation?.decision } });
       return { data };
     } catch (err) { return handle(reply, err); }
+  });
+
+  // Brouillon de notation (socle §8.6) : enregistre le score humain par
+  // critère AVANT toute suggestion IA — la preuve peut rester vide au brouillon.
+  app.put("/enrollments/:id/evaluation/draft", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const body = z.object({
+      criteria: z.array(z.object({ label: z.string().optional(), index: z.number().int().min(0).optional(), points: z.number().int().min(0), evidence: z.string().optional() })).min(1),
+    }).parse(req.body);
+    try { return { data: await saveRubricDraft(id, body.criteria, req.principal!.id) }; }
+    catch (err) { return handle(reply, err); }
   });
 
   // Bloc 4 evaluation queue — every submitted project (staff only).

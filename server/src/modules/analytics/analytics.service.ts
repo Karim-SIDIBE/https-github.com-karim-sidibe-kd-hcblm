@@ -681,3 +681,70 @@ export async function khcblmTargets(courseId?: string) {
     ],
   };
 }
+
+/**
+ * Indicateurs de surveillance de la suggestion automatisée (socle §8.10) :
+ *   1. taux de blocage PAR CRITÈRE (> 20 % → le descripteur demande une
+ *      inférence au lieu d'un fait : réviser le descripteur, pas le modèle) ;
+ *   2. concordance IA / humain PAR CRITÈRE (> 90 % → l'évaluateur a cessé
+ *      d'évaluer et valide la suggestion) ;
+ *   3. identité des preuves humaine et IA (100 % → copie systématique : la
+ *      preuve humaine ne démontre plus la lecture du dossier).
+ */
+export async function aiComplianceIndicators(courseId?: string) {
+  const assessments = await prisma.aiAssessment.findMany({
+    where: { kind: "RUBRIC_SUGGESTION", ...(courseId ? { enrollment: { courseId } } : {}) },
+    orderBy: { createdAt: "asc" },
+  });
+
+  type SuggestedCrit = {
+    label: string; suggested: number;
+    verification?: { ok: boolean; issues: string[] };
+  };
+  type Agg = { requests: number; evidenceFailed: number; graded: number; concordant: number; copyTotal: number; copyIdentical: number };
+  const byCriterion = new Map<string, Agg>();
+  const agg = (label: string): Agg => {
+    let a = byCriterion.get(label);
+    if (!a) { a = { requests: 0, evidenceFailed: 0, graded: 0, concordant: 0, copyTotal: 0, copyIdentical: 0 }; byCriterion.set(label, a); }
+    return a;
+  };
+
+  for (const assessment of assessments) {
+    const crits = (assessment.criteria ?? []) as unknown as SuggestedCrit[];
+    if (!Array.isArray(crits)) continue;
+    const finals = (assessment.finalScores ?? null) as { label: string; points: number }[] | null;
+    const copies = (assessment.copyFlags ?? null) as boolean[] | null;
+    crits.forEach((c, i) => {
+      if (!c?.label) return;
+      const a = agg(c.label);
+      a.requests += 1;
+      if (c.verification && !c.verification.ok) a.evidenceFailed += 1;
+      if (finals?.[i]) { a.graded += 1; if (finals[i]!.points === c.suggested) a.concordant += 1; }
+      if (copies) { a.copyTotal += 1; if (copies[i]) a.copyIdentical += 1; }
+    });
+  }
+
+  const pct = (n: number, d: number) => (d === 0 ? null : Math.round((n / d) * 100));
+  const criteria = [...byCriterion.entries()].map(([label, a]) => {
+    const blockRatePct = pct(a.evidenceFailed, a.requests);
+    const concordancePct = pct(a.concordant, a.graded);
+    const evidenceIdentityPct = pct(a.copyIdentical, a.copyTotal);
+    return {
+      label,
+      requests: a.requests,
+      blockRatePct, blockAlert: blockRatePct != null && blockRatePct > 20,
+      concordancePct, concordanceAlert: concordancePct != null && concordancePct > 90,
+      evidenceIdentityPct, identityAlert: evidenceIdentityPct === 100,
+    };
+  });
+
+  return {
+    totals: {
+      suggestions: assessments.length,
+      blocked: assessments.filter((a) => a.blocked).length,
+      displayed: assessments.filter((a) => !a.blocked).length,
+      linkedToFinal: assessments.filter((a) => a.finalScores != null).length,
+    },
+    criteria,
+  };
+}
