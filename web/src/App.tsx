@@ -15,6 +15,7 @@ import { initNative, isNative, syncPushToken } from "./lib/native";
 const Home = lazy(() => import("./ui/Home").then((m) => ({ default: m.Home })));
 const Course = lazy(() => import("./ui/Course").then((m) => ({ default: m.Course })));
 const Journal = lazy(() => import("./ui/Journal").then((m) => ({ default: m.Journal })));
+const Cohorte = lazy(() => import("./ui/Cohorte").then((m) => ({ default: m.Cohorte })));
 const SessionScreen = lazy(() => import("./ui/Session").then((m) => ({ default: m.SessionScreen })));
 const QuizScreen = lazy(() => import("./ui/QuizScreen").then((m) => ({ default: m.QuizScreen })));
 const Deliverable = lazy(() => import("./ui/Deliverable").then((m) => ({ default: m.Deliverable })));
@@ -45,6 +46,7 @@ function Screen({ route }: { route: Route }) {
     case "course": return <Home eid={route.eid} />;
     case "cours": return <Course eid={route.eid} />;
     case "journal": return <Journal eid={route.eid} />;
+    case "cohorte": return <Cohorte eid={route.eid} />;
     // Item screens are KEYED by their route params: chaining from 1.2 to 1.3
     // must mount a FRESH screen (video phase, blank answers) — React would
     // otherwise reuse the component instance and keep the previous item's

@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
-  EngineError, assignEvaluator, captureMomentAncrage, completeItem, designatePeer, enroll, getEnrollment,
+  EngineError, assignEvaluator, captureMomentAncrage, cohortBoard, completeItem, designatePeer, enroll, getEnrollment,
   getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
   projectState,
@@ -93,6 +93,13 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   });
 
   // Every recorded answer (frozen results) — powers the read-only recap views.
+  // Tableau de progression de cohorte anonymisé (Pilier 6.3) — agrégats
+  // uniquement, aucun individu identifiable.
+  app.get("/enrollments/:id/cohort", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await cohortBoard(id) }; } catch (err) { return handle(reply, err); }
+  });
+
   app.get("/enrollments/:id/answers", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await listAnswers(id) }; } catch (err) { return handle(reply, err); }

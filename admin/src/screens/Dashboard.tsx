@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
-import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies } from "../lib/api";
+import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies, type KhcblmTargets } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";
 import { table, downloadCsv, downloadBlob, today } from "../lib/csv";
 import { ScheduledReports } from "./ScheduledReports";
@@ -47,6 +47,7 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
   const rep = useAsync<CourseReport>(() => api.courseReport(courseId, since ? { since } : {}), [courseId, period]);
   const risk = useAsync<AtRiskLearner[]>(() => api.atRisk(courseId), [courseId]);
   const comp = useAsync<CourseCompetencies>(() => api.competencies(courseId), [courseId]);
+  const targets = useAsync<KhcblmTargets>(() => api.khcblmTargets(courseId), [courseId]);
 
   const r = rep.data;
   const certified = r?.statusCounts?.CERTIFIED ?? r?.credentialsIssued ?? 0;
@@ -159,6 +160,29 @@ export function Dashboard({ ctx }: { ctx: CourseCtx }) {
                 })}
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="card">
+          <div className="card-h">
+            <h3>Cibles K-HCBLM v2.2 <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(ch. 7 du modèle)</span></h3>
+            {targets.data && (() => {
+              const ms = targets.data.metrics.filter((m) => m.met != null);
+              const okCount = ms.filter((m) => m.met).length;
+              return <span className={`pill ${okCount === ms.length ? "pill--green" : "pill--warn"}`}>{okCount}/{ms.length} atteintes</span>;
+            })()}
+          </div>
+          <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {!targets.data ? <div className="muted">Chargement…</div> : targets.data.metrics.map((m) => (
+              <div className="row between" key={m.key} style={{ gap: 8 }}>
+                <span style={{ fontSize: 12.5 }}>{m.label}</span>
+                <span className="row" style={{ gap: 6, flexShrink: 0 }}>
+                  <b className="num" style={{ fontSize: 13 }}>{m.valuePct == null ? "—" : `${m.valuePct}%`}</b>
+                  <span className={`pill pill--sm ${m.met == null ? "pill--soft" : m.met ? "pill--green" : "pill--red"}`}>cible ≥ {m.targetPct}%</span>
+                </span>
+              </div>
+            ))}
+            {targets.data && <div className="muted" style={{ fontSize: 11.5 }}>Mesures tous inscrits confondus ({targets.data.enrollments} inscription(s)) — les cibles s'apprécient sur une population représentative.</div>}
           </div>
         </div>
 

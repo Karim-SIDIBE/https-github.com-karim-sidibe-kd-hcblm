@@ -32,6 +32,20 @@ export function Course({ eid }: { eid: string }) {
   const [avail, setAvail] = useState<Record<string, Availability>>({});
   const [busy, setBusy] = useState<Record<string, boolean>>({});
   const [journalStart, setJournalStart] = useState<string | null>(null);
+  const [cohortName, setCohortName] = useState<string | null>(null);
+
+  // Pilier 6.3 : la carte cohorte n'apparaît que si l'apprenant est membre
+  // d'un groupe (silencieux hors-ligne — le forum est en ligne uniquement).
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const d = await api.get<{ cohort: { name: string } | null }>(`/enrollments/${eid}/cohort`);
+        if (alive) setCohortName(d?.cohort?.name ?? null);
+      } catch { /* hors-ligne : pas de carte */ }
+    })();
+    return () => { alive = false; };
+  }, [eid]);
 
   // Recompute every element's offline availability from the local registry.
   const refreshAvail = useCallback((b: Bundle | null) => {
@@ -156,6 +170,20 @@ export function Course({ eid }: { eid: string }) {
     <div className="stack">
       <div><div className="eyebrow">{t("course.title")}</div><h1 style={{ marginTop: 6 }}>{bundle.course.title}</h1></div>
       {msg && <p className="meta">{msg}</p>}
+
+      {cohortName && (
+        // Pilier 6.3 : accès au tableau de cohorte anonymisé + forum de pratique.
+        <div className="hf-rowtap hf-card row between" style={{ cursor: "pointer", padding: "12px 16px" }} onClick={() => navigate(routes.cohorte(eid))}>
+          <span className="row" style={{ gap: 10 }}>
+            <span style={{ fontSize: 18 }}>👥</span>
+            <span>
+              <strong className="h4" style={{ fontWeight: 600 }}>{t("ch.courseCard")}</strong>
+              <div className="meta">{cohortName}</div>
+            </span>
+          </span>
+          <span className="meta">→</span>
+        </div>
+      )}
 
       {diag && (diag.priorities?.length ?? 0) > 0 && (
         <div className="hf-card hf-card--peach hf-card--stripe-orange">

@@ -623,3 +623,61 @@ export function toCsv(rows: Record<string, unknown>[]): string {
   };
   return [headers.join(","), ...rows.map((r) => headers.map((h) => escape(r[h])).join(","))].join("\n");
 }
+
+// --- Cibles K-HCBLM v2.2 (chapitre 7) ----------------------------------------
+
+/** Indicateurs de complétion et d'engagement du modèle, mesurés contre leurs
+ *  cibles officielles (K-HCBLM v2.2, ch. 7). Sans courseId, porte sur le
+ *  parcours le plus inscrit. Le taux de soumission des micro-exercices compte
+ *  les complétions des micro-sessions PORTEUSES d'un exercice (Blocs 1-3) —
+ *  une micro-session à exercice ne se complète qu'à la soumission. */
+export async function khcblmTargets(courseId?: string) {
+  const course = courseId
+    ? await prisma.course.findUnique({ where: { id: courseId } })
+    : (await prisma.course.findFirst({ orderBy: { enrollments: { _count: "desc" } } }));
+  if (!course) throw new AnalyticsError(404, "not_found", "Aucun parcours");
+
+  const where = { courseId: course.id };
+  const total = await prisma.enrollment.count({ where });
+  const badgeCounts = await prisma.badge.groupBy({
+    by: ["type"], _count: { _all: true }, where: { enrollment: where },
+  });
+  const badges = Object.fromEntries(badgeCounts.map((b) => [b.type, b._count._all])) as Record<string, number>;
+  const pairs = await prisma.enrollment.count({ where: { ...where, peerEmail: { not: null } } });
+
+  // Micro-sessions à exercice (Blocs 1-3) du contenu publié.
+  const published = await prisma.courseVersion.findFirst({
+    where: { courseId: course.id, status: "PUBLISHED" }, orderBy: { version: "desc" },
+  });
+  const parsed = published ? CourseContent.safeParse(published.content) : null;
+  const exerciseKeys: string[] = [];
+  if (parsed?.success) {
+    for (const b of parsed.data.blocks) {
+      if (!("payload" in b) || !("microSessions" in b.payload)) continue;
+      for (const ms of b.payload.microSessions ?? []) if (ms.exercise) exerciseKeys.push(ms.id);
+    }
+  }
+  const exercisesSubmitted = exerciseKeys.length === 0 ? 0 : await prisma.itemCompletion.count({
+    where: { enrollment: where, itemType: "MICRO_SESSION", itemKey: { in: exerciseKeys } },
+  });
+  const exercisesExpected = exerciseKeys.length * total;
+
+  const pct = (n: number, d: number) => (d === 0 ? null : Math.round((n / d) * 100));
+  const metric = (key: string, label: string, valuePct: number | null, targetPct: number) => ({
+    key, label, valuePct, targetPct, met: valuePct == null ? null : valuePct >= targetPct,
+  });
+
+  return {
+    course: { id: course.id, slug: course.slug },
+    enrollments: total,
+    metrics: [
+      metric("bloc0", "Taux de complétion Bloc 0", pct(badges.ENTRY ?? 0, total), 95),
+      metric("bloc1", "Taux de complétion Bloc 1", pct(badges.COMPREHENSION ?? 0, total), 85),
+      metric("bloc2", "Taux de complétion Bloc 2", pct(badges.PRACTICE ?? 0, total), 75),
+      metric("bloc3", "Taux de complétion Bloc 3", pct(badges.ANCHORING ?? 0, total), 70),
+      metric("certification", "Taux de certification finale (Bloc 4)", pct(badges.CERTIFICATE ?? 0, total), 60),
+      metric("exercices", "Taux de soumission des micro-exercices", pct(exercisesSubmitted, exercisesExpected), 80),
+      metric("pair", "Taux de désignation d'un pair de progression", pct(pairs, total), 50),
+    ],
+  };
+}
