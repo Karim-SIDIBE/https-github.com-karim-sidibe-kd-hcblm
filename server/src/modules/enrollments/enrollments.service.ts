@@ -13,6 +13,7 @@ import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJE
 import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
 import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
+import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
@@ -463,13 +464,72 @@ export async function completeItem(
  * Assign an evaluator (an EVALUATOR / staff user) to a Bloc 4 project (§6.3).
  * The learner must have submitted the project first.
  */
-export async function assignEvaluator(enrollmentId: string, evaluatorId: string) {
+export async function assignEvaluator(enrollmentId: string, evaluatorId: string, opts: { f2fConflict?: boolean } = {}) {
   const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
   if (!submission) throw new EngineError(409, "no_submission", "Aucun projet soumis pour cette inscription");
   const evaluator = await prisma.user.findUnique({ where: { id: evaluatorId } });
   if (!evaluator) throw new EngineError(404, "no_evaluator", "Évaluateur introuvable");
   if (!hasPermission(evaluator.role, "evaluation:grade")) {
     throw new EngineError(422, "not_evaluator", `${evaluator.name} ne peut pas évaluer (rôle ${evaluator.role})`);
+  }
+  const enrollment = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+  if (!enrollment) throw new EngineError(404, "not_found", "Inscription introuvable");
+
+  // --- Habilitation (socle §9.2) : « aucun évaluateur ne note un dossier réel
+  //     avant d'avoir passé ce test » — active, sur CE parcours. La remise est
+  //     réassignée au même évaluateur : elle passe par la même garde.
+  const accreditation = await activeAccreditation(evaluatorId, enrollment.courseId);
+  if (!accreditation) {
+    throw new EngineError(409, "not_accredited", `${evaluator.name} n'est pas habilité·e sur ce parcours (calibration §9.2 requise, validité 12 mois)`);
+  }
+
+  // --- Incompatibilités (socle §5.1) — appliquées à l'ASSIGNATION, pas à la
+  //     déclaration. Les trois premières sont détectées en base ; le lien
+  //     FACE2FACE fait l'objet d'une déclaration tant que le rapprochement
+  //     entre les deux systèmes n'est pas automatisé.
+  if (opts.f2fConflict) {
+    throw new EngineError(409, "incompat_face2face", `${evaluator.name} a animé une session FACE2FACE suivie par ce candidat sur la même compétence — dossier à réassigner`);
+  }
+  // (1) il est le pair de progression désigné par le candidat.
+  if (enrollment.peerEmail && evaluator.email.trim().toLowerCase() === enrollment.peerEmail.trim().toLowerCase()) {
+    throw new EngineError(409, "incompat_peer", `${evaluator.name} est le pair de progression désigné par ce candidat`);
+  }
+  // (2) il a conduit une relance individuelle (Pilier 6.4) — tracée à l'audit.
+  const nudged = await prisma.auditLog.count({
+    where: { action: "enrollment.nudge", actorId: evaluatorId, targetId: enrollmentId },
+  });
+  if (nudged > 0) {
+    throw new EngineError(409, "incompat_relance", `${evaluator.name} a conduit une relance individuelle auprès de ce candidat`);
+  }
+  // (3) même organisation que le candidat (lien hiérarchique possible).
+  const sharedOrg = await prisma.organizationMembership.findFirst({
+    where: {
+      userId: evaluatorId,
+      organization: { memberships: { some: { userId: enrollment.userId } } },
+    },
+  });
+  if (sharedOrg) {
+    throw new EngineError(409, "incompat_org", `${evaluator.name} appartient à la même organisation que ce candidat`);
+  }
+
+  // --- Rotation (socle §5.1) : ≤ 60 % des dossiers du parcours sur le
+  //     trimestre calendaire. Mesurable dès 2 évaluateurs habilités et un
+  //     volume suffisant (< 5 dossiers/trimestre, l'écart ne se mesure pas —
+  //     même logique que la double notation du §9.3).
+  const accredited = await accreditedEvaluatorIds(enrollment.courseId);
+  if (accredited.length >= 2) {
+    const q = Math.floor(new Date().getMonth() / 3);
+    const quarterStart = new Date(new Date().getFullYear(), q * 3, 1);
+    const assigned = await prisma.projectSubmission.findMany({
+      where: { enrollment: { courseId: enrollment.courseId }, assignedAt: { gte: quarterStart }, evaluatorId: { not: null } },
+      select: { enrollmentId: true, evaluatorId: true },
+    });
+    const others = assigned.filter((a) => a.enrollmentId !== enrollmentId);
+    const resultingTotal = others.length + 1;
+    const resultingCount = others.filter((a) => a.evaluatorId === evaluatorId).length + 1;
+    if (resultingTotal >= 5 && resultingCount / resultingTotal > 0.6) {
+      throw new EngineError(409, "rotation_exceeded", `${evaluator.name} dépasserait 60 % des dossiers de ce parcours sur le trimestre (${resultingCount}/${resultingTotal}) — assigner un autre évaluateur habilité`);
+    }
   }
   const updated = await prisma.projectSubmission.update({
     where: { enrollmentId },
@@ -689,6 +749,13 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
   const rubric = block.payload.rubric;
   const threshold = rubric.threshold;
   const banded = rubric.criteria.some((rc) => rc.bands?.length);
+
+  // Habilitation (socle §9.2) : le notateur doit détenir une habilitation
+  // ACTIVE sur ce parcours — quel que soit son rôle.
+  if (gradedBy) {
+    const acc = await activeAccreditation(gradedBy, ctx.enrollment.courseId);
+    if (!acc) throw new EngineError(403, "not_accredited", "Notation refusée : habilitation active requise sur ce parcours (calibration §9.2, validité 12 mois)");
+  }
 
   let scorePct: number;
   let breakdown: { label: string; weightPoints: number; points: number; band?: number | null; evidence?: string | null }[] | null = null;

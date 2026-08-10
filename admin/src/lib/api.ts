@@ -238,6 +238,16 @@ export type KhcblmTargets = {
   enrollments: number;
   metrics: { key: string; label: string; valuePct: number | null; targetPct: number; met: boolean | null }[];
 };
+/** Habilitation d'évaluateur (socle §9.2) — 12 mois par parcours. */
+export type Accreditation = {
+  id: string;
+  evaluator: { id: string; name: string; email: string; role: string };
+  course: { id: string; slug: string };
+  grantedAt: string; expiresAt: string; revokedAt: string | null;
+  grantedBy: { id: string; name: string } | null;
+  notes: string | null;
+  status: "active" | "expired" | "revoked";
+};
 export type ProjectDetail = {
   content: { sections?: Record<string, string> } | null;
   revisionStatus: string; scoreTotal: number | null; feedback: string | null;
@@ -437,7 +447,10 @@ export const api = {
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number; evidence?: string }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
-  assignEvaluator: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId }),
+  assignEvaluator: (enrollmentId: string, evaluatorId: string, f2fConflict?: boolean) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId, f2fConflict }),
+  accreditations: () => req<Accreditation[]>("GET", "/accreditations"),
+  grantAccreditation: (evaluatorId: string, courseId: string, notes?: string) => req<Accreditation>("POST", "/accreditations", { evaluatorId, courseId, notes }),
+  revokeAccreditation: (id: string) => req<unknown>("DELETE", `/accreditations/${id}`),
   credentials: () => req<CredentialRow[]>("GET", "/credentials"),
   revokeCredential: (id: string, reason: string) => req<unknown>("POST", `/credentials/${id}/revoke`, { reason }),
   course: (id: string) => req<CourseFull>("GET", `/courses/${id}`),

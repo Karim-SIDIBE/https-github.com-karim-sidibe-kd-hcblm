@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, auth, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
+import { api, auth, type Accreditation, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
+import { modal } from "../lib/modal";
 
 /** Roles allowed to be picked as evaluator of a Bloc 4 project. */
 const EVALUATOR_ROLES = new Set(["EVALUATOR", "COURSE_ADMIN", "SUPER_ADMIN"]);
@@ -41,9 +42,12 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const decision = minimumsMissed.length >= 2 || total < 55 ? "NOT_CERTIFIED"
     : total >= threshold && minimumsMissed.length === 0 ? "CERTIFIED" : "RESUBMIT";
 
+  const [f2f, setF2f] = useState(false);
   async function assign(evaluatorId: string) {
     setBusy("assign"); setMsg(null);
-    try { await api.assignEvaluator(item.enrollmentId, evaluatorId); setMsg("Projet attribué."); onDone(); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
+    // Déclaration FACE2FACE (socle §5.1) : cochée = incompatibilité déclarée,
+    // le serveur refuse et le dossier doit partir à un autre évaluateur.
+    try { await api.assignEvaluator(item.enrollmentId, evaluatorId, f2f); setMsg("Projet attribué (déclaration FACE2FACE : aucun lien)."); onDone(); } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
   }
   async function suggest() {
     setBusy("ai"); setMsg(null);
@@ -110,6 +114,12 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
               </span>
             )}
           </div>
+          {(item.revisionStatus === "SUBMITTED" || !item.evaluator) && (
+            <label className="row" style={{ gap: 8, alignItems: "flex-start", fontSize: 12, marginBottom: 12, cursor: "pointer" }}>
+              <input type="checkbox" checked={f2f} onChange={(e) => setF2f(e.target.checked)} style={{ marginTop: 2 }} />
+              <span className="muted">Déclaration FACE2FACE (§5.1 du socle) : cochez si l'évaluateur pressenti a animé une session FACE2FACE suivie par ce candidat sur la même compétence — l'assignation sera refusée et archivée.</span>
+            </label>
+          )}
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>Copie de l'apprenant</div>
           {Object.keys(sections).length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{detail ? "Aucune section." : "Chargement…"}</p>
@@ -250,7 +260,90 @@ export function Evaluation() {
         </div>
       </div>
 
+      <AccreditationPanel />
+
       {sel && <GradeDrawer item={sel} onClose={() => setSel(null)} onDone={() => { reload(); }} />}
+    </div>
+  );
+}
+
+/** Registre d'habilitation (socle §9.2) : qui peut évaluer quel parcours,
+ *  jusqu'à quand — octroi après calibration, révocation datée, historique. */
+function AccreditationPanel() {
+  const { data, reload } = useAsync<Accreditation[]>(() => api.accreditations(), []);
+  const [courses, setCourses] = useState<{ id: string; slug?: string; title?: string }[]>([]);
+  const [evaluators, setEvaluators] = useState<UserRow[]>([]);
+  const [form, setForm] = useState({ evaluatorId: "", courseId: "", notes: "" });
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    api.courses().then((cs: any[]) => setCourses(cs)).catch(() => {});
+    api.users().then((us) => setEvaluators(us.filter((u) => EVALUATOR_ROLES.has(u.role) && !u.disabled))).catch(() => {});
+  }, []);
+
+  async function grant() {
+    if (!form.evaluatorId || !form.courseId) return;
+    setBusy(true); setMsg(null);
+    try {
+      await api.grantAccreditation(form.evaluatorId, form.courseId, form.notes.trim() || undefined);
+      setForm({ evaluatorId: "", courseId: "", notes: "" });
+      setMsg("Habilitation accordée pour 12 mois.");
+      reload();
+    } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+  async function revoke(id: string) {
+    const okGo = await modal.confirm({ title: "Révoquer cette habilitation ?", body: "L'évaluateur ne pourra plus être assigné ni noter sur ce parcours. L'historique est conservé." });
+    if (!okGo) return;
+    try { await api.revokeAccreditation(id); reload(); } catch (e: any) { setMsg(e?.message || "Erreur"); }
+  }
+
+  const ST: Record<string, { cls: string; label: string }> = {
+    active: { cls: "pill--green", label: "Active" },
+    expired: { cls: "pill--warn", label: "Expirée" },
+    revoked: { cls: "pill--red", label: "Révoquée" },
+  };
+  const activeCount = (data ?? []).filter((a) => a.status === "active").length;
+
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-h">
+        <h3>Évaluateurs habilités <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(socle §9.2 — calibration, validité 12 mois par parcours ; minimum 2 par parcours pour la rotation et la double notation)</span></h3>
+        <span className={`pill ${activeCount >= 2 ? "pill--green" : "pill--warn"}`}>{activeCount} active(s)</span>
+      </div>
+      <div className="card-b">
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+          <select className="select" value={form.evaluatorId} onChange={(e) => setForm({ ...form, evaluatorId: e.target.value })}>
+            <option value="">Évaluateur…</option>
+            {evaluators.map((u) => <option key={u.id} value={u.id}>{u.name} ({u.role})</option>)}
+          </select>
+          <select className="select" value={form.courseId} onChange={(e) => setForm({ ...form, courseId: e.target.value })}>
+            <option value="">Parcours…</option>
+            {courses.map((c: any) => <option key={c.id} value={c.id}>{c.title ?? c.slug ?? c.id}</option>)}
+          </select>
+          <input className="select" style={{ minWidth: 260, flex: 1 }} placeholder="Notes de calibration (écarts sur les 3 dossiers de référence)…" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          <button className="btn btn--primary btn--sm" disabled={busy || !form.evaluatorId || !form.courseId} onClick={grant}>{busy ? "…" : "Habiliter (12 mois)"}</button>
+        </div>
+        {msg && <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--navy-600)", margin: "0 0 10px" }}>{msg}</p>}
+        {(data ?? []).length === 0 ? <div className="empty" style={{ padding: "22px 10px" }}>Aucune habilitation. Aucun évaluateur ne peut être assigné ni noter tant qu'il n'est pas habilité.</div> : (
+          <table className="table">
+            <thead><tr><th>Évaluateur</th><th>Parcours</th><th>Accordée</th><th>Expire</th><th>Par</th><th>Statut</th><th /></tr></thead>
+            <tbody>
+              {(data ?? []).map((a) => (
+                <tr key={a.id}>
+                  <td><b style={{ fontSize: 13 }}>{a.evaluator.name}</b> <span className="muted" style={{ fontSize: 12 }}>{a.evaluator.email}</span></td>
+                  <td><span className="muted" style={{ fontSize: 12.5 }}>{a.course.slug}</span></td>
+                  <td style={{ fontSize: 12.5 }}>{new Date(a.grantedAt).toLocaleDateString("fr-FR")}</td>
+                  <td style={{ fontSize: 12.5 }}>{new Date(a.expiresAt).toLocaleDateString("fr-FR")}</td>
+                  <td style={{ fontSize: 12.5 }}>{a.grantedBy?.name ?? "—"}</td>
+                  <td><span className={`pill ${(ST[a.status] ?? ST.active).cls}`}>{(ST[a.status] ?? ST.active).label}</span></td>
+                  <td>{a.status === "active" && <button className="btn btn--sm btn--ghost" onClick={() => void revoke(a.id)}>Révoquer</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }
