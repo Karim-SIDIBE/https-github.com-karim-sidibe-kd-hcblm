@@ -17,6 +17,10 @@
       "types": "./src/scoring.ts",
       "import": "./src/scoring.ts"
     },
+    "./profile": {
+      "types": "./src/profile.ts",
+      "import": "./src/profile.ts"
+    },
     "./ui-texts": {
       "types": "./src/ui-texts.ts",
       "import": "./src/ui-texts.ts"

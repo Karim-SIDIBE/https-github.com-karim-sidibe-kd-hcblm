@@ -8,7 +8,7 @@
 import { Prisma, type ItemType } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { materializeQuiz } from "../bank/bank.service.js";
-import { CourseContent, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
+import { CourseContent, profileDivergence, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
 import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
 import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
 import { journalRecap } from "../../domain/engine/journal.js";
@@ -234,9 +234,12 @@ export async function captureMomentAncrage(enrollmentId: string, text: string) {
 
 // --- peer -------------------------------------------------------------------
 
-export async function designatePeer(enrollmentId: string, name: string, email: string, phone?: string) {
-  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { peerName: name, peerEmail: email, peerPhone: phone ?? null } });
-  await upsertCompletion(enrollmentId, 0, "PEER", "peer", null, { name, email, phone: phone ?? null });
+export async function designatePeer(enrollmentId: string, name: string, email: string, phone?: string, consent?: boolean) {
+  // Consentement recueilli AU MOMENT de la désignation (Pilier 6.3) : sans lui,
+  // le pair est nommé mais ne reçoit aucune notification de progression.
+  const peerConsent = consent ?? true;
+  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { peerName: name, peerEmail: email, peerPhone: phone ?? null, peerConsent } });
+  await upsertCompletion(enrollmentId, 0, "PEER", "peer", null, { name, email, phone: phone ?? null, consent: peerConsent });
   await touch(enrollmentId, 0, "peer");
   return reconcile(enrollmentId);
 }
@@ -559,6 +562,7 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
       quiz: {
         scorePct: doneDg.scorePct ?? 0, correct: (d.correct as number) ?? 0, total: (d.total as number) ?? 0,
         profile: (d.profile as string | null) ?? null, subAreaScores: d.subAreaScores ?? [], priorities: (d.priorities as string[]) ?? [],
+        divergence: (d.divergence as object | null) ?? null,
         frozen: true,
       },
     };
@@ -568,16 +572,23 @@ export async function submitDiagnosticQuiz(enrollmentId: string, answers: Record
   const band = block.payload.diagnosticQuiz.profiles.find(
     (p) => correct >= p.scoreRange[0] && correct <= p.scoreRange[1],
   );
+  // Pilier 2 (v2.2) : le diagnostic fait autorité — quand il s'écarte du profil
+  // auto-déclaré du Bloc 0, l'écart est énoncé explicitement (jamais tu).
+  const onboarding = ctx.content.blocks.find((b) => b.type === "ONBOARDING");
+  const selfKey = ((completionOf(ctx, 0, "profile")?.data ?? {}) as { profileKey?: string }).profileKey;
+  const selfChoice = onboarding?.type === "ONBOARDING" && selfKey
+    ? onboarding.payload.profileChoices.find((c) => c.key === selfKey) ?? null : null;
+  const divergence = profileDivergence(selfChoice, band?.name ?? null);
   // Competency entry profile: 2 weakest sub-areas framed as priorities (Pilier 2).
   await upsertCompletion(enrollmentId, block.index, "DIAGNOSTIC_QUIZ", "diagnostic", scorePct, {
-    answers, correct, total, profile: band?.name ?? null, subAreaScores, priorities,
+    answers, correct, total, profile: band?.name ?? null, subAreaScores, priorities, divergence,
   });
   await touch(enrollmentId, block.index, "diagnostic");
   await emitQuestionStatements(ctx, block.index, "diagnostic", qs, answers, meta);
   await emitXapi(ctx, "completed", [`blocks/${block.index}`, "items/diagnostic"], "Quiz diagnostique", quizResult(scorePct, correct, total));
   return {
     ...(await reconcile(enrollmentId)),
-    quiz: { scorePct, correct, total, profile: band?.name ?? null, subAreaScores, priorities },
+    quiz: { scorePct, correct, total, profile: band?.name ?? null, subAreaScores, priorities, divergence },
   };
 }
 
@@ -689,13 +700,20 @@ export async function reconcile(enrollmentId: string) {
   const existingBadgeTypes = new Set(enrollment.badges.map((b) => b.type));
   const newlyIssued: { type: string; message: string }[] = [];
 
+  // Restitution personnalisée (Pilier 6.5) : le Badge Entrée reprend la phrase
+  // d'ancrage ET le profil auto-déclaré de l'apprenant.
+  const selfProfileKey = ((enrollment.completions.find((c) => c.blockIndex === 0 && c.itemKey === "profile")?.data ?? {}) as { profileKey?: string }).profileKey;
+  const onboardingBlock = content.blocks.find((b) => b.type === "ONBOARDING");
+  const selfProfileName = onboardingBlock?.type === "ONBOARDING" && selfProfileKey
+    ? onboardingBlock.payload.profileChoices.find((c) => c.key === selfProfileKey)?.name ?? null : null;
+
   for (const idx of progress.completedBlockIndexes) {
     const block = content.blocks[idx]!;
     const type = badgeTypeForBlock(block.type);
     if (existingBadgeTypes.has(type)) continue;
-    const message = badgeMessage(type, block.badge.label, enrollment.momentAncrage);
+    const message = badgeMessage(type, block.badge.label, enrollment.momentAncrage, selfProfileName);
     const badge = await prisma.badge.create({
-      data: { enrollmentId, type, message, peerNotified: Boolean(enrollment.peerEmail) },
+      data: { enrollmentId, type, message, peerNotified: Boolean(enrollment.peerConsent && enrollment.peerEmail) },
     });
     // Mint a verifiable credential (OB 2.0 + signed OB 3.0). Non-fatal.
     try {
@@ -711,7 +729,8 @@ export async function reconcile(enrollmentId: string) {
     }
     // Peer notification (Pilier 6.3) — by e-mail and, when a number is on file,
     // by mobile messaging (§7.1: e-mail alone underreaches African peers).
-    if (enrollment.peerEmail || enrollment.peerPhone) {
+    // Sous réserve du consentement recueilli à la désignation (Pilier 6.3).
+    if (enrollment.peerConsent && (enrollment.peerEmail || enrollment.peerPhone)) {
       const peerBody = peerNotificationText(enrollment.peerName, enrollment.user.name, block.badge.label);
       if (enrollment.peerEmail) {
         await enqueueNotification({

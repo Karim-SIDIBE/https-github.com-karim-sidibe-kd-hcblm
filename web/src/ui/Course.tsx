@@ -168,6 +168,11 @@ export function Course({ eid }: { eid: string }) {
       {blocks.map((b) => {
         const st = stateOf(b.index); const done = doneKeys(b.index); const locked = st === "locked"; const items = blockItems(b, t);
         const blockDur = blockDurationSec(b as never, t);
+        // Carte de rappel (Pilier 6.2) : avant de reprendre le bloc courant, les
+        // 3 apprentissages clés du bloc PRÉCÉDENT — jamais comptée comme unité.
+        const prevRecall = st === "available" && b.index > 0
+          ? (blocks.find((x: any) => x.index === b.index - 1) as any)?.recallCard as string[] | undefined
+          : undefined;
         return (
           <section key={b.index} className="hf-card" style={locked ? { opacity: 0.62 } : undefined}>
             <div className="row between" style={{ alignItems: "flex-start", gap: 8 }}>
@@ -177,6 +182,14 @@ export function Course({ eid }: { eid: string }) {
                 {STATE(st, t)}
               </span>
             </div>
+            {prevRecall?.length ? (
+              <details className="hf-card hf-card--icy" style={{ marginTop: 10, padding: "10px 14px" }}>
+                <summary style={{ cursor: "pointer" }} className="h4">🧠 {t("course.recallTitle", { n: b.index - 1 })} <span className="meta">· {t("course.recallDuration")}</span></summary>
+                <ol className="body" style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                  {prevRecall.map((p) => <li key={p} style={{ marginBottom: 4 }}>{p}</li>)}
+                </ol>
+              </details>
+            ) : null}
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
               const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };

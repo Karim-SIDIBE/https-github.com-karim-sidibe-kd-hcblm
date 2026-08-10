@@ -194,6 +194,13 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
       warn("bloc0.duration", "blocks[0].units", `A1 : la micro-session du Bloc 0 dure 20 minutes (déclaré : ${ms[0]!.durationMin} min)`);
   }
 
+  // --- v2.2, Pilier 6.2 — chaque bloc met à disposition une carte de rappel
+  //     des apprentissages clés en 3 points (jamais comptée comme unité) ---
+  content.blocks.forEach((b, i) => {
+    if (b.type !== "CERTIFICATION" && !b.recallCard?.length)
+      warn("bloc.recallCard", `blocks[${i}].recallCard`, "chaque bloc met à disposition une carte de rappel en 3 points (Pilier 6.2)");
+  });
+
   // --- v2.2, Pilier 2 — le quiz déclencheur pose 5 questions déclaratives ---
   const trigCount = onboarding?.payload.triggerQuiz.questions.length ?? 0;
   if (onboarding && trigCount !== 5)

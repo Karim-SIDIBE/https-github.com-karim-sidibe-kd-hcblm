@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { isAnswerCorrect } from "@kd/shared/scoring";
+import { profileDivergence, type ProfileDivergence } from "@kd/shared/profile";
 import { engine, store } from "../lib/app";
 import { getCachedProgress, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
@@ -54,6 +55,23 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
   const failedFinal = kind === "final" && recorded != null && (recorded.scorePct ?? 0) < (data?.threshold ?? 70);
   const isFrozen = recorded != null && !failedFinal;
 
+  // Pilier 2 (v2.2) : le diagnostic fait autorité — l'écart avec le profil
+  // auto-déclaré du Bloc 0 est énoncé explicitement, jamais laissé coexister.
+  const selfChoice = useMemo(() => {
+    if (kind !== "diagnostic" || !answersMap) return null;
+    const rec = Object.values(answersMap).find((r) => r.blockIndex === 0 && r.itemKey === "profile");
+    const key = (rec?.data as { profileKey?: string } | undefined)?.profileKey;
+    const choices = bundle?.content?.blocks?.find((x: any) => x.type === "ONBOARDING")?.payload?.profileChoices ?? [];
+    return key ? (choices.find((c: any) => c.key === key) ?? null) : null;
+  }, [kind, answersMap, bundle]);
+  const divergenceNode = (dv: ProfileDivergence | null) => dv && (
+    <div className={`hf-card ${dv.diverges ? "hf-card--peach" : "hf-card--icy"}`}>
+      <p className="body" style={{ margin: 0 }}>
+        {t(dv.diverges === true ? "qz.selfDiverges" : dv.diverges === false ? "qz.selfConfirms" : "qz.selfNeutral", { self: dv.selfName, band: dv.bandName })}
+      </p>
+    </div>
+  );
+
   async function onSubmit(answers: Record<string, string>, meta: QuestionMeta) {
     const r = await engine.commit(eid, cfg.action, { answers, meta });
     if ((r as any).progress) { setCachedProgress(eid, (r as any).progress); setProgressAfter((r as any).progress); }
@@ -67,6 +85,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           <div className="eyebrow">{t("qz.profileTitle")}</div>
           {band && <span className="hf-pill hf-pill--mint" style={{ alignSelf: "flex-start" }}>{band.name}</span>}
           {band?.description && <p className="body">{band.description}</p>}
+          {divergenceNode(profileDivergence(selfChoice, band?.name ?? null))}
           {prof.priorities.length > 0 ? (
             <>
               <strong className="h4">{t(prof.priorities.length > 1 ? "qz.priorities" : "qz.priority1")}</strong>
@@ -116,8 +135,9 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
   // Read-only recap of an already-submitted quiz: recorded score/profile plus
   // the per-question review (learner answer vs. correct), nothing editable.
   if (isFrozen && !result) {
-    const d = (recorded!.data ?? {}) as { answers?: Record<string, string>; correct?: number; total?: number; profile?: string | null; priorities?: string[] };
+    const d = (recorded!.data ?? {}) as { answers?: Record<string, string>; correct?: number; total?: number; profile?: string | null; priorities?: string[]; divergence?: ProfileDivergence | null };
     const stored = d.answers ?? {};
+    const frozenDivergence = kind === "diagnostic" ? (d.divergence ?? profileDivergence(selfChoice, d.profile ?? null)) : null;
     return (
       <div className="stack">
         <Breadcrumb eid={eid} block={data.block} itemKey={kind} />
@@ -136,6 +156,7 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           )}
           <p className="meta" style={{ margin: 0 }}>{t("qz.correctCount", { correct: d.correct ?? 0, total: d.total ?? data.questions.length })}</p>
         </div>
+        {divergenceNode(frozenDivergence)}
         {data.questions.map((q, i) => {
           const a = stored[q.id] ?? "";
           const good = q.profiling ? null : isAnswerCorrect(q as never, a);

@@ -28,7 +28,7 @@ export function Onboarding({ eid }: { eid: string }) {
   const [step, setStep] = useState<Step | null>(null);
   const [pam, setPam] = useState("");
   const [profileKey, setProfileKey] = useState("");
-  const [peer, setPeer] = useState({ name: "", email: "" });
+  const [peer, setPeer] = useState({ name: "", email: "", consent: false });
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -71,7 +71,7 @@ export function Onboarding({ eid }: { eid: string }) {
   async function submitPeer() {
     if (!peer.name.trim() || !/.+@.+\..+/.test(peer.email)) { setMsg(t("ob.invalidPeer")); return; }
     setBusy(true); setMsg(null);
-    try { const r = await engine.commit(eid, "peer", { name: peer.name.trim(), email: peer.email.trim() }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("done"); } finally { setBusy(false); }
+    try { const r = await engine.commit(eid, "peer", { name: peer.name.trim(), email: peer.email.trim(), consent: peer.consent }); if ((r as any).progress) setCachedProgress(eid, (r as any).progress); setStep("done"); } finally { setBusy(false); }
   }
 
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={() => navigate(routes.course(eid))}>← {t("nav.home")}</button>;
@@ -131,6 +131,12 @@ export function Onboarding({ eid }: { eid: string }) {
           <p className="body">{t("ob.peerDescPre")}<strong>{t("ob.peerMandatory")}</strong>{t("ob.peerDescPost")}</p>
           <label>{t("ob.name")}<input className="hf-field" value={peer.name} onChange={(e) => setPeer({ ...peer, name: e.target.value })} placeholder={t("ob.namePh")} /></label>
           <label>{t("ob.email")}<input className="hf-field" value={peer.email} type="email" onChange={(e) => setPeer({ ...peer, email: e.target.value })} placeholder={t("ob.emailPh")} /></label>
+          {/* Pilier 6.3 : consentement recueilli AU MOMENT de la désignation — sans
+              lui, le pair est nommé mais ne reçoit aucune notification. */}
+          <label className="row" style={{ gap: 10, alignItems: "flex-start", cursor: "pointer" }}>
+            <input type="checkbox" checked={peer.consent} onChange={(e) => setPeer({ ...peer, consent: e.target.checked })} style={{ marginTop: 3 }} />
+            <span className="body">{t("ob.peerConsent")}</span>
+          </label>
           {msg && <p className="ko" style={{ margin: 0 }}>{msg}</p>}
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy} onClick={submitPeer}>{busy ? "…" : t("ob.validate")}</button>
         </div>
