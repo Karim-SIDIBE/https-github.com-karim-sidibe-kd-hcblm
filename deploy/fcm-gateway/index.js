@@ -1,5 +1,5 @@
 /**
- * fcm-gateway — minimal EXAMPLE relay between the KD-HCBLM API and Firebase
+ * fcm-gateway — minimal EXAMPLE relay between the K-HCBLM API and Firebase
  * Cloud Messaging (which also delivers to APNs for iOS tokens).
  *
  * The API's notification dispatcher POSTs the PUSH payload to PUSH_WEBHOOK_URL:

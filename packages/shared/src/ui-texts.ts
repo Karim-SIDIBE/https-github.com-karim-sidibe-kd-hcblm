@@ -102,7 +102,7 @@ const fr: UiDict = {
   "course.availMsgSimple": "« {label} » disponible hors ligne · 7 jours.",
   "course.lockAfter43": "s'ouvre après la micro-session 4.3",
   "course.lockUntil": "s'ouvre le {date} (vous serez notifié·e)",
-  "course.lockFinalSection": "s'ouvre après les sections 1-3 et les 6 journaux",
+  "course.lockFinalSection": "s'ouvre après les sections 1-3",
   // onboarding
   "ob.invalidPeer": "Indiquez un nom et un e-mail valides.", "ob.step": "Étape {n} sur 3",
   "ob.startingPoint": "Votre point de départ", "ob.pamTag": "🎯 Moment d'Ancrage",
@@ -297,7 +297,7 @@ const en: UiDict = {
   "course.availMsgSimple": "“{label}” available offline · 7 days.",
   "course.lockAfter43": "opens after micro-session 4.3",
   "course.lockUntil": "opens on {date} (you'll be notified)",
-  "course.lockFinalSection": "opens after sections 1-3 and the 6 logbook entries",
+  "course.lockFinalSection": "opens after sections 1-3",
   "ob.invalidPeer": "Enter a valid name and e-mail.", "ob.step": "Step {n} of 3",
   "ob.startingPoint": "Your starting point", "ob.pamTag": "🎯 Anchor Moment",
   "ob.pamPlaceholder": "Describe your real work situation…", "ob.saveContinue": "Save and continue →",

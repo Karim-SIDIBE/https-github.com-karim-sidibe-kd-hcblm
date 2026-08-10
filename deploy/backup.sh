@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────
-# Automated backup for the KD-HCBLM / DECLICK DIGITAL stack.
+# Automated backup for the K-HCBLM / DECLICK DIGITAL stack.
 # Dumps PostgreSQL + the media volume + the .env secrets, rotates old copies,
 # and (optionally) pushes a copy off-site via rclone.
 #

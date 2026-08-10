@@ -164,6 +164,63 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
       err("badge.conditions", `blocks[${i}].badge.conditions`, "chaque badge exige au moins une condition de complétion");
   });
 
+  // --- K-HCBLM v2.2, amendement A2 — contrôle d'auditabilité : la somme des
+  //     durées des micro-tâches d'une activité distribuée doit être égale à la
+  //     durée annoncée de l'activité. « Tout écart signale une erreur de
+  //     structure. » Contrôlé dès que l'unité ET tous ses enfants portent une
+  //     durée déclarée.
+  content.blocks.forEach((b, i) => {
+    (b.units ?? []).forEach((u, j) => {
+      if (!u.children?.length || u.durationMin == null) return;
+      if (u.children.some((c) => c.durationMin == null)) return; // durées partielles : rien à contrôler
+      const sum = u.children.reduce((a, c) => a + (c.durationMin ?? 0), 0);
+      if (sum !== u.durationMin)
+        err(
+          "units.durationAudit",
+          `blocks[${i}].units[${j}]`,
+          `A2 : la somme des durées des micro-tâches (${sum} min) doit être égale à la durée annoncée de l'activité (${u.durationMin} min)`,
+        );
+    });
+  });
+
+  // --- K-HCBLM v2.2, amendement A1 — le Bloc 0 tient dans UNE micro-session
+  //     standard unique de 20 minutes (warning : ne bloque pas le contenu
+  //     antérieur, mais signale l'écart au modèle) ---
+  if (onboarding?.units?.length) {
+    const ms = onboarding.units.filter((u) => u.type === "micro-session");
+    if (ms.length !== 1)
+      warn("bloc0.singleSession", "blocks[0].units", `A1 : le Bloc 0 tient dans une micro-session standard unique (déclaré : ${ms.length})`);
+    else if (ms[0]!.durationMin != null && ms[0]!.durationMin !== 20)
+      warn("bloc0.duration", "blocks[0].units", `A1 : la micro-session du Bloc 0 dure 20 minutes (déclaré : ${ms[0]!.durationMin} min)`);
+  }
+
+  // --- v2.2, Pilier 2 — le quiz déclencheur pose 5 questions déclaratives ---
+  const trigCount = onboarding?.payload.triggerQuiz.questions.length ?? 0;
+  if (onboarding && trigCount !== 5)
+    warn("bloc0.triggerQuiz", "blocks[0].payload.triggerQuiz.questions", `le quiz déclencheur pose 5 questions déclaratives (déclaré : ${trigCount})`);
+
+  // --- v2.2, Pilier 1 — le profil auto-déclaré propose 4 archétypes ---
+  const profCount = onboarding?.payload.profileChoices.length ?? 0;
+  if (onboarding && profCount !== 4)
+    warn("bloc0.profiles", "blocks[0].payload.profileChoices", `le choix de profil propose 4 archétypes propres au parcours (déclaré : ${profCount})`);
+
+  // --- v2.2, Pilier 3 — règles de durée vidéo : Bloc 0 ≤ 10 min ; Blocs 1–3
+  //     entre 4 et 8 min ; aucune vidéo > 10 min ---
+  const vids: { path: string; sec: number; bloc0: boolean }[] = [];
+  if (onboarding?.payload.triggerVideo?.durationSec)
+    vids.push({ path: "blocks[0].payload.triggerVideo", sec: onboarding.payload.triggerVideo.durationSec, bloc0: true });
+  content.blocks.forEach((b, i) => {
+    if (!("payload" in b) || !("microSessions" in b.payload)) return;
+    (b.payload.microSessions ?? []).forEach((ms, j) => {
+      if (ms.video?.durationSec) vids.push({ path: `blocks[${i}].payload.microSessions[${j}].video`, sec: ms.video.durationSec, bloc0: false });
+    });
+  });
+  for (const v of vids) {
+    if (v.sec > 600) warn("video.max10min", v.path, `aucune vidéo ne dépasse 10 minutes (déclaré : ${Math.round(v.sec / 60)} min)`);
+    else if (!v.bloc0 && (v.sec < 240 || v.sec > 480))
+      warn("video.range", v.path, `les vidéos des Blocs 1 à 3 durent 4 à 8 minutes (déclaré : ${Math.round(v.sec / 60)} min)`);
+  }
+
   const publishable = !issues.some((i) => i.level === "error");
   return { publishable, issues };
 }

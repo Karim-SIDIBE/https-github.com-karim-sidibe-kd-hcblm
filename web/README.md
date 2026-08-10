@@ -1,4 +1,4 @@
-# KD-HCBLM — Web PWA (`web/`)
+# K-HCBLM — Web PWA (`web/`)
 
 Offline-first Progressive Web App for learners, consuming the `server/` API.
 Stack: **Vite · React · TypeScript · vite-plugin-pwa (Workbox)**.

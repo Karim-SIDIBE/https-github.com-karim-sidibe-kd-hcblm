@@ -75,3 +75,20 @@ test("scoreQuiz computes a percentage", () => {
   assert.deepEqual(scoreQuiz(qs, { a: "A", b: "B", c: "C" }), { scorePct: 100, correct: 3, total: 3 });
   assert.equal(scoreQuiz(qs, { a: "A", b: "X", c: "X" }).scorePct, 33);
 });
+
+test("v2.2 : le journal ne verrouille pas le Bloc 4 — complet sans les 6 entrées, entrées optionnelles hors « missing »", () => {
+  const cert = content.blocks[4]!;
+  const reqs = blockRequirements(cert);
+  const journalReqs = reqs.filter((r) => r.itemType === "JOURNAL_ENTRY");
+  assert.ok(journalReqs.length === 6 && journalReqs.every((r) => r.optional), "les 6 entrées sont déclarées optionnelles");
+
+  // Tout le parcours complété SAUF les entrées de journal (grille validée à 85).
+  const all: CompletionRecord[] = content.blocks.flatMap((b) =>
+    blockRequirements(b)
+      .filter((r) => r.itemType !== "JOURNAL_ENTRY")
+      .map((r) => ({ blockIndex: b.index, itemKey: r.key, scorePct: r.minScore != null ? 85 : null })));
+  const p = computeProgress(content, all, true);
+  assert.equal(p.blocks[4]!.state, "completed", "le Bloc 4 se complète sans les entrées de journal");
+  assert.equal(p.courseCompleted, true);
+  assert.ok(p.blocks[4]!.missing.every((m) => m.itemType !== "JOURNAL_ENTRY"), "aucune entrée de journal dans missing");
+});

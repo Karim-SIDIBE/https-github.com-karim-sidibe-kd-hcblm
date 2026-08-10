@@ -395,10 +395,12 @@ export const n1Full: CourseContent = {
       type: "ONBOARDING",
       title: "Onboarding & Déclencheur",
       objective: "Créer un engagement personnel immédiat dans les 5 premières minutes via le Moment d'Ancrage et le profil de gestion du temps.",
-      durationEstimate: "20 min · 2 micro-sessions",
+      durationEstimate: "20 min · 1 micro-session",
+      // K-HCBLM v2.2, amendement A1 : le Bloc 0 tient dans une micro-session
+      // standard unique de 20 minutes — Moment d'Ancrage (2') → profil (1') →
+      // objectif, structure, pair (4') → Vidéo Déclencheur (10' max) → quiz (3').
       units: [
-        { label: "MS 0.1 — Onboarding (Moment d'Ancrage, profil, objectif, pair)", type: "micro-session", durationMin: 10 },
-        { label: "MS 0.2 — Déclencheur (Vidéo 1 + quiz)", type: "micro-session", durationMin: 10 },
+        { label: "MS 0 — Bloc 0 (Moment d'Ancrage, profil, objectif, pair, Vidéo 1, quiz déclencheur)", type: "micro-session", durationMin: 20 },
       ],
       badge: {
         type: "ENTRY",
@@ -844,11 +846,11 @@ export const n1Full: CourseContent = {
       durationEstimate: "~1 h 25 · 3 micro-sessions + 1 activité longue",
       units: [
         { label: "MS 3.1 — Vidéo 10 + micro-exercice", type: "micro-session", durationMin: 15 },
-        { label: "Activité Expérientielle Longue — Productivité hybride", type: "long-activity", durationMin: 35, children: [
-          { label: "Vidéo 11 — Productivité hybride dans les organisations africaines", type: "micro-task", durationMin: 5 },
-          { label: "Cas transversal Sylvie", type: "micro-task", durationMin: 20 },
-          { label: "Auto-évaluation (6 critères)", type: "micro-task", durationMin: 10 },
-        ] },
+        // A2 : activité longue en mode CONTINU (une seule séance de 35 min :
+        // vidéo 11 + cas Sylvie + auto-évaluation). Sa composition est portée
+        // par itemGroups (affichage) — les micro-tâches sont réservées aux
+        // activités distribuées poussées par la plateforme (ex. le journal).
+        { label: "Activité Expérientielle Longue — Productivité hybride (Vidéo 11 + cas Sylvie + auto-évaluation)", type: "long-activity", mode: "continuous", durationMin: 35 },
         { label: "MS 3.2 — Plan d'action 30 jours", type: "micro-session", durationMin: 20 },
         { label: "MS 3.3 — Quiz final (noté · seuil 70 %)", type: "micro-session", durationMin: 15 },
       ],
@@ -1022,9 +1024,11 @@ export const n1Full: CourseContent = {
         { label: "Micro-session 4.1 — Section 1 — Description de la situation (~10 lignes)", type: "micro-session", durationMin: 15 },
         { label: "Micro-session 4.2 — Section 2 — La solution mise en œuvre", type: "micro-session", durationMin: 15 },
         { label: "Micro-session 4.3 — Section 3 — Résultat observé", type: "micro-session", durationMin: 15 },
-        // The 6 journal micro-entries are SUB-UNITS of the 2-week journal long
-        // activity (6 × 5 min = its 30 min) — not independent top-level units.
-        { label: "Activité Expérientielle Longue — Section 4 — Journal des 2 semaines (6 micro-entrées)", type: "long-activity", durationMin: 30, children: [
+        // A2 : le journal est l'exemple type de l'activité longue DISTRIBUÉE —
+        // ses 6 micro-tâches (6 × 5 min = 30 min) décrivent sa composition et
+        // n'ajoutent aucune unité d'un autre type ; la durée n'est comptée
+        // qu'une fois. Contrôle d'auditabilité : 6 × 5 = 30 ✓ (validation).
+        { label: "Activité Expérientielle Longue — Section 4 — Journal des 2 semaines (6 micro-entrées)", type: "long-activity", mode: "distributed", durationMin: 30, children: [
           { label: "Journal J+2", type: "micro-task", durationMin: 5 },
           { label: "Journal J+4", type: "micro-task", durationMin: 5 },
           { label: "Journal J+6", type: "micro-task", durationMin: 5 },
@@ -1037,7 +1041,7 @@ export const n1Full: CourseContent = {
       badge: {
         type: "CERTIFICATE",
         label: "Certificat de Niveau 1",
-        conditions: ["5 sections soumises", "6 micro-entrées de journal complétées", "Grille D4 ≥ 70/100 validée par un évaluateur"],
+        conditions: ["5 sections soumises", "Journal de pratique tenu (6 micro-entrées — noté par la grille, critère S1)", "Grille D4 ≥ 70/100 validée par un évaluateur"],
       },
       payload: {
         projectBrief:

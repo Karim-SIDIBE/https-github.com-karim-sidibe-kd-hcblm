@@ -1,4 +1,4 @@
-# Déploiement KD-HCBLM — VPS LWS (tout-en-un : API + PWA)
+# Déploiement K-HCBLM — VPS LWS (tout-en-un : API + PWA)
 
 Architecture de production (**tout sur le VPS**, Caddy gère le HTTPS automatique
 pour les deux) :

@@ -23,6 +23,9 @@ export type RequiredItem = {
   /** Minimum score (%) required for this item to count as satisfied. */
   minScore?: number;
   label: string;
+  /** Tracked and displayed, but never blocks block completion (K-HCBLM v2.2 :
+   *  the journal is sanctioned by rubric criterion S1, not by a lock). */
+  optional?: boolean;
 };
 
 export type CompletionRecord = {
@@ -107,8 +110,10 @@ export function blockRequirements(block: Block): RequiredItem[] {
       const req: RequiredItem[] = [];
       block.payload.sections.forEach((s, i) => {
         if (i === 3) {
+          // Journal micro-entries are pushed on their J+n schedule and feed
+          // rubric criterion S1, but NEVER lock the block (v2.2, Pilier 5).
           req.push(...block.payload.journal.entries.map((e) => ({
-            itemType: "JOURNAL_ENTRY" as const, key: `J+${e.day}`, label: `Journal J+${e.day}`,
+            itemType: "JOURNAL_ENTRY" as const, key: `J+${e.day}`, label: `Journal J+${e.day}`, optional: true,
           })));
         } else {
           req.push({ itemType: "PROJECT", key: projectSectionKey(i), label: s.title });
@@ -191,7 +196,9 @@ export function computeProgress(
     // The Moment d'Ancrage is the very first productivity unit (Pilier 6.5).
     if (block.type === "ONBOARDING") { prodTotal++; if (hasMomentAncrage) prodEarned++; }
 
-    const missing = required.filter((r) => !isSatisfied(r, byKey));
+    // Optional items (journal micro-entries) are tracked and displayed but
+    // never appear in `missing`, so they cannot lock the block.
+    const missing = required.filter((r) => !r.optional && !isSatisfied(r, byKey));
 
     // Bloc 0 additionally requires the Moment d'Ancrage to be captured.
     let pamMissing = false;

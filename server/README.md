@@ -1,4 +1,4 @@
-# KD-HCBLM v2.0 — Backend (`server/`)
+# K-HCBLM v2.2 — Backend (`server/`)
 
 Production engine behind the Declick learner experience. Stack: **Node 22 ·
 TypeScript · Fastify · Prisma · PostgreSQL 16 · Zod**.
@@ -271,7 +271,7 @@ the local cluster on port **5433**.
 
 ## Status
 
-### Spec coverage — KD-HCBLM v2.0 technical specification (complete)
+### Spec coverage — K-HCBLM v2.2 technical specification (complete)
 
 Audited against `KDHCBLM_v2_Platform_Technical_Specification.docx`. All
 NON-NEGOTIABLE / CRITICAL and REQUIRED backend items are closed and verified

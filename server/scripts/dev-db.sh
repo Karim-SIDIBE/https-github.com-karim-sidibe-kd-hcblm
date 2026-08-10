@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local Postgres 16 dev cluster helper for KD-HCBLM.
+# Local Postgres 16 dev cluster helper for K-HCBLM.
 # Usage: bash scripts/dev-db.sh {start|stop|status|psql}
 set -euo pipefail
 

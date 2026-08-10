@@ -1,4 +1,4 @@
-# KD-HCBLM API — production image (monorepo-aware).
+# K-HCBLM API — production image (monorepo-aware).
 # Build context = repo ROOT:  docker build -f deploy/Dockerfile -t kd-api .
 FROM node:22-slim
 

@@ -74,6 +74,22 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
           <button className="x" onClick={onClose}>×</button>
         </div>
         <div className="db">
+          {item.journal && (
+            // Part calculée par la plateforme du critère S1 (socle §3) : l'évaluateur
+            // ne relit pas le calendrier — il note le signal de surcharge et l'ajustement.
+            <div className="card" style={{ padding: "10px 12px", marginBottom: 12 }}>
+              <div className="row between">
+                <strong style={{ fontSize: 13 }}>Journal de pratique — donnée plateforme (critère S1)</strong>
+                <span className={`pill pill--sm ${item.journal.completed === item.journal.expected ? "pill--green" : item.journal.completed >= 4 ? "pill--warn" : "pill--red"}`}>
+                  {item.journal.completed}/{item.journal.expected} entrées
+                </span>
+              </div>
+              <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
+                {item.journal.entries.map((e) => `J+${e.day} : ${e.completedAt ? new Date(e.completedAt).toLocaleDateString("fr-FR") : "—"}`).join(" · ")}
+                {item.journal.groupedCatchup && <span style={{ color: "var(--red, #b91c1c)" }}> · ⚠️ rattrapage groupé (plus de 2 entrées le même jour)</span>}
+              </div>
+            </div>
+          )}
           <div className="row between" style={{ marginBottom: 14 }}>
             <span className={`pill ${(STATUS[item.revisionStatus] ?? { cls: "pill--soft" }).cls}`}>{(STATUS[item.revisionStatus] ?? { label: item.revisionStatus }).label}</span>
             {item.evaluator ? <span className="muted" style={{ fontSize: 12.5 }}>Évaluateur : {item.evaluator.name}</span> : (

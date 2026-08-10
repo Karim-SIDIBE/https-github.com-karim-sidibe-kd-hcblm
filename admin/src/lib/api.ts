@@ -222,6 +222,9 @@ export type EvalQueueItem = {
   submittedAt: string; revisionStatus: string; scoreTotal: number | null;
   evaluator: { id: string; name: string } | null;
   rubric: { criteria: RubricCriterion[]; threshold: number } | null;
+  /** Part calculée par la plateforme du critère S1 (socle §3) : décompte des
+   *  entrées du journal, dates de saisie et détection du rattrapage groupé. */
+  journal: { expected: number; completed: number; entries: { day: number; completedAt: string | null }[]; groupedCatchup: boolean } | null;
 };
 export type ProjectDetail = {
   content: { sections?: Record<string, string> } | null;

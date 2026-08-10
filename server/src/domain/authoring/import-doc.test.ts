@@ -37,7 +37,7 @@ test("a doc with no block headings keeps all text (parked in block 0)", () => {
   assert.ok((seg.blockNotes[0] ?? "").length >= 0);
 });
 
-test("fine pass: KD-HCBLM conventions fill micro-session + video fields", () => {
+test("fine pass: K-HCBLM conventions fill micro-session + video fields", () => {
   const seg = segmentImportedDoc([
     H("Gestion du temps"),
     H("Bloc 1 — Comprendre"),

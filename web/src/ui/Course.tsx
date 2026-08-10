@@ -116,8 +116,10 @@ export function Course({ eid }: { eid: string }) {
   const failedFinal = (i: number) => Boolean((progress?.blocks.find((b) => b.index === i) as { failedThreshold?: boolean } | undefined)?.failedThreshold);
 
   // Progressive Bloc 4 : each journal micro-entry unlocks J+n days after the
-  // completion of 4.3 ; Section 5 unlocks after sections 1–3 + the 6 entries.
-  const itemLock = (b: { type?: string }, it: BlockItem, done: Set<string>, items: BlockItem[]): string | null => {
+  // completion of 4.3 ; Section 5 unlocks after sections 1–3. Le journal ne
+  // verrouille JAMAIS la soumission finale (K-HCBLM v2.2, Pilier 5) — les
+  // entrées manquantes sont sanctionnées par la grille (critère S1).
+  const itemLock = (b: { type?: string }, it: BlockItem, done: Set<string>, _items: BlockItem[]): string | null => {
     if ((b as { type?: string }).type !== "CERTIFICATION" || isItemDone(it, done)) return null;
     const m = /^J\+(\d+)$/.exec(it.key);
     if (m) {
@@ -127,7 +129,7 @@ export function Course({ eid }: { eid: string }) {
       return null;
     }
     if (it.key === "project@4") {
-      const need = ["project", "project@1", "project@2", ...items.filter((x) => /^J\+\d+$/.test(x.key)).map((x) => x.key)];
+      const need = ["project", "project@1", "project@2"];
       if (!need.every((k) => done.has(k))) return t("course.lockFinalSection");
     }
     return null;
