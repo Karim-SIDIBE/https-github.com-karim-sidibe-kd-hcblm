@@ -20,16 +20,23 @@ export function badgeTypeForBlock(type: Block["type"]): BadgeTypeName {
   return BLOCK_BADGE[type];
 }
 
-/** A short PAM-anchored congratulation, per badge. */
+/** A short PAM-anchored congratulation, per badge. For the ENTRY badge, the
+ *  restitution also replays the learner's self-declared profile (K-HCBLM v2.2,
+ *  Pilier 6.5 : « l'écran de délivrance du Badge Entrée reprend la phrase du
+ *  Moment d'Ancrage et le profil auto-déclaré »). */
 export function badgeMessage(
   badgeType: BadgeTypeName,
   badgeLabel: string,
   momentAncrage: string | null | undefined,
+  selfProfileName?: string | null,
 ): string {
   const pam = (momentAncrage ?? "").trim();
   const anchor = pam.length > 0
     ? `Souvenez-vous de ce que vous aviez écrit : « ${pam} »`
     : "Souvenez-vous de la situation que vous aviez décrite au Bloc 0.";
+  const profile = badgeType === "ENTRY" && selfProfileName?.trim()
+    ? ` Vous vous êtes reconnu·e dans le profil « ${selfProfileName.trim()} » — le parcours part de là.`
+    : "";
 
   const tail: Record<BadgeTypeName, string> = {
     ENTRY: "Vous venez de poser le premier jalon de votre reprise de contrôle.",
@@ -39,7 +46,7 @@ export function badgeMessage(
     CERTIFICATE: "Vous avez démontré votre maîtrise. Félicitations pour votre certification de Niveau 1 !",
   };
 
-  return `🏅 ${badgeLabel} débloqué ! ${anchor} ${tail[badgeType]}`;
+  return `🏅 ${badgeLabel} débloqué ! ${anchor}${profile} ${tail[badgeType]}`;
 }
 
 /** Peer notification text (Pilier 6.3). */

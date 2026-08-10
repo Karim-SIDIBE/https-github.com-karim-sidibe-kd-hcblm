@@ -747,6 +747,11 @@ model Enrollment {
   peerEmail String?
   /// Peer mobile number for SMS / WhatsApp delivery (§7.1 — African reach).
   peerPhone String?
+  /// Consentement au partage de progression avec le pair, recueilli au moment
+  /// de la désignation (K-HCBLM v2.2, Pilier 6.3). Conditionne toute
+  /// notification au pair. `true` par défaut pour les désignations antérieures
+  /// à la collecte explicite (comportement historique conservé).
+  peerConsent Boolean @default(true)
 
   /// Enterprise enrolment → J+14 inactivity signals go to the admin (Pilier 6.4).
   isEnterprise Boolean @default(false)

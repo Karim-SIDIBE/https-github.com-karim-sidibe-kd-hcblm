@@ -396,6 +396,12 @@ export const n1Full: CourseContent = {
       title: "Onboarding & Déclencheur",
       objective: "Créer un engagement personnel immédiat dans les 5 premières minutes via le Moment d'Ancrage et le profil de gestion du temps.",
       durationEstimate: "20 min · 1 micro-session",
+      // Carte de rappel (Pilier 6.2) : 3 points, 2 minutes avant la reprise.
+      recallCard: [
+        "Votre Moment d'Ancrage — la situation que vous avez décrite — est le fil rouge de tout le parcours.",
+        "Votre profil de départ décrit un point de départ, pas une identité : le diagnostic du Bloc 1 fait autorité.",
+        "Chaque micro-session se consomme en 15 à 25 minutes, sur mobile, avec reprise exacte là où vous vous êtes arrêté·e.",
+      ],
       // K-HCBLM v2.2, amendement A1 : le Bloc 0 tient dans une micro-session
       // standard unique de 20 minutes — Moment d'Ancrage (2') → profil (1') →
       // objectif, structure, pair (4') → Vidéo Déclencheur (10' max) → quiz (3').
@@ -415,11 +421,14 @@ export const n1Full: CourseContent = {
           placeholderExample:
             "Mardi : 11 h au bureau à répondre au WhatsApp et aux urgences de mon manager — et mon dossier prioritaire n'a pas avancé.",
         },
+        // Pilier 2 (v2.2) : `consistentBands` relie chaque archétype aux bandes
+        // du quiz diagnostique qui lui sont cohérentes — hors de ces bandes,
+        // l'interface énonce l'écart (le diagnostic fait autorité).
         profileChoices: [
-          { key: "A", name: "Le Débordé réactif", description: "Je réponds à tout ce qui arrive dans l'ordre où ça arrive. Je n'ai jamais le temps de planifier — les urgences ne s'arrêtent jamais." },
-          { key: "B", name: "Le Procrastinateur organisé", description: "Je sais ce que je dois faire, j'ai des listes — mais je reporte les tâches importantes au profit du facile ou des sollicitations externes." },
-          { key: "C", name: "L'Urgentiste chronique", description: "Je ne travaille vraiment qu'en mode urgence maximale. Les deadlines imminentes et la pression de mon manager sont mes seuls moteurs." },
-          { key: "D", name: "L'Organisateur submergé", description: "Je planifie, j'ai des outils, des agendas — mais les imprévus et demandes de dernière minute détruisent mes plans en permanence." },
+          { key: "A", name: "Le Débordé réactif", description: "Je réponds à tout ce qui arrive dans l'ordre où ça arrive. Je n'ai jamais le temps de planifier — les urgences ne s'arrêtent jamais.", consistentBands: ["Réactif en éveil", "Réactif conscient"] },
+          { key: "B", name: "Le Procrastinateur organisé", description: "Je sais ce que je dois faire, j'ai des listes — mais je reporte les tâches importantes au profit du facile ou des sollicitations externes.", consistentBands: ["Réactif conscient", "Organisateur en transition"] },
+          { key: "C", name: "L'Urgentiste chronique", description: "Je ne travaille vraiment qu'en mode urgence maximale. Les deadlines imminentes et la pression de mon manager sont mes seuls moteurs.", consistentBands: ["Réactif en éveil", "Réactif conscient"] },
+          { key: "D", name: "L'Organisateur submergé", description: "Je planifie, j'ai des outils, des agendas — mais les imprévus et demandes de dernière minute détruisent mes plans en permanence.", consistentBands: ["Organisateur en transition", "Productif maîtrisé"] },
         ],
         triggerVideo: v({
           title: "Occupé ou productif ? Ce que les meilleures organisations africaines ont compris",
@@ -497,6 +506,12 @@ export const n1Full: CourseContent = {
       title: "Comprendre les dynamiques du temps en contexte africain",
       objective: "Identifier les mécanismes qui détruisent la productivité, comprendre sa relation au temps, poser les bases d'une gestion du temps adaptée.",
       durationEstimate: "~1 h 35 · 6 micro-sessions + 1 activité longue",
+      // Carte de rappel (Pilier 6.2) : 3 points, 2 minutes avant la reprise.
+      recallCard: [
+        "L'urgent n'est pas l'important : le critère de tri se choisit avant la journée, pas au fil des sollicitations.",
+        "Un temps non planifié est un temps capturé par les priorités des autres — la planification écrite précède tout.",
+        "Le cas Nadia : répondre à toutes les urgences est précisément ce qui les multiplie.",
+      ],
       units: [
         { label: "MS 1.0 — Quiz diagnostique", type: "micro-session", durationMin: 15 },
         { label: "MS 1.1 — Vidéo 2 + micro-exercice", type: "micro-session", durationMin: 10 },
@@ -679,6 +694,12 @@ export const n1Full: CourseContent = {
       title: "Pratiquer et progresser",
       objective: "Mettre en pratique les outils dans des situations africaines réalistes, en tenant compte des codes culturels et des dynamiques hiérarchiques.",
       durationEstimate: "~1 h 35 · 3 micro-sessions + 2 activités longues",
+      // Carte de rappel (Pilier 6.2) : 3 points, 2 minutes avant la reprise.
+      recallCard: [
+        "Un créneau protégé n'existe que s'il a un jour, une heure et une durée — et qu'il est annoncé.",
+        "Regrouper les sollicitations sur des plages fixes rend les interruptions gérables sans rompre la relation.",
+        "L'application terrain vaut plus que la théorie : une action datée, dans votre contexte réel.",
+      ],
       units: [
         { label: "MS 2.1 — Vidéo 7 + exercice", type: "micro-session", durationMin: 10 },
         { label: "MS 2.2 — Vidéo 8 + exercice", type: "micro-session", durationMin: 10 },
@@ -844,6 +865,12 @@ export const n1Full: CourseContent = {
       title: "Installer des habitudes durables",
       objective: "Ancrer des habitudes durables adaptées aux réalités africaines, mesurer sa progression et finaliser un plan d'action de 30 jours.",
       durationEstimate: "~1 h 25 · 3 micro-sessions + 1 activité longue",
+      // Carte de rappel (Pilier 6.2) : 3 points, 2 minutes avant la reprise.
+      recallCard: [
+        "Une habitude tient quand elle est petite, datée et accrochée à un déclencheur déjà présent dans la journée.",
+        "L'auto-évaluation mesure l'écart entre l'intention et la pratique réelle — sans jugement.",
+        "Un plan 30 jours efficace : trois habitudes maximum, revues chaque semaine.",
+      ],
       units: [
         { label: "MS 3.1 — Vidéo 10 + micro-exercice", type: "micro-session", durationMin: 15 },
         // A2 : activité longue en mode CONTINU (une seule séance de 35 min :

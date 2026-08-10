@@ -244,6 +244,32 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
               </div>
             </div>
 
+            <div className="card">
+              <div className="card-h"><h3>Cartes de rappel <span className="muted" style={{ fontWeight: 400 }}>(Pilier 6.2 — 3 points par bloc, consultés avant la reprise)</span></h3></div>
+              <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {content.blocks.filter((b) => b.type !== "CERTIFICATION").map((b) => {
+                  const i = content.blocks.indexOf(b);
+                  const pts: string[] = ((b as any).recallCard ?? ["", "", ""]).slice(0, 3);
+                  while (pts.length < 3) pts.push("");
+                  return (
+                    <div key={b.index} style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                      <label style={lbl}>Bloc {b.index} · {b.title}</label>
+                      {pts.map((p, j) => (
+                        <input key={j} style={field} value={p} placeholder={`Point ${j + 1}`}
+                          onChange={(e) => set((c) => {
+                            const cur: string[] = ((c.blocks[i] as any).recallCard ?? ["", "", ""]).slice(0, 3);
+                            while (cur.length < 3) cur.push("");
+                            cur[j] = e.target.value;
+                            // Contrat : exactement 3 points non vides, ou pas de carte du tout.
+                            (c.blocks[i] as any).recallCard = cur.every((x) => x.trim()) ? cur : cur.some((x) => x.trim()) ? cur : undefined;
+                          })} />
+                      ))}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
             {rubric && (
               <div className="card">
                 <div className="card-h"><h3>Grille Bloc 4</h3><span className={`pill ${weightSum === 100 ? "pill--green" : "pill--red"}`}>Somme : {weightSum}/100</span></div>

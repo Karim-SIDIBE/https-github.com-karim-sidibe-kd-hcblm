@@ -229,6 +229,11 @@ const ProfileChoice = z.object({
   key: OptionKey,
   name: nonEmpty("nom de profil"),
   description: nonEmpty("description du profil"),
+  /** Bandes du quiz diagnostique cohérentes avec cet archétype (Pilier 2 :
+   *  quand le diagnostic tombe hors de ces bandes, l'interface énonce
+   *  explicitement l'écart — le diagnostic fait autorité). Optionnel : sans
+   *  correspondance déclarée, l'écart n'est pas affirmé. */
+  consistentBands: z.array(nonEmpty("bande cohérente")).optional(),
 });
 
 /** Scored question kinds. `single` (default) is the historical single-answer
@@ -288,6 +293,7 @@ export type ScoredQuestion = z.infer<typeof ScoredQuestion>;
 // Scoring helpers live in a zod-free module (so the learner PWA imports them
 // without bundling zod). Re-exported here for the server's `export *` surface.
 export { isAnswerCorrect, type ScorableQuestion } from "./scoring.js";
+export { profileDivergence, type ProfileDivergence, type SelfProfileChoice } from "./profile.js";
 
 /** Optional random draw from the question bank, materialised per learner at
  *  bundle time (so each learner gets a different set; stays offline-capable). */
@@ -535,6 +541,10 @@ const BlockBase = z.object({
   title: nonEmpty("titre du bloc"),
   objective: z.string().default(""),
   durationEstimate: z.string().default(""),
+  /// Carte de rappel des apprentissages clés (K-HCBLM v2.2, Pilier 6.2) : 3
+  /// points consultables en 2 minutes avant la reprise. N'est PAS une
+  /// micro-session et n'entre jamais dans le comptage des unités.
+  recallCard: z.array(nonEmpty("point de rappel")).length(3, "exactement 3 points de rappel").optional(),
   /// Explicit, designer-declared units for auditable counting (v2.1). Optional
   /// for backward compatibility; when absent the block shows no breakdown.
   units: z.array(BlockUnit).optional(),
