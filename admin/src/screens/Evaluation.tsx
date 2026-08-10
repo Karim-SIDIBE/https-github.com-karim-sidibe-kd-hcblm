@@ -8,8 +8,9 @@ const EVALUATOR_ROLES = new Set(["EVALUATOR", "COURSE_ADMIN", "SUPER_ADMIN"]);
 const STATUS: Record<string, { cls: string; label: string }> = {
   SUBMITTED: { cls: "pill--warn", label: "À attribuer" },
   ASSIGNED: { cls: "pill--info", label: "En évaluation" },
-  PASSED: { cls: "pill--green", label: "Validé" },
-  REVISION_REQUESTED: { cls: "pill--red", label: "Révision demandée" },
+  PASSED: { cls: "pill--green", label: "Certifié" },
+  REVISION_REQUESTED: { cls: "pill--red", label: "Remise demandée" },
+  NOT_CERTIFIED: { cls: "pill--red", label: "Non certifié" },
 };
 
 function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: () => void; onDone: () => void }) {
@@ -29,11 +30,16 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   }, []);
 
   const crit = item.rubric?.criteria ?? [];
+  const banded = crit.some((c) => (c.bands ?? []).length > 0);
+  const [evidence, setEvidence] = useState<string[]>(() => crit.map(() => ""));
   const maxTotal = crit.reduce((s, c) => s + c.weightPoints, 0) || 100;
   const total = points.reduce((s, p) => s + p, 0);
-  const pct = Math.round((total / maxTotal) * 100);
   const threshold = item.rubric?.threshold ?? 70;
   const sections = detail?.content?.sections ?? {};
+  // Décision du socle §6, prévisualisée en direct (mêmes règles que le serveur).
+  const minimumsMissed = crit.filter((c, i) => c.minPoints != null && (points[i] ?? 0) < c.minPoints).map((c) => c.label);
+  const decision = minimumsMissed.length >= 2 || total < 55 ? "NOT_CERTIFIED"
+    : total >= threshold && minimumsMissed.length === 0 ? "CERTIFIED" : "RESUBMIT";
 
   async function assign(evaluatorId: string) {
     setBusy("assign"); setMsg(null);
@@ -53,10 +59,12 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
     setPoints(crit.map((c) => ai.perCriterion.find((s) => s.label === c.label)?.suggested ?? 0));
   }
   async function grade() {
+    if (banded && evidence.some((e) => !e.trim())) { setMsg("Preuve manquante : chaque critère exige une citation exacte ou une déclaration d'absence (règle 3 du socle)."); return; }
     setBusy("grade"); setMsg(null);
     try {
-      await api.gradeProject(item.enrollmentId, { criteria: points.map((p, i) => ({ index: i, points: p })), notes: notes.trim() || undefined });
-      setMsg(`Note enregistrée : ${pct}% (${pct >= threshold ? "validé" : "révision demandée"}).`);
+      await api.gradeProject(item.enrollmentId, { criteria: points.map((p, i) => ({ index: i, points: p, evidence: evidence[i]?.trim() || undefined })), notes: notes.trim() || undefined });
+      const label = decision === "CERTIFIED" ? "certifié" : decision === "RESUBMIT" ? "remise demandée" : "non certifié";
+      setMsg(`Décision enregistrée : ${total}/100 — ${label}.`);
       onDone();
     } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
   }
@@ -128,21 +136,60 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
             </div>
           )}
           {crit.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>Grille indisponible.</p> : (<>
+            {banded && <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>Notation PAR BANDE (socle §5) : choisissez la bande la plus haute dont <b>tous</b> les éléments sont satisfaits — milieu de bande par défaut. La preuve (citation exacte ou déclaration d'absence) est obligatoire pour chaque critère.</p>}
             {crit.map((c, i) => (
-              <div className="crit" key={c.label}>
-                <div className="lab">{c.label}<small>sur {c.weightPoints} points</small></div>
-                <div className="row" style={{ justifyContent: "flex-end", gap: 6 }}>
-                  <input type="number" min={0} max={c.weightPoints} value={points[i]}
-                    onChange={(e) => setPoints((p) => p.map((v, j) => j === i ? Math.max(0, Math.min(c.weightPoints, Number(e.target.value) || 0)) : v))} />
-                  <span className="max">/ {c.weightPoints}</span>
+              <div className="crit" key={c.label} style={{ display: "block" }}>
+                <div className="row between" style={{ gap: 8 }}>
+                  <div className="lab">
+                    {c.label}
+                    <small>sur {c.weightPoints} pts{c.minPoints != null ? ` · minimum ${c.minPoints}` : ""}{c.origin ? ` · ${c.origin}` : ""}</small>
+                    {c.whereToLook ? <small style={{ display: "block" }}>Où chercher : {c.whereToLook}</small> : null}
+                  </div>
+                  <div className="row" style={{ justifyContent: "flex-end", gap: 6, flexShrink: 0 }}>
+                    <input type="number" min={0} max={c.weightPoints} value={points[i]}
+                      onChange={(e) => setPoints((p) => p.map((v, j) => j === i ? Math.max(0, Math.min(c.weightPoints, Number(e.target.value) || 0)) : v))} />
+                    <span className="max">/ {c.weightPoints}</span>
+                  </div>
                 </div>
+                {(c.bands ?? []).length > 0 && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "6px 0 4px" }}>
+                    {[...c.bands!].sort((a, b) => b.band - a.band).map((b) => {
+                      const active = points[i]! >= b.scoreRange[0] && points[i]! <= b.scoreRange[1];
+                      const mid = Math.ceil((b.scoreRange[0] + b.scoreRange[1]) / 2);
+                      return (
+                        <button key={b.band} type="button" title={b.descriptor}
+                          onClick={() => setPoints((p) => p.map((v, j) => j === i ? mid : v))}
+                          style={{ textAlign: "left", fontSize: 11.5, lineHeight: 1.35, padding: "6px 8px", borderRadius: 7, cursor: "pointer",
+                            border: `1px solid ${active ? "var(--orange-500, #E8722A)" : "var(--line)"}`,
+                            background: active ? "var(--orange-50, #FDF1E8)" : "transparent", color: "inherit" }}>
+                          <b>Bande {b.band} · {b.scoreRange[0]}–{b.scoreRange[1]}</b> — {b.descriptor}
+                        </button>
+                      );
+                    })}
+                    <textarea value={evidence[i] ?? ""} onChange={(e) => setEvidence((ev) => ev.map((v, j) => j === i ? e.target.value : v))}
+                      placeholder="Preuve (obligatoire) : citation exacte du dossier — ou, pour une bande basse, sections parcourues et ce qui n'y figure pas…"
+                      style={{ width: "100%", padding: "8px 10px", border: `1px solid ${evidence[i]?.trim() ? "var(--line-strong)" : "var(--danger, #b91c1c)"}`, borderRadius: 8, fontFamily: "inherit", fontSize: 12, minHeight: 46, resize: "vertical" }} />
+                  </div>
+                )}
               </div>
             ))}
             <div className="gradetotal">
-              <span>Total · seuil {threshold}%</span>
-              <span style={{ color: pct >= threshold ? "var(--success)" : "var(--danger)" }}><b className="num">{pct}%</b> ({total}/{maxTotal})</span>
+              <span>Total · seuil {threshold}</span>
+              <span style={{ color: decision === "CERTIFIED" ? "var(--success)" : "var(--danger)" }}><b className="num">{total}</b>/{maxTotal}</span>
             </div>
-            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Retour à l'apprenant (facultatif)…"
+            {banded && (
+              // Prévisualisation de la décision du socle §6 (conditions exclusives —
+              // la règle des minimums prime sur le total).
+              <div className="row between" style={{ marginTop: 8, gap: 8 }}>
+                <span className={`pill ${decision === "CERTIFIED" ? "pill--green" : decision === "RESUBMIT" ? "pill--warn" : "pill--red"}`}>
+                  {decision === "CERTIFIED" ? "Certifié" : decision === "RESUBMIT" ? "Remise demandée" : "Non certifié"}
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  {minimumsMissed.length === 0 ? "Tous les minimums atteints" : `Minimum(s) non atteint(s) : ${minimumsMissed.join(" · ")}`}
+                </span>
+              </div>
+            )}
+            <textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Retour écrit à l'apprenant (3 lignes minimum recommandées — socle §7)…"
               style={{ width: "100%", marginTop: 12, padding: "10px 12px", border: "1px solid var(--line-strong)", borderRadius: 9, fontFamily: "inherit", fontSize: 13, minHeight: 80, resize: "vertical" }} />
           </>)}
           {msg && <p style={{ marginTop: 12, fontSize: 13, fontWeight: 600, color: "var(--navy-600)" }}>{msg}</p>}

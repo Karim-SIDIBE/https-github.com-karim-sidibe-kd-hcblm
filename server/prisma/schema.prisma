@@ -886,8 +886,14 @@ model ProjectSubmission {
   feedback       String?
   result         ProjectResult?
   evaluatedAt    DateTime?
-  /// SUBMITTED → ASSIGNED → PASSED | REVISION_REQUESTED.
+  /// SUBMITTED → ASSIGNED → PASSED | REVISION_REQUESTED | NOT_CERTIFIED.
   revisionStatus ProjectStatus  @default(SUBMITTED)
+  /// Décision du socle §6 (CERTIFIED · RESUBMIT · NOT_CERTIFIED) — archivée
+  /// avec la fiche (conditions exclusives, la règle des minimums prime).
+  decision       String?
+  /// Version de la grille appliquée (socle §6 : « archivée avec la fiche de
+  /// notation et la version de la grille » — condition d'auditabilité).
+  gridVersion    String?
   /// Day+5 SLA: set once the admin alert has fired (idempotent).
   slaAlertedAt   DateTime?
 
@@ -904,6 +910,9 @@ enum ProjectStatus {
   ASSIGNED
   PASSED
   REVISION_REQUESTED
+  /// Socle §6 : total < 55 ou ≥ 2 minimums non atteints — reprise du Bloc 2
+  /// ou 3 conseillée avant nouvelle soumission.
+  NOT_CERTIFIED
 }
 
 /// One row per completed content item for an enrolment.

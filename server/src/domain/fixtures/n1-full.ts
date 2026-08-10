@@ -1094,14 +1094,73 @@ export const n1Full: CourseContent = {
           ],
         },
         rubric: {
-          // Updated KOMPETENCES AFRICA D4 referential (6 criteria, /100, threshold 70).
+          // Grille certifiante officielle : annexe Gestion du Temps N1 v1.1
+          // (critères du domaine D4, 60 pts) + socle commun v1.1 (S1-S3, 40 pts).
+          // Pondérations INCHANGÉES par rapport à la grille v1.0 (correspondance
+          // consignée au §4 de l'annexe : D4.C4 → S1, transversaux → S2/S3).
+          // Notation PAR BANDE : la bande la plus haute dont tous les éléments
+          // sont satisfaits ; milieu de bande par défaut ; preuve obligatoire.
           criteria: [
-            { label: "Organisation personnelle", competencyCode: "D4.C1", weightPoints: 20 },
-            { label: "Gestion des priorités", competencyCode: "D4.C2", weightPoints: 20 },
-            { label: "Gestion du temps & interruptions", competencyCode: "D4.C3", weightPoints: 20 },
-            { label: "Performance durable + journal", competencyCode: "D4.C4", weightPoints: 15 },
-            { label: "Ancrage culturel africain (transversal)", competencyCode: "", weightPoints: 10 },
-            { label: "Profondeur de l'apprentissage (transversal)", competencyCode: "", weightPoints: 15 },
+            {
+              label: "Organisation personnelle", competencyCode: "D4.C1", weightPoints: 20, origin: "annexe", minPoints: 10,
+              whereToLook: "Section 2 (solution mise en œuvre) et journal de pratique",
+              bands: [
+                { band: 4, scoreRange: [16, 20], descriptor: "Décrit un système de planification appliqué sur la période de pratique de 15 jours. Nomme au moins un créneau protégé avec son jour, son heure et sa durée. Cite au moins deux occasions datées où il l'a tenu. Le journal montre la planification initiale et au moins un ajustement en cours de route." },
+                { band: 3, scoreRange: [11, 15], descriptor: "Décrit un système de planification qu'il a appliqué. Nomme un créneau protégé avec son jour et sa durée. Cite une occasion où il l'a tenu, ou explique précisément pourquoi il n'a pas pu le tenir." },
+                { band: 2, scoreRange: [6, 10], descriptor: "Décrit une intention de planification ou un outil adopté, sans créneau daté ni preuve d'application. Le journal reste descriptif : il raconte les journées sans montrer de planification." },
+                { band: 1, scoreRange: [0, 5], descriptor: "Aucun système décrit, ou description générique reprenant le vocabulaire du parcours sans situation propre au candidat." },
+              ],
+            },
+            {
+              label: "Gestion des priorités", competencyCode: "D4.C2", weightPoints: 20, origin: "annexe", minPoints: 10,
+              whereToLook: "Sections 1, 2 et 3",
+              bands: [
+                { band: 4, scoreRange: [16, 20], descriptor: "Rapporte au moins deux arbitrages réels entre une demande urgente et une tâche importante. Nomme le critère qu'il a utilisé pour trancher. Indique explicitement ce qu'il a reporté, délégué ou refusé. Décrit ce qui s'est passé ensuite." },
+                { band: 3, scoreRange: [11, 15], descriptor: "Rapporte un arbitrage réel entre urgent et important. Nomme le critère utilisé. Indique ce qu'il a écarté et la conséquence, même sommairement." },
+                { band: 2, scoreRange: [6, 10], descriptor: "Distingue urgent et important sur un exemple issu de son travail, mais sans nommer de critère de décision, ou sans indiquer ce qui a été écarté." },
+                { band: 1, scoreRange: [0, 5], descriptor: "Reprend la distinction en termes théoriques ou cite un exemple du parcours, sans situation issue de sa propre période de pratique." },
+              ],
+            },
+            {
+              label: "Gestion du temps et des interruptions", competencyCode: "D4.C3", weightPoints: 20, origin: "annexe", minPoints: 10,
+              whereToLook: "Sections 2 et 3, journal de pratique",
+              bands: [
+                { band: 4, scoreRange: [16, 20], descriptor: "Identifie ses trois principales sources d'interruption et donne leur fréquence approximative. Décrit une réponse concrète mise en place pour au moins deux d'entre elles. Rapporte l'effet observé sur la période. Traite explicitement au moins une sollicitation relationnelle, hiérarchique ou de messagerie professionnelle propre à son environnement." },
+                { band: 3, scoreRange: [11, 15], descriptor: "Identifie ses principales sources d'interruption. Décrit une réponse concrète mise en place et l'effet qu'elle a produit." },
+                { band: 2, scoreRange: [6, 10], descriptor: "Identifie ses interruptions sans décrire de réponse mise en place, ou décrit une réponse sans rapporter d'effet observé." },
+                { band: 1, scoreRange: [0, 5], descriptor: "Ne traite pas les interruptions, ou les cite de façon générale sans lien avec sa situation de travail." },
+              ],
+            },
+            {
+              label: "S1 — Régularité de la pratique et journal", competencyCode: "D4.C4", weightPoints: 15, origin: "socle", minPoints: 8,
+              whereToLook: "Journal de pratique (6 micro-entrées, J+2 à J+15) et section apprentissage personnel",
+              bands: [
+                { band: 4, scoreRange: [13, 15], descriptor: "Les 6 entrées sont présentes et réparties sur les 15 jours, sans rattrapage groupé de plus de deux entrées le même jour. Le candidat décrit un signal de surcharge ou de décrochage qu'il a repéré chez lui et l'ajustement concret qu'il a fait en réponse." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Les 6 entrées sont présentes. Le candidat mentionne sa charge de travail ou sa charge mentale et un ajustement, sans décrire le signal qui l'a déclenché." },
+                { band: 2, scoreRange: [5, 8], descriptor: "4 ou 5 entrées présentes, ou 6 entrées rattrapées en une seule fois. La charge est évoquée sans ajustement décrit." },
+                { band: 1, scoreRange: [0, 4], descriptor: "Moins de 4 entrées, ou aucune mention de la charge de travail ni de la charge mentale." },
+              ],
+            },
+            {
+              label: "S2 — Profondeur de l'apprentissage personnel", competencyCode: "", weightPoints: 15, origin: "socle",
+              whereToLook: "Section apprentissage personnel et journal de pratique",
+              bands: [
+                { band: 4, scoreRange: [13, 15], descriptor: "Nomme une croyance ou une habitude qu'il a révisée et indique ce qui l'a fait changer d'avis. Cite au moins une chose qui n'a pas fonctionné et analyse la raison de cet échec. Formule ce qu'il fera différemment." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Nomme un changement de pratique et ce qui l'a déclenché. Mentionne au moins une difficulté rencontrée pendant la période." },
+                { band: 2, scoreRange: [5, 8], descriptor: "Décrit ce qu'il a appris en termes de contenu du parcours, sans retour sur sa propre pratique. Aucune difficulté rapportée." },
+                { band: 1, scoreRange: [0, 4], descriptor: "Bilan de satisfaction, appréciation du parcours ou remerciements. Aucun élément d'analyse personnelle." },
+              ],
+            },
+            {
+              label: "S3 — Ancrage culturel et organisationnel", competencyCode: "", weightPoints: 10, origin: "socle",
+              whereToLook: "L'ensemble du dossier",
+              bands: [
+                { band: 4, scoreRange: [9, 10], descriptor: "La solution tient compte d'une contrainte nommée de son organisation ou de son contexte : obligation de disponibilité, distance hiérarchique, culture de l'oralité, coupure d'électricité, transport, horaires imposés, connectivité. Le candidat explique le compromis qu'il a trouvé pour agir sans rompre le code concerné." },
+                { band: 3, scoreRange: [6, 8], descriptor: "Une contrainte de contexte est nommée, et au moins un élément de la solution y renvoie explicitement. Le compromis lui-même n'est pas formulé." },
+                { band: 2, scoreRange: [3, 5], descriptor: "Le contexte est mentionné en décor (ville, secteur, poste) sans influence visible sur la solution retenue." },
+                { band: 1, scoreRange: [0, 2], descriptor: "Solution transposable telle quelle depuis un manuel générique. Aucun élément de contexte n'intervient dans le raisonnement." },
+              ],
+            },
           ],
           totalPoints: 100,
           threshold: 70,

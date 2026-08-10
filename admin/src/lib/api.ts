@@ -216,7 +216,13 @@ export type ImportReport = {
   errors: { line: number; email: string; error: string }[];
   credentials: { email: string; password: string }[];
 };
-export type RubricCriterion = { label: string; weightPoints: number };
+export type RubricBand = { band: number; scoreRange: [number, number]; descriptor: string };
+export type RubricCriterion = {
+  label: string; weightPoints: number;
+  /** Grille à bandes (socle v1.1) : minimum de non-compensation, origine,
+   *  « où chercher la preuve » et les 4 descripteurs. Absents = grille plate. */
+  minPoints?: number; origin?: "annexe" | "socle"; whereToLook?: string; bands?: RubricBand[];
+};
 export type EvalQueueItem = {
   enrollmentId: string; learner: { name: string; email: string }; courseTitle: string;
   submittedAt: string; revisionStatus: string; scoreTotal: number | null;
@@ -430,7 +436,7 @@ export const api = {
     req<ImportReport>("POST", "/users/import", { rows, ...opts }),
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
-  gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
+  gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number; evidence?: string }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
   assignEvaluator: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId }),
   credentials: () => req<CredentialRow[]>("GET", "/credentials"),
   revokeCredential: (id: string, reason: string) => req<unknown>("POST", `/credentials/${id}/revoke`, { reason }),

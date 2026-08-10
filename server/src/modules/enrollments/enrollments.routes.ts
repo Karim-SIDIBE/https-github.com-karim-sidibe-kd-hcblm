@@ -217,13 +217,13 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   app.post("/enrollments/:id/evaluation", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = z.object({
-      criteria: z.array(z.object({ label: z.string().optional(), index: z.number().int().min(0).optional(), points: z.number().int().min(0) })).optional(),
+      criteria: z.array(z.object({ label: z.string().optional(), index: z.number().int().min(0).optional(), points: z.number().int().min(0), evidence: z.string().optional() })).optional(),
       scorePct: z.number().int().min(0).max(100).optional(),
       notes: z.string().optional(),
     }).parse(req.body);
     try {
       const data = await recordRubricEvaluation(id, body, req.principal!.id);
-      await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct } });
+      await audit({ actorId: req.principal!.id, action: "evaluation.grade", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { scorePct: (data as any).evaluation?.scorePct, decision: (data as any).evaluation?.decision } });
       return { data };
     } catch (err) { return handle(reply, err); }
   });

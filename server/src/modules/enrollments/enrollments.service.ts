@@ -12,6 +12,7 @@ import { CourseContent, profileDivergence, type CourseContent as CourseContentT,
 import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
 import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
 import { journalRecap } from "../../domain/engine/journal.js";
+import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
@@ -664,9 +665,12 @@ export async function submitFinalQuiz(enrollmentId: string, answers: Record<stri
 }
 
 export type RubricEvaluationInput = {
-  /** Per-criterion points (preferred): the platform computes the weighted total. */
-  criteria?: { label?: string; index?: number; points: number }[];
-  /** Legacy single total (still accepted). */
+  /** Per-criterion points (preferred): the platform computes the weighted total.
+   *  `evidence` = preuve du socle (règle 3) : citation exacte du dossier ou,
+   *  pour une bande basse, déclaration des sections parcourues et de ce qui
+   *  n'y figure pas. OBLIGATOIRE sur une grille à bandes. */
+  criteria?: { label?: string; index?: number; points: number; evidence?: string }[];
+  /** Legacy single total (still accepted — grilles plates uniquement). */
   scorePct?: number;
   notes?: string;
 };
@@ -684,27 +688,53 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
   assertUnlocked(ctx, block.index);
   const rubric = block.payload.rubric;
   const threshold = rubric.threshold;
+  const banded = rubric.criteria.some((rc) => rc.bands?.length);
 
   let scorePct: number;
-  let breakdown: { label: string; weightPoints: number; points: number }[] | null = null;
+  let breakdown: { label: string; weightPoints: number; points: number; band?: number | null; evidence?: string | null }[] | null = null;
+  let decision: ReturnType<typeof decideCertification> | null = null;
   if (input.criteria?.length) {
     breakdown = rubric.criteria.map((rc, i) => {
       const given = input.criteria!.find((c) => c.index === i || c.label?.trim().toLowerCase() === rc.label.trim().toLowerCase());
       const points = Math.max(0, Math.min(rc.weightPoints, Math.round(given?.points ?? 0)));
-      return { label: rc.label, weightPoints: rc.weightPoints, points };
+      // Socle, règle 3 : « Un critère sans preuve reportée n'est pas noté et le
+      // dossier repart en évaluation. » — bloquant sur une grille à bandes.
+      if (banded && !given?.evidence?.trim()) {
+        throw new EngineError(422, "missing_evidence", `Preuve requise pour « ${rc.label} » : citation exacte du dossier ou, pour une bande basse, déclaration des sections parcourues (règle 3 du socle)`);
+      }
+      return { label: rc.label, weightPoints: rc.weightPoints, points, band: bandOf(rc, points), evidence: given?.evidence?.trim() ?? null };
     });
     scorePct = breakdown.reduce((a, b) => a + b.points, 0); // weighted total (rubric = 100)
+    // Décision du socle §6 (conditions exclusives, les minimums priment).
+    decision = decideCertification(rubric.criteria, breakdown.map((b) => ({ points: b.points })), threshold);
   } else if (input.scorePct != null) {
+    if (banded) throw new EngineError(422, "criteria_required", "Cette grille se note PAR BANDE : fournir criteria[] avec points et preuve par critère");
     scorePct = Math.max(0, Math.min(100, Math.round(input.scorePct)));
   } else {
     throw new EngineError(422, "missing_score", "Fournir criteria[] (par critère) ou scorePct");
   }
 
-  const passed = scorePct >= threshold;
-  await upsertCompletion(enrollmentId, block.index, "RUBRIC_EVALUATION", "rubric", scorePct, { notes: input.notes ?? null, criteria: breakdown });
+  // Sans grille à bandes (héritage) : décision binaire seuil — mappée sur les
+  // deux états historiques.
+  const verdict = decision?.decision ?? (scorePct >= threshold ? "CERTIFIED" : "RESUBMIT");
+  const passed = verdict === "CERTIFIED";
+  // Le RUBRIC_EVALUATION ne « passe » (et n'émet le certificat) que sur
+  // décision CERTIFIÉ — un total ≥ seuil avec un minimum manqué reste en remise.
+  await upsertCompletion(enrollmentId, block.index, "RUBRIC_EVALUATION", "rubric", passed ? scorePct : Math.min(scorePct, threshold - 1), {
+    notes: input.notes ?? null, criteria: breakdown, decision: verdict,
+    minimumsMissed: decision?.minimumsMissed ?? [], scoreTotal: scorePct,
+  });
+
+  const STATUS: Record<string, "PASSED" | "REVISION_REQUESTED" | "NOT_CERTIFIED"> = {
+    CERTIFIED: "PASSED", RESUBMIT: "REVISION_REQUESTED", NOT_CERTIFIED: "NOT_CERTIFIED",
+  };
+  const missedTxt = decision?.minimumsMissed.length
+    ? `\n\nMinimum(s) non atteint(s) : ${decision.minimumsMissed.map((m) => `${m.label} (${m.points}/${m.minPoints})`).join(" · ")}`
+    : "";
 
   // Close the project lifecycle on the submission record (stops the SLA clock,
-  // freezes the verification metadata) and notify the learner of the result.
+  // freezes the verification metadata — grid version archived for audit) and
+  // notify the learner of the result.
   const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
   if (submission) {
     await prisma.projectSubmission.update({
@@ -716,21 +746,27 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
         feedback: input.notes ?? null,
         result: passed ? "PASS" : "FAIL",
         evaluatedAt: new Date(),
-        revisionStatus: passed ? "PASSED" : "REVISION_REQUESTED",
+        revisionStatus: STATUS[verdict],
+        decision: verdict,
+        gridVersion: `v${ctx.enrollment.courseVersion.version} (${ctx.enrollment.courseVersionId})`,
       },
     });
+    const subject = verdict === "CERTIFIED" ? "Projet de certification validé 🎉"
+      : verdict === "RESUBMIT" ? "Projet de certification — remise demandée"
+      : "Projet de certification — non certifié";
+    const body = verdict === "CERTIFIED"
+      ? `Félicitations ! Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}).${missedTxt}${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`
+      : verdict === "RESUBMIT"
+        ? `Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}). Une remise unique est possible dans les 30 jours — elle sera revue par le même évaluateur.${missedTxt}${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`
+        : `Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}) et n'est pas certifiable en l'état. Une reprise des Blocs 2 ou 3 est conseillée avant une nouvelle soumission.${missedTxt}${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`;
     await enqueueNotification({
       enrollmentId, recipientKind: "LEARNER", recipient: ctx.enrollment.user.email,
-      subject: passed ? "Projet de certification validé 🎉" : "Projet de certification — révision demandée",
-      body: passed
-        ? `Félicitations ! Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}).${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`
-        : `Votre projet a obtenu ${scorePct}/100 (seuil ${threshold}). Une révision est demandée.${input.notes ? `\n\nRetour de l'évaluateur :\n${input.notes}` : ""}`,
-      provider: "project",
+      subject, body, provider: "project",
     });
   }
 
   await emitXapi(ctx, passed ? "passed" : "failed", [`blocks/${block.index}`, "items/rubric"], "Évaluation grille", quizResult(scorePct, scorePct, 100, threshold));
-  return { ...(await reconcile(enrollmentId)), evaluation: { scorePct, threshold, passed, breakdown } };
+  return { ...(await reconcile(enrollmentId)), evaluation: { scorePct, threshold, passed, breakdown, decision: verdict, minimumsMissed: decision?.minimumsMissed ?? [] } };
 }
 
 // --- reconciliation: recompute progress + issue badges ----------------------

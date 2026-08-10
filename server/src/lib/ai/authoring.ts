@@ -143,7 +143,10 @@ export function buildScaffold(brief: CourseBrief): CourseContentT {
               { label: "Ancrage contextuel + journal", competencyCode: competencies[3]?.code ?? "", weightPoints: 25 },
             ],
             totalPoints: 100,
-            threshold,
+            // Socle d'évaluation v1.1 (§1) : le seuil certifiant est de 70 à
+            // TOUS les niveaux — l'exigence monte par les descripteurs et les
+            // minimums, pas par le seuil (70/75/80 reste pour le quiz final).
+            threshold: 70,
           },
           evaluation: { humanEvaluator: true, turnaroundDays: 5, adminAlertAtDay: 5 },
         },
