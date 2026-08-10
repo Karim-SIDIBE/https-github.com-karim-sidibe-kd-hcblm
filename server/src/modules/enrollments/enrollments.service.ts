@@ -244,6 +244,49 @@ export async function designatePeer(enrollmentId: string, name: string, email: s
   return reconcile(enrollmentId);
 }
 
+// --- cohort board (Pilier 6.3) ----------------------------------------------
+
+/** Tableau de progression de cohorte ANONYMISÉ (K-HCBLM v2.2, Pilier 6.3) :
+ *  l'apprenant inscrit dans un groupe voit la progression agrégée de sa
+ *  cohorte « sans identifier les individus » — effectif, répartition par
+ *  nombre de blocs complétés (badges), complétion moyenne, certifiés.
+ *  Aucun nom, aucun e-mail, aucun identifiant de membre ne sort d'ici. */
+export async function cohortBoard(enrollmentId: string) {
+  const e = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+  if (!e) throw new EngineError(404, "not_found", "Inscription introuvable");
+  const membership = await prisma.cohortMembership.findFirst({
+    where: { userId: e.userId, cohort: { OR: [{ courseId: e.courseId }, { courseId: null }] } },
+    include: { cohort: { select: { id: true, name: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  if (!membership) return { cohort: null, board: null };
+  const memberIds = (await prisma.cohortMembership.findMany({
+    where: { cohortId: membership.cohortId }, select: { userId: true },
+  })).map((m) => m.userId);
+  const enrollments = await prisma.enrollment.findMany({
+    where: { userId: { in: memberIds }, courseId: e.courseId },
+    select: { badges: { select: { type: true } } },
+  });
+  // 0..5 blocs complétés (5 = certifié) — un badge par bloc, plafonné à 5.
+  const distribution = [0, 0, 0, 0, 0, 0];
+  let certified = 0, sum = 0;
+  for (const en of enrollments) {
+    const n = Math.min(en.badges.length, 5);
+    distribution[n]!++;
+    sum += n / 5;
+    if (en.badges.some((b) => b.type === "CERTIFICATE")) certified++;
+  }
+  return {
+    cohort: { id: membership.cohort.id, name: membership.cohort.name },
+    board: {
+      members: enrollments.length,
+      distribution,
+      avgPct: enrollments.length === 0 ? 0 : Math.round((sum / enrollments.length) * 100),
+      certified,
+    },
+  };
+}
+
 // --- generic item completion ------------------------------------------------
 
 async function upsertCompletion(

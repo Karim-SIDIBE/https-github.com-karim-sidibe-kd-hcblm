@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  AnalyticsError, atRiskLearners, cohortReport, compareInsights, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, exploreStatements, learnerDiagnostic, overview, pamExport, toCsv, transcript,
+  AnalyticsError, atRiskLearners, cohortReport, compareInsights, courseCompetencies, courseInsights, courseLearners, courseReport, courseWorkbook, exploreStatements, khcblmTargets, learnerDiagnostic, overview, pamExport, toCsv, transcript,
 } from "./analytics.service.js";
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { authenticate, guard, requireEnrollmentAccess } from "../../lib/auth.js";
@@ -41,6 +41,12 @@ export async function analyticsRoutes(app: FastifyInstance) {
   app.get("/analytics/overview", { preHandler: guard("analytics:read") }, async (req) => {
     const q = rangeQuery.parse(req.query ?? {});
     return { data: await overview(toRange(q)) };
+  });
+
+  // Cibles K-HCBLM v2.2 (ch. 7) — mesures vs cibles officielles du modèle.
+  app.get("/analytics/khcblm-targets", { preHandler: guard("analytics:read") }, async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string().optional() }).parse(req.query ?? {});
+    try { return { data: await khcblmTargets(courseId) }; } catch (err) { return handle(reply, err); }
   });
 
   // Course aggregates + funnel + Block 4 completion forecast (optional date range).

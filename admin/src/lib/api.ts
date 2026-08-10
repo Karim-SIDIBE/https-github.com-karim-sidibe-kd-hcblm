@@ -226,6 +226,12 @@ export type EvalQueueItem = {
    *  entrées du journal, dates de saisie et détection du rattrapage groupé. */
   journal: { expected: number; completed: number; entries: { day: number; completedAt: string | null }[]; groupedCatchup: boolean } | null;
 };
+/** Cibles K-HCBLM v2.2 (ch. 7) — mesures vs cibles officielles du modèle. */
+export type KhcblmTargets = {
+  course: { id: string; slug: string };
+  enrollments: number;
+  metrics: { key: string; label: string; valuePct: number | null; targetPct: number; met: boolean | null }[];
+};
 export type ProjectDetail = {
   content: { sections?: Record<string, string> } | null;
   revisionStatus: string; scoreTotal: number | null; feedback: string | null;
@@ -245,6 +251,7 @@ export const api = {
   },
   courseLearners: (courseId: string) => req<LearnerRow[]>("GET", `/analytics/courses/${courseId}/learners`),
   atRisk: (courseId: string) => req<AtRiskLearner[]>("GET", `/analytics/courses/${courseId}/at-risk`),
+  khcblmTargets: (courseId: string) => req<KhcblmTargets>("GET", `/analytics/khcblm-targets?courseId=${encodeURIComponent(courseId)}`),
   // UI texts — super-admin overrides of the learner-app interface copy.
   uiTexts: (app = "web") => req<{ fr: Record<string, string>; en: Record<string, string> }>("GET", `/ui-texts?app=${app}`),
   setUiText: (locale: "fr" | "en", key: string, value: string, app = "web") => req<unknown>("PUT", "/ui-texts", { app, locale, key, value }),
