@@ -13,6 +13,7 @@ import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJE
 import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
 import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
+import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
 import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -583,10 +584,13 @@ export async function listEvaluationQueue() {
     return {
       enrollmentId: s.enrollmentId,
       learner: { name: s.enrollment.user.name, email: s.enrollment.user.email },
+      courseId: s.enrollment.courseId,
       courseTitle: s.enrollment.courseVersion.title,
       submittedAt: s.submittedAt,
       revisionStatus: s.revisionStatus,
       scoreTotal: s.scoreTotal,
+      draftAt: s.draftAt,
+      appealStage: s.appealStage,
       evaluator: s.evaluator ? { id: s.evaluator.id, name: s.evaluator.name } : null,
       rubric: (b4?.payload?.rubric as { criteria: { label: string; weightPoints: number }[]; threshold: number } | undefined) ?? null,
       // Part calculée par la plateforme du critère S1 (socle §3) : décompte,
@@ -736,6 +740,42 @@ export type RubricEvaluationInput = {
 };
 
 /**
+ * Brouillon de notation de l'évaluateur (socle §8.6) : la suggestion IA ne
+ * s'affiche qu'après saisie et ENREGISTREMENT du score humain — ce brouillon
+ * est cet enregistrement. Chaque critère doit porter des points ; la preuve
+ * peut encore être vide à ce stade (elle est exigée à la notation finale).
+ */
+export async function saveRubricDraft(
+  enrollmentId: string,
+  criteria: { index?: number; label?: string; points: number; evidence?: string }[],
+  gradedBy?: string,
+) {
+  const ctx = await loadContext(enrollmentId);
+  const block = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (block?.type !== "CERTIFICATION") throw new EngineError(409, "no_block", "Bloc 4 absent");
+  if (gradedBy) {
+    const acc = await activeAccreditation(gradedBy, ctx.enrollment.courseId);
+    if (!acc) throw new EngineError(403, "not_accredited", "Brouillon refusé : habilitation active requise sur ce parcours (§9.2)");
+  }
+  const rubric = block.payload.rubric;
+  const draft = rubric.criteria.map((rc, i) => {
+    const given = criteria.find((c) => c.index === i || c.label?.trim().toLowerCase() === rc.label.trim().toLowerCase());
+    if (given == null || typeof given.points !== "number") {
+      throw new EngineError(422, "draft_incomplete", `Score manquant pour « ${rc.label} » : le brouillon doit couvrir chaque critère (§8.6)`);
+    }
+    const points = Math.max(0, Math.min(rc.weightPoints, Math.round(given.points)));
+    return { label: rc.label, points, evidence: given.evidence?.trim() || null };
+  });
+  const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
+  if (!submission) throw new EngineError(404, "no_submission", "Aucun projet soumis pour cette inscription");
+  await prisma.projectSubmission.update({
+    where: { enrollmentId },
+    data: { draftScores: draft as unknown as Prisma.InputJsonValue, draftAt: new Date() },
+  });
+  return { draft, draftAt: new Date().toISOString() };
+}
+
+/**
  * Human evaluator records the Bloc 4 rubric score (gates the certificate).
  * The evaluator scores EACH criterion (Pilier 6.3): each is clamped to its
  * weight and the weighted total (= sum, rubric totals 100) is computed by the
@@ -830,6 +870,28 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
       enrollmentId, recipientKind: "LEARNER", recipient: ctx.enrollment.user.email,
       subject, body, provider: "project",
     });
+  }
+
+  // Journalisation §8.9 : lier la notation humaine finale à la dernière
+  // suggestion affichée — score final par critère + indicateur de copie de la
+  // preuve (calculé CÔTÉ SERVEUR : preuve humaine ≡ preuve IA après
+  // normalisation des espaces). Alimente la concordance et l'identité des
+  // preuves du §8.10.
+  if (breakdown) {
+    const lastSuggestion = await prisma.aiAssessment.findFirst({
+      where: { enrollmentId, kind: "RUBRIC_SUGGESTION", blocked: false },
+      orderBy: { createdAt: "desc" },
+    });
+    if (lastSuggestion) {
+      const suggested = (lastSuggestion.criteria ?? []) as unknown as SuggestedCriterion[];
+      await prisma.aiAssessment.update({
+        where: { id: lastSuggestion.id },
+        data: {
+          finalScores: breakdown.map((b) => ({ label: b.label, points: b.points })) as unknown as Prisma.InputJsonValue,
+          copyFlags: breakdown.map((b, i) => evidenceCopied(b.evidence ?? "", suggested[i])) as unknown as Prisma.InputJsonValue,
+        },
+      });
+    }
   }
 
   await emitXapi(ctx, passed ? "passed" : "failed", [`blocks/${block.index}`, "items/rubric"], "Évaluation grille", quizResult(scorePct, scorePct, 100, threshold));
