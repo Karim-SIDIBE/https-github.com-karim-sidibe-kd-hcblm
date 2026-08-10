@@ -144,6 +144,8 @@ model User {
   authoredThreads  ForumThread[]         @relation("ThreadAuthor")
   authoredPosts    ForumPost[]           @relation("PostAuthor")
   evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
+  accreditations       EvaluatorAccreditation[] @relation("AccreditationHolder")
+  accreditationsGranted EvaluatorAccreditation[] @relation("AccreditationGranter")
   verificationCodes VerificationCode[]
   consents          Consent[]
   devices           Device[]
@@ -347,6 +349,7 @@ model Course {
 
   versions     CourseVersion[]
   enrollments  Enrollment[]
+  accreditations EvaluatorAccreditation[]
   liveSessions LiveSession[]
   cohorts      Cohort[]
 
@@ -903,6 +906,29 @@ model ProjectSubmission {
 enum ProjectResult {
   PASS
   FAIL
+}
+
+/// Habilitation d'un évaluateur sur UN parcours (socle §9.2) : accordée après
+/// calibration (3 dossiers de référence à l'aveugle, écart ≤ 8 pts, ≤ 1 bande),
+/// valable 12 mois, à refaire après toute révision de la grille. Historique
+/// conservé (une ligne par octroi) ; l'habilitation active est la plus récente
+/// non révoquée et non expirée. Assignation ET notation l'exigent.
+model EvaluatorAccreditation {
+  id          String    @id @default(cuid())
+  evaluatorId String
+  evaluator   User      @relation("AccreditationHolder", fields: [evaluatorId], references: [id], onDelete: Cascade)
+  courseId    String
+  course      Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  grantedAt   DateTime  @default(now())
+  expiresAt   DateTime
+  grantedById String?
+  grantedBy   User?     @relation("AccreditationGranter", fields: [grantedById], references: [id], onDelete: SetNull)
+  /// Résumé du test de calibration (écarts constatés sur les 3 dossiers).
+  notes       String?
+  revokedAt   DateTime?
+
+  @@index([evaluatorId, courseId])
+  @@index([courseId])
 }
 
 enum ProjectStatus {

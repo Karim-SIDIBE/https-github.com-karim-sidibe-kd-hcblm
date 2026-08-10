@@ -66,6 +66,9 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const r = await nudgeOne(id);
     if (!r) return reply.notFound("Inscription introuvable");
+    // Trace ACTEUR de la relance individuelle (Pilier 6.4) : fonde
+    // l'incompatibilité d'évaluation du §5.1 (« a conduit une relance »).
+    await audit({ actorId: req.principal!.id, action: "enrollment.nudge", targetType: "Enrollment", targetId: id, ip: req.ip });
     return { data: r };
   });
 
@@ -251,10 +254,11 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   // Assign an evaluator to the Bloc 4 project — admin only (NOT the learner).
   app.post("/enrollments/:id/project/assign", { preHandler: [authenticate, authorize("evaluation:assign")] }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { evaluatorId } = z.object({ evaluatorId: z.string().min(1) }).parse(req.body);
+    const { evaluatorId, f2fConflict } = z.object({ evaluatorId: z.string().min(1), f2fConflict: z.boolean().optional() }).parse(req.body);
     try {
-      const data = await assignEvaluator(id, evaluatorId);
-      await audit({ actorId: req.principal!.id, action: "evaluation.assign", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { evaluatorId } });
+      const data = await assignEvaluator(id, evaluatorId, { f2fConflict });
+      // La déclaration FACE2FACE (socle §5.1) est archivée avec l'assignation.
+      await audit({ actorId: req.principal!.id, action: "evaluation.assign", targetType: "Enrollment", targetId: id, ip: req.ip, meta: { evaluatorId, f2fDeclaration: f2fConflict ? "conflict" : "none" } });
       return { data };
     } catch (err) { return handle(reply, err); }
   });

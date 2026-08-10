@@ -81,6 +81,17 @@ async function main() {
   console.log(`  Index sémantique     : ${idx.chunks} chunks (${idx.model})`);
 
   // 5. Report what was ingested.
+  // Habilitations dev (socle §9.2) : l'évaluateur et l'admin sont habilités
+  // 12 mois sur le parcours canonique — en production, l'octroi se fait depuis
+  // l'admin après le test de calibration sur les dossiers de référence.
+  const accExpiry = new Date();
+  accExpiry.setMonth(accExpiry.getMonth() + 12);
+  for (const holder of [users.EVALUATOR!, users.SUPER_ADMIN!]) {
+    await prisma.evaluatorAccreditation.create({
+      data: { evaluatorId: holder.id, courseId: course.id, grantedById: users.SUPER_ADMIN!.id, expiresAt: accExpiry, notes: "Habilitation de développement (seed)" },
+    });
+  }
+
   const blocks = c.blocks;
   const microTotal = blocks.reduce(
     (n, b) => n + ("microSessions" in b.payload ? b.payload.microSessions.length : 0),
