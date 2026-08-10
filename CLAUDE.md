@@ -1,4 +1,4 @@
-# KD-HCBLM v2.0 — repository guide
+# K-HCBLM v2.2 — repository guide
 
 KOMPETENCES DECLICK learning platform. An **npm-workspaces monorepo**:
 

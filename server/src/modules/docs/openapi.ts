@@ -15,7 +15,7 @@ export function openapiDocument() {
   return {
     openapi: "3.1.0",
     info: {
-      title: "KD-HCBLM API",
+      title: "K-HCBLM API",
       version: "2.0.0",
       description:
         "KOMPETENCES DECLICK — Human Competency-Based Learning Model. Documented, " +
@@ -147,7 +147,7 @@ export function openapiDocument() {
 
 /** Minimal Redoc viewer (renders the spec client-side; CDN-hosted bundle). */
 export const DOCS_HTML = `<!doctype html><html><head><meta charset="utf-8"/>
-<title>KD-HCBLM API</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>K-HCBLM API</title><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <style>body{margin:0}</style></head><body>
 <redoc spec-url="./openapi.json"></redoc>
 <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>

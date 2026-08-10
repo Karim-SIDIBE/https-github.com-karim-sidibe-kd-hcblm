@@ -14,6 +14,6 @@ const pub = await exportSPKI(publicKey);
 
 const esc = (pem: string) => pem.trim().replace(/\n/g, "\\n");
 
-console.log("# ES256 keypair for KD-HCBLM JWT signing\n");
+console.log("# ES256 keypair for K-HCBLM JWT signing\n");
 console.log(`AUTH_JWT_PRIVATE_KEY_PEM="${esc(priv)}"`);
 console.log(`AUTH_JWT_PUBLIC_KEY_PEM="${esc(pub)}"`);

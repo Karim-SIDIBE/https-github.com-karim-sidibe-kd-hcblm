@@ -211,7 +211,7 @@ const MS_BLOCK_TYPES = new Set(["COMPREHENSION", "PRACTICE", "ANCHORING"]);
  * Build a DRAFT course from imported paragraphs.
  * Deterministic backbone: a valid scaffold enriched from the document. The
  * coarse pass fills title/objective/block titles + a per-block bucket of raw
- * text (`blockNotes`). The fine pass maps KD-HCBLM house conventions
+ * text (`blockNotes`). The fine pass maps K-HCBLM house conventions
  * (MICRO-SESSION X.Y, Vidéo N, MESSAGE CLÉ, EXEMPLE AFRICAIN, ERREUR À ÉVITER,
  * durations) into real micro-session + video fields — no AI. When an AI key is
  * configured it additionally maps the rest; otherwise the scaffold stands and

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────────────────
-# Restore the KD-HCBLM / DECLICK DIGITAL database (and optionally media) from a
+# Restore the K-HCBLM / DECLICK DIGITAL database (and optionally media) from a
 # backup produced by deploy/backup.sh. DESTRUCTIVE: overwrites current data.
 #
 #   deploy/restore.sh deploy/backups/db-YYYYMMDD-HHMMSS.dump \

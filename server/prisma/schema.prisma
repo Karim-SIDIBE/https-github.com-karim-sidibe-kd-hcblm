@@ -1,4 +1,4 @@
-// KD-HCBLM v2.0 — Prisma schema
+// K-HCBLM v2.2 — Prisma schema
 // ---------------------------------------------------------------------------
 // Two faces of the platform (see handoff README):
 //   A. AUTHORING  — a Course has many versioned CourseVersions. Each version

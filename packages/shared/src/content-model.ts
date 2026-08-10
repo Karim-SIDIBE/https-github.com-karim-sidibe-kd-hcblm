@@ -1,7 +1,7 @@
 /**
  * content-model.ts — THE CONTRACT.
  *
- * A single Zod definition of the KD-HCBLM course content document. It is the
+ * A single Zod definition of the K-HCBLM course content document. It is the
  * one source of truth shared (now on the server; later via packages/shared) by:
  *   1. the Learning Designer authoring form (field shapes + per-field validation),
  *   2. the publish-time "non-negotiable rules" engine (validation.ts),
@@ -501,12 +501,18 @@ const CertificationPayload = z.object({
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Unit typology (KD-HCBLM v2.1, Corrections 2-4) — auditable per-block counts.
+// Unit typology (K-HCBLM v2.1, Corrections 2-4) — auditable per-block counts.
 // Designer-declared so the totals never mix unit types and stay auditable.
 // ---------------------------------------------------------------------------
 
 export const UnitType = z.enum(["micro-session", "long-activity", "micro-task"]);
 export type UnitType = z.infer<typeof UnitType>;
+
+/** Delivery mode of a long activity (K-HCBLM v2.2, amendement A2) :
+ *  `continuous` = one 25–40 min sitting ; `distributed` = the same load split
+ *  into platform-pushed micro-tasks (children) over a defined period. */
+export const LongActivityMode = z.enum(["continuous", "distributed"]);
+export type LongActivityMode = z.infer<typeof LongActivityMode>;
 
 const SubUnit = z.object({
   label: nonEmpty("intitulé de l'unité"),
@@ -514,9 +520,13 @@ const SubUnit = z.object({
   durationMin: z.number().int().positive().optional(),
 });
 export const BlockUnit = SubUnit.extend({
+  /** A2 — long activities only. Optional for backward compatibility ; a unit
+   *  with micro-task children reads as distributed by default. */
+  mode: LongActivityMode.optional(),
   /** Sub-units nested under this unit — e.g. the 6 journal micro-entries that
-   *  compose the "Journal des 2 semaines" long activity (6 × 5 min = 30 min).
-   *  One level deep; counted in the totals, displayed indented. */
+   *  compose the distributed "Journal des 2 semaines" long activity
+   *  (6 × 5 min = 30 min). One level deep; counted in the micro-task column
+   *  (they never add course units of another type), displayed indented. */
   children: z.array(SubUnit).optional(),
 });
 export type BlockUnit = z.infer<typeof BlockUnit>;
@@ -601,7 +611,7 @@ export const CourseContent = z.object({
     .min(1),
   summary: z.string().default(""),
   /// Course objective, framed as a benefit and tied to the Moment d'Ancrage
-  /// ("à la fin, vous saurez…"). Shown in Bloc 0 BEFORE the structure (KD-HCBLM
+  /// ("à la fin, vous saurez…"). Shown in Bloc 0 BEFORE the structure (K-HCBLM
   /// v2.1, Correction 1). Optional for backward compatibility.
   objective: z.string().default(""),
   audience: z.string().default(""),

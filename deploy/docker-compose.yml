@@ -1,4 +1,4 @@
-# KD-HCBLM API stack for a VPS (LWS) — Fastify API + PostgreSQL 16 + Caddy (auto-HTTPS).
+# K-HCBLM API stack for a VPS (LWS) — Fastify API + PostgreSQL 16 + Caddy (auto-HTTPS).
 # Usage (from repo root on the VPS):
 #   cp deploy/.env.example deploy/.env   # then fill the secrets
 #   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build

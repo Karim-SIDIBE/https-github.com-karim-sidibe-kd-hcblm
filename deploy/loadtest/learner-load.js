@@ -1,4 +1,4 @@
-// k6 load test — KD-HCBLM API (Vague B, "crédibilité entreprise").
+// k6 load test — K-HCBLM API (Vague B, "crédibilité entreprise").
 //
 // Baseline (no secrets): exercises the public health + readiness endpoints under
 // a staged ramp so you can characterise latency/throughput and prove the stack

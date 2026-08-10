@@ -5,7 +5,7 @@
  * levels, both deterministic and unit-tested:
  *   1. coarse — course title, objective, per-block titles/objectives, and a
  *      per-block bucket of leftover raw text ("à répartir").
- *   2. fine — KD-HCBLM house conventions: "MICRO-SESSION X.Y — …", "Vidéo N — …",
+ *   2. fine — K-HCBLM house conventions: "MICRO-SESSION X.Y — …", "Vidéo N — …",
  *      "MESSAGE CLÉ :", "EXEMPLE AFRICAIN :", "ERREUR À ÉVITER :", "(~20 min)".
  *      These fill real micro-session + video fields, no AI.
  * Block detection keys on "Bloc N" (N = 0..4).

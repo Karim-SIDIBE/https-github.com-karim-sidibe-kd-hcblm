@@ -2,7 +2,7 @@
   "name": "kd-hcblm-server",
   "version": "0.1.0",
   "private": true,
-  "description": "KD-HCBLM v2.0 — KOMPETENCES DECLICK learning platform backend",
+  "description": "K-HCBLM v2.2 — KOMPETENCES DECLICK learning platform backend",
   "type": "module",
   "engines": {
     "node": ">=20"

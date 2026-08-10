@@ -11,6 +11,7 @@ import { materializeQuiz } from "../bank/bank.service.js";
 import { CourseContent, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
 import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
 import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
+import { journalRecap } from "../../domain/engine/journal.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
 import { computeResume } from "../../domain/engine/resume.js";
@@ -298,8 +299,10 @@ function textOfData(data: unknown): string {
  * Progressive Bloc 4 (« Amélioration » — déblocage séquentiel) :
  *  - a journal micro-entry opens only once its J+n date is reached, `n` days
  *    after the completion of micro-session 4.3 (the notification schedule) ;
- *  - Section 5 (the final micro-session) opens only after sections 1–3 AND the
- *    six journal entries.
+ *  - Section 5 (the final micro-session) opens after sections 1–3. The journal
+ *    NEVER gates the final submission (K-HCBLM v2.2, Pilier 5 : « la plateforme
+ *    ne bloque jamais la soumission d'un journal incomplet ») — missing entries
+ *    are sanctioned by rubric criterion S1, not by a technical lock.
  * Server-enforced so the offline queue can never bypass the sequence.
  */
 function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, itemType: ItemType, itemKey: string) {
@@ -322,9 +325,8 @@ function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, b
 
   if (itemType === "PROJECT" && itemKey === PROJECT_FINAL_SECTION_KEY) {
     const missingSections = [0, 1, 2].map(projectSectionKey).filter((k) => !done.has(k));
-    const missingJournal = cert.payload.journal.entries.map((e) => `J+${e.day}`).filter((k) => !done.has(k));
-    if (missingSections.length > 0 || missingJournal.length > 0) {
-      throw new EngineError(423, "section_locked", "La Section 5 s'ouvre après les sections 1 à 3 et les 6 micro-entrées du journal.");
+    if (missingSections.length > 0) {
+      throw new EngineError(423, "section_locked", "La Section 5 s'ouvre après les sections 1 à 3.");
     }
   }
 }
@@ -459,11 +461,17 @@ export async function listEvaluationQueue() {
     orderBy: { submittedAt: "asc" },
     include: {
       evaluator: { select: { id: true, name: true } },
-      enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true, content: true } } } },
+      enrollment: {
+        include: {
+          user: { select: { name: true, email: true } },
+          courseVersion: { select: { title: true, content: true } },
+          completions: { where: { itemType: "JOURNAL_ENTRY" }, select: { itemKey: true, completedAt: true } },
+        },
+      },
     },
   });
   return subs.map((s) => {
-    const content = s.enrollment.courseVersion.content as { blocks?: { type: string; payload?: { rubric?: unknown } }[] } | null;
+    const content = s.enrollment.courseVersion.content as { blocks?: { type: string; payload?: { rubric?: unknown; journal?: { entries?: { day: number }[] } } }[] } | null;
     const b4 = content?.blocks?.find((b) => b.type === "CERTIFICATION");
     return {
       enrollmentId: s.enrollmentId,
@@ -474,6 +482,10 @@ export async function listEvaluationQueue() {
       scoreTotal: s.scoreTotal,
       evaluator: s.evaluator ? { id: s.evaluator.id, name: s.evaluator.name } : null,
       rubric: (b4?.payload?.rubric as { criteria: { label: string; weightPoints: number }[]; threshold: number } | undefined) ?? null,
+      // Part calculée par la plateforme du critère S1 (socle §3) : décompte,
+      // dates de saisie et détection du rattrapage groupé — l'évaluateur ne
+      // relit pas le calendrier, il note le signal de surcharge et l'ajustement.
+      journal: journalRecap(b4?.payload?.journal?.entries ?? [], s.enrollment.completions),
     };
   });
 }
@@ -928,7 +940,10 @@ export async function projectState(enrollmentId: string) {
   const sections = cert.payload.sections.map((sec, i) => {
     if (i === 3) return { key: "journal", title: sec.title, helpText: sec.helpText, auto: true as const, done: journalDone, text: composeJournalChapter(journalTexts), locked: false };
     const key = projectSectionKey(i);
-    const locked = i === 4 && (!journalDone || [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k)));
+    // Section 5 opens after sections 1–3 only : the journal NEVER locks the
+    // final submission (K-HCBLM v2.2, Pilier 5) — missing entries are graded
+    // down by rubric criterion S1 instead.
+    const locked = i === 4 && [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k));
     return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: textOfData(byKey.get(key)?.data), locked };
   });
 

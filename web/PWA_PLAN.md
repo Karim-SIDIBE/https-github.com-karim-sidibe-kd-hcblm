@@ -1,4 +1,4 @@
-# KD-HCBLM Learner PWA — §9 audit & implementation plan
+# K-HCBLM Learner PWA — §9 audit & implementation plan
 
 Status date: 2026-06-02. Branch: `feat/kd-hcblm-backend`.
 
