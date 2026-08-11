@@ -7,9 +7,15 @@ import { modal } from "../lib/modal";
 
 const PAGE_SIZE = 25;
 
+/** Jalons de fin de bloc : des BADGES — seul le titre de fin de parcours
+ *  (achievementType CERTIFICATE) est un certificat. */
+const BADGE_FR: Record<string, string> = {
+  ENTRY: "Entrée", COMPREHENSION: "Compréhension", PRACTICE: "Pratique", ANCHORING: "Ancrage", CERTIFICATE: "Certificat",
+};
+
 export function Certificats() {
   const [rows, setRows] = useState<CredentialRow[] | null>(null);
-  const [counts, setCounts] = useState({ total: 0, valid: 0, revoked: 0 });
+  const [counts, setCounts] = useState({ total: 0, valid: 0, revoked: 0, certificates: 0, badges: 0 });
   const [page, setPage] = useState(1);
   const [q, setQ] = useState("");
   const [status, setStatus] = useState(""); // "" | "valid" | "revoked"
@@ -19,7 +25,7 @@ export function Certificats() {
   async function load() {
     try {
       const r = await api.credentialsPaged({ q, status: status || undefined, page, pageSize: PAGE_SIZE });
-      setRows(r.data); setCounts({ total: r.total, valid: r.valid, revoked: r.revoked }); setError(null);
+      setRows(r.data); setCounts({ total: r.total, valid: r.valid, revoked: r.revoked, certificates: r.certificates, badges: r.badges }); setError(null);
     } catch (e) { setError(e instanceof Error ? e.message : "Erreur"); setRows([]); }
   }
   useEffect(() => { const t = setTimeout(load, q ? 300 : 0); return () => clearTimeout(t); /* eslint-disable-next-line */ }, [q, status, page]);
@@ -56,8 +62,8 @@ export function Certificats() {
       <div className="pagehead">
         <div>
           <div className="eyebrow">Open Badges 2.0 / 3.0</div>
-          <h1>Certificats</h1>
-          <div className="sub">Attestations vérifiables délivrées aux apprenants certifiés.</div>
+          <h1>Certificats &amp; Badges</h1>
+          <div className="sub">Certificats de fin de parcours et badges de fin de bloc — attestations vérifiables.</div>
         </div>
         <span className="row" style={{ gap: 8, alignItems: "center" }}>
           <ViewsBar screen="certs" config={{ q, status }} onApply={(c) => { setQ((c.q as string) ?? ""); setStatus((c.status as string) ?? ""); }} />
@@ -72,8 +78,11 @@ export function Certificats() {
         </span>
       </div>
 
-      <div className="grid" style={{ gridTemplateColumns: "repeat(3,1fr)", marginBottom: 16 }}>
-        <div className="kpi"><div className="val num">{rows ? counts.valid + counts.revoked : "…"}</div><div className="lbl">Certificats délivrés</div></div>
+      {/* Seul le titre de FIN DE PARCOURS est un certificat ; les jalons de
+          fin de bloc (Entrée, Compréhension, Pratique, Ancrage) sont des badges. */}
+      <div className="grid" style={{ gridTemplateColumns: "repeat(4,1fr)", marginBottom: 16 }}>
+        <div className="kpi"><div className="val num">{rows ? counts.certificates : "…"}</div><div className="lbl">Certificats (fin de parcours)</div></div>
+        <div className="kpi"><div className="val num">{rows ? counts.badges : "…"}</div><div className="lbl">Badges (fins de bloc)</div></div>
         <div className="kpi"><div className="val num" style={{ color: "var(--success)" }}>{rows ? counts.valid : "…"}</div><div className="lbl">Valides</div></div>
         <div className="kpi"><div className="val num" style={{ color: "var(--danger)" }}>{rows ? counts.revoked : "…"}</div><div className="lbl">Révoqués</div></div>
       </div>
@@ -87,7 +96,9 @@ export function Certificats() {
                 <tr key={c.id} style={{ cursor: "default" }}>
                   <td><div className="uitem"><span className="av" style={{ background: avatarColor(c.learner.name) }}>{initials(c.learner.name)}</span><div className="who"><b>{c.learner.name}</b><span>{c.learner.email}</span></div></div></td>
                   <td><span className="muted" style={{ fontSize: 12.5 }}>{c.courseTitle}</span></td>
-                  <td><span className="pill pill--soft">{c.badgeLabel}</span></td>
+                  <td>{c.achievementType === "CERTIFICATE"
+                    ? <span className="pill pill--green">🎓 Certificat</span>
+                    : <span className="pill pill--soft">Badge — {BADGE_FR[c.badgeLabel] ?? c.badgeLabel}</span>}</td>
                   <td><span style={{ fontSize: 12.5 }}>{ago(c.issuedAt)}</span></td>
                   <td>{c.revoked ? <span className="pill pill--red" title={c.revocationReason ?? ""}><span className="dot" />Révoqué</span> : <span className="pill pill--green"><span className="dot" />Valide</span>}</td>
                   <td style={{ textAlign: "right" }}>

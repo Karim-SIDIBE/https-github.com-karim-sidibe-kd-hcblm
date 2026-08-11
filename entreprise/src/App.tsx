@@ -53,7 +53,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
     return (
       <div className="login-wrap">
         <form className="card login-card" onSubmit={submitCode}>
-          <div className="brandline"><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
+          <div className="brandline"><img src="/logo-icon.png" alt="DECLICK DIGITAL" style={{ width: 34, height: 34, objectFit: "contain", verticalAlign: "middle", marginRight: 8 }} /><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>Double authentification</div>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Saisissez le code de votre application d'authentification (ou un code de secours).</p>
           <label className="lbl">Code<input className="field" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus required /></label>
@@ -68,7 +68,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
   return (
     <div className="login-wrap">
       <form className="card login-card" onSubmit={submit}>
-        <div className="brandline"><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
+        <div className="brandline"><img src="/logo-icon.png" alt="DECLICK DIGITAL" style={{ width: 34, height: 34, objectFit: "contain", verticalAlign: "middle", marginRight: 8 }} /><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
         <div className="eyebrow" style={{ marginBottom: 14 }}>Espace entreprise</div>
         <label className="lbl">E-mail<input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
         <label className="lbl">Mot de passe<input className="field" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
@@ -419,7 +419,7 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brandline"><b>DECLICK</b> <span className="accent">DIGITAL</span> <span className="topbar-sub">Espace entreprise</span></div>
+        <div className="brandline" style={{ display: "flex", alignItems: "center", gap: 8 }}><img src="/logo-icon.png" alt="DECLICK DIGITAL" style={{ width: 30, height: 30, objectFit: "contain" }} /><span><b>DECLICK</b> <span className="accent">DIGITAL</span> <span className="topbar-sub">Espace entreprise</span></span></div>
         <div className="row" style={{ gap: 12 }}>
           {orgs && orgs.length > 1 && (
             <select className="select" value={orgId} onChange={(e) => setOrgId(e.target.value)}>

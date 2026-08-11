@@ -459,7 +459,7 @@ export const api = {
   usersPaged: (p: { q?: string; page?: number; pageSize?: number; sort?: string }) => reqPaged<Paged<UserRow>>("/users", p),
   auditPaged: (p: { q?: string; action?: string; page?: number; pageSize?: number }) => reqPaged<Paged<AuditRow>>("/audit", p),
   mediaPaged: (p: { q?: string; folder?: string; page?: number; pageSize?: number }) => reqPaged<Paged<MediaAsset>>("/media", p),
-  credentialsPaged: (p: { q?: string; status?: string; page?: number; pageSize?: number }) => reqPaged<Paged<CredentialRow> & { valid: number; revoked: number }>("/credentials", p),
+  credentialsPaged: (p: { q?: string; status?: string; page?: number; pageSize?: number }) => reqPaged<Paged<CredentialRow> & { valid: number; revoked: number; certificates: number; badges: number }>("/credentials", p),
   learnersPaged: (courseId: string, p: { q?: string; status?: string; page?: number; pageSize?: number; sort?: string }) => reqPaged<Paged<LearnerRow>>(`/analytics/courses/${courseId}/learners`, p),
   updateUser: (id: string, b: { name?: string; email?: string; role?: string; disabled?: boolean; password?: string }) => req<{ id: string; name: string; email: string; role: string; disabled: boolean }>("PATCH", `/users/${id}`, b),
   // --- saved views (per-user, per-screen, stored server-side) ---

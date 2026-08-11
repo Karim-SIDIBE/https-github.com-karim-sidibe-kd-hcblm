@@ -50,7 +50,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
     { id: "medias", label: "Médiathèque", Icon: ISession, roles: [A, C, D] },
     { id: "bank", label: "Banque de questions", Icon: ICourse, roles: [A, C, D, R] },
     { id: "eval", label: "Projets Bloc 4", Icon: IEval, roles: [A, C, E] },
-    { id: "certs", label: "Certificats", Icon: ICert, roles: [A, C] },
+    { id: "certs", label: "Certificats & Badges", Icon: ICert, roles: [A, C] },
   ]},
   { group: "Organisation", items: [
     { id: "entreprises", label: "Entreprises & licences", Icon: IOrg, roles: [A, C] },
