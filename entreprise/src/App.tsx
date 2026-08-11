@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, auth, login as apiLogin, verify2fa, genPassword, publishedCourse, ApiError,
-  type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow, type OrgImportReport,
+  type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow, type OrgImportReport, type OrgKpis,
 } from "./api";
 
 /** `Nom, Email` per line; separators , ; tab; a header row is skipped. */
@@ -376,6 +376,68 @@ function Learners({ orgId, members, progress, selectedCourse, onChange }: {
   );
 }
 
+/* ------------------------------------------------------- Tableau de bord -- */
+const BLOCK_LABELS = ["Bloc 0", "Bloc 1", "Bloc 2", "Bloc 3", "Bloc 4", "Terminé"];
+
+/** KPIs agrégés pour le DRH/Admin : effectif engagé, progression, répartition
+ *  par bloc, certification, badges — et l'alerte inactifs 14 jours. */
+function KpiBoard({ kpis, onExport }: { kpis: OrgKpis; onExport: () => void }) {
+  const maxBlock = Math.max(1, ...kpis.blockDistribution);
+  const kpiCell = (val: React.ReactNode, label: string, sub?: string) => (
+    <div className="card" style={{ padding: "12px 14px" }}>
+      <div style={{ fontSize: 24, fontWeight: 800, lineHeight: 1.1 }}>{val}</div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 3 }}>{label}</div>
+      {sub && <div className="muted" style={{ fontSize: 11 }}>{sub}</div>}
+    </div>
+  );
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="row" style={{ justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <strong style={{ fontSize: 14 }}>Tableau de bord</strong>
+        <button className="btn btn--sm" onClick={onExport} title="Exporter les indicateurs (CSV Excel)">⤓ KPIs CSV</button>
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: 10 }}>
+        {kpiCell(`${kpis.enrolled}/${kpis.members}`, "Apprenants inscrits", `${kpis.seats.used}/${kpis.seats.total} licences`)}
+        {kpiCell(kpis.active7d, "Actifs (7 derniers jours)")}
+        {kpiCell(kpis.avgProgressPct != null ? `${kpis.avgProgressPct} %` : "—", "Progression moyenne")}
+        {kpiCell(<span style={{ color: "var(--green, #2DAA4F)" }}>{kpis.certified}</span>, "Certifiés", kpis.certificationRatePct != null ? `taux ${kpis.certificationRatePct} %` : undefined)}
+        {kpiCell(kpis.badges, "Badges de bloc obtenus", `${kpis.certificates} certificat(s) délivré(s)`)}
+      </div>
+      <div className="grid" style={{ gridTemplateColumns: "2fr 1fr", gap: 10, marginTop: 10, alignItems: "start" }}>
+        <div className="card" style={{ padding: "12px 14px" }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Où en sont vos apprenants ? (inscriptions par bloc en cours)</div>
+          <div className="row" style={{ gap: 8, alignItems: "flex-end" }}>
+            {kpis.blockDistribution.map((n, i) => (
+              <div key={i} style={{ flex: 1, textAlign: "center" }}>
+                <div style={{ fontSize: 12, fontWeight: 700 }}>{n}</div>
+                <div style={{ height: 46, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
+                  <div style={{ width: "70%", height: `${Math.max((n / maxBlock) * 100, n > 0 ? 8 : 2)}%`, borderRadius: 4, background: i === 5 ? "var(--green, #2DAA4F)" : "var(--accent)" , opacity: n > 0 ? 1 : 0.25 }} />
+                </div>
+                <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>{BLOCK_LABELS[i]}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="card" style={{ padding: "12px 14px", background: kpis.inactive14d.length ? "var(--danger-tint)" : undefined }}>
+          <div className="muted" style={{ fontSize: 12, marginBottom: 6 }}>Inactifs depuis 14 jours ou plus</div>
+          {kpis.inactive14d.length === 0
+            ? <div style={{ fontSize: 13, fontWeight: 600 }}>✅ Aucun — tout le monde est en mouvement.</div>
+            : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 120, overflowY: "auto" }}>
+                {kpis.inactive14d.map((r) => (
+                  <div key={r.email} className="row" style={{ justifyContent: "space-between", fontSize: 12.5 }}>
+                    <span><b>{r.name}</b> <span className="muted">{r.email}</span></span>
+                    <span style={{ fontWeight: 700, whiteSpace: "nowrap" }}>{r.inactiveDays} j</span>
+                  </div>
+                ))}
+              </div>
+            )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* -------------------------------------------------------------- Console -- */
 function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) {
   const [orgs, setOrgs] = useState<Org[] | null>(null);
@@ -383,6 +445,7 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
   const [seats, setSeats] = useState<Seats | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [progress, setProgress] = useState<Map<string, ProgressRow>>(new Map());
+  const [kpis, setKpis] = useState<OrgKpis | null>(null);
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>("");
@@ -406,8 +469,11 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
     if (!id) return;
     setForbidden(false); setError(null); setLoading(true);
     try {
-      const [s, m, p] = await Promise.all([api.seats(id), api.members(id), api.progress(id).catch(() => [] as ProgressRow[])]);
-      setSeats(s); setMembers(m); setProgress(new Map(p.map((r) => [r.userId, r])));
+      const [s, m, p, k] = await Promise.all([
+        api.seats(id), api.members(id), api.progress(id).catch(() => [] as ProgressRow[]),
+        api.kpis(id).catch(() => null),
+      ]);
+      setSeats(s); setMembers(m); setProgress(new Map(p.map((r) => [r.userId, r]))); setKpis(k);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) { setForbidden(true); setSeats(null); setMembers([]); }
       else setError(e instanceof Error ? e.message : "Erreur");
@@ -453,6 +519,15 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
 
         {!forbidden && !seats && !error && (
           <div className="card" style={{ padding: "22px 16px" }}><span className="muted">Chargement de l'organisation…</span></div>
+        )}
+        {!forbidden && seats && kpis && (
+          <KpiBoard kpis={kpis} onExport={() => {
+            void api.kpisCsv(orgId).then((blob) => {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob); a.download = "kpis-organisation.csv"; a.click();
+              URL.revokeObjectURL(a.href);
+            }).catch(() => {});
+          }} />
         )}
         {!forbidden && seats && (
           <div className="grid grid-console" style={{ alignItems: "start", gap: 16 }}>
