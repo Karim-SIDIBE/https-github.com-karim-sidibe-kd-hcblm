@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import {
   OrgError, addMember, addMemberByEmail, createOrganization, createOrgLearner, enrollOrgLearner, getOrganization,
-  importOrgLearners, listMembers, listOrganizations, orgProgress, removeMember, seatUsage, setSeats, setLearnerDisabled,
+  importOrgLearners, listMembers, listOrganizations, orgKpis, orgProgress, removeMember, seatUsage, setSeats, setLearnerDisabled,
 } from "./organizations.service.js";
 import { inviteUser } from "../users/users.service.js";
 import { toCsv } from "../analytics/analytics.service.js";
@@ -162,6 +162,38 @@ export async function organizationRoutes(app: FastifyInstance) {
         meta: { total: report.total, created: report.created, enrolled: report.enrolled, errors: report.errors.length },
       });
       return { data: report };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // KPIs agrégés de l'organisation (tableau de bord DRH) : effectif, activité,
+  // progression moyenne, répartition par bloc, certification, badges, inactifs.
+  // ?format=csv exporte les agrégats à plat pour les comités.
+  app.get("/organizations/:id/kpis", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    if (!(await canAdminOrg(req, id))) return reply.forbidden("Réservé aux administrateurs de l'organisation");
+    const { format } = z.object({ format: z.enum(["csv", "json"]).optional() }).parse(req.query ?? {});
+    try {
+      const k = await orgKpis(id);
+      if (format === "csv") {
+        const flat = [
+          { indicateur: "Licences utilisées", valeur: `${k.seats.used}/${k.seats.total}` },
+          { indicateur: "Apprenants (actifs)", valeur: k.members },
+          { indicateur: "Apprenants inscrits à un parcours", valeur: k.enrolled },
+          { indicateur: "Inscriptions", valeur: k.enrollments },
+          { indicateur: "Actifs 7 derniers jours", valeur: k.active7d },
+          { indicateur: "Progression moyenne (%)", valeur: k.avgProgressPct ?? "" },
+          { indicateur: "En Bloc 0 / 1 / 2 / 3 / 4 / terminé", valeur: k.blockDistribution.join(" / ") },
+          { indicateur: "Certifiés", valeur: k.certified },
+          { indicateur: "Taux de certification (%)", valeur: k.certificationRatePct ?? "" },
+          { indicateur: "Badges de bloc obtenus", valeur: k.badges },
+          { indicateur: "Certificats délivrés", valeur: k.certificates },
+          { indicateur: "Inactifs depuis 14 jours ou plus", valeur: k.inactive14d.map((r) => `${r.name} (${r.inactiveDays} j)`).join(" · ") || "aucun" },
+        ];
+        reply.header("content-type", "text/csv; charset=utf-8");
+        reply.header("content-disposition", `attachment; filename="kpis-organisation.csv"`);
+        return reply.send("﻿" + toCsv(flat));
+      }
+      return { data: k };
     } catch (err) { return handle(reply, err); }
   });
 

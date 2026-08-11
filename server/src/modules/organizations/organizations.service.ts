@@ -229,6 +229,87 @@ export async function orgProgress(organizationId: string) {
   }));
 }
 
+/**
+ * KPIs agrégés de l'organisation — le tableau de bord du DRH : effectif engagé,
+ * progression moyenne, répartition par bloc, certification, badges de bloc,
+ * et apprenants inactifs depuis 14 jours (nominatif : le DRH suit SES effectifs,
+ * contrairement au tableau de cohorte apprenant qui reste anonyme).
+ */
+export async function orgKpis(organizationId: string) {
+  const org = await getOrganization(organizationId);
+  const memberships = await prisma.organizationMembership.findMany({
+    where: { organizationId, orgRole: "MEMBER" },
+    include: { user: { select: { id: true, name: true, email: true, disabledAt: true } } },
+  });
+  const activeMembers = memberships.filter((m) => m.user.disabledAt == null);
+  const userIds = activeMembers.map((m) => m.userId);
+  const enrollments = userIds.length === 0 ? [] : await prisma.enrollment.findMany({
+    where: { userId: { in: userIds } },
+    include: { courseVersion: { select: { title: true, content: true } }, completions: true, badges: true },
+  });
+
+  const now = Date.now();
+  const DAY = 86_400_000;
+  // Bloc courant par inscription : nombre de blocs terminés = index du bloc en
+  // cours (0-4) ; 5 blocs terminés = parcours complété.
+  const blockDistribution = [0, 0, 0, 0, 0, 0]; // index 0-4 = bloc courant, 5 = terminé
+  let progressSum = 0;
+  let badgeCount = 0;
+  let certificateCount = 0;
+  const lastActivityByUser = new Map<string, number>();
+  const enrolledUsers = new Set<string>();
+
+  for (const e of enrollments) {
+    enrolledUsers.add(e.userId);
+    let done = 0;
+    let totalBlocks = 5;
+    try {
+      const content = CourseContent.parse(e.courseVersion.content);
+      const progress = computeProgress(
+        content,
+        e.completions.map((c) => ({ blockIndex: c.blockIndex, itemKey: c.itemKey, scorePct: c.scorePct })),
+        Boolean(e.momentAncrage),
+      );
+      done = progress.completedBlockIndexes.length;
+      totalBlocks = content.blocks.length;
+    } catch { /* contenu illisible → 0 % plutôt qu'une 500 */ }
+    progressSum += Math.round((done / totalBlocks) * 100);
+    const slot = Math.min(done, 5);
+    blockDistribution[slot] = (blockDistribution[slot] ?? 0) + 1;
+    for (const b of e.badges) {
+      if (b.type === "CERTIFICATE") certificateCount += 1; else badgeCount += 1;
+    }
+    const seen = e.lastSeenAt?.getTime() ?? e.startedAt.getTime();
+    lastActivityByUser.set(e.userId, Math.max(lastActivityByUser.get(e.userId) ?? 0, seen));
+  }
+
+  const certified = enrollments.filter((e) => e.status === "CERTIFIED").length;
+  const active7d = [...lastActivityByUser.values()].filter((ts) => now - ts <= 7 * DAY).length;
+  const inactive14d = activeMembers
+    .filter((m) => enrolledUsers.has(m.userId))
+    .map((m) => ({ name: m.user.name, email: m.user.email, inactiveDays: Math.floor((now - (lastActivityByUser.get(m.userId) ?? now)) / DAY) }))
+    .filter((r) => r.inactiveDays >= 14)
+    .sort((a, b) => b.inactiveDays - a.inactiveDays);
+
+  const used = await countSeatsUsed(organizationId);
+  return {
+    seats: { total: org.seats, used, available: remainingSeats(org.seats, used) },
+    members: activeMembers.length,
+    enrolled: enrolledUsers.size,
+    enrollments: enrollments.length,
+    active7d,
+    avgProgressPct: enrollments.length === 0 ? null : Math.round(progressSum / enrollments.length),
+    /** Inscriptions par bloc courant : [bloc 0, 1, 2, 3, 4, terminé]. */
+    blockDistribution,
+    certified,
+    inProgress: enrollments.filter((e) => e.status === "ACTIVE").length,
+    certificationRatePct: enrollments.length === 0 ? null : Math.round((certified / enrollments.length) * 100),
+    badges: badgeCount,
+    certificates: certificateCount,
+    inactive14d,
+  };
+}
+
 // --- bulk learner import (ENT lot 2) -----------------------------------------
 
 export type OrgImportReport = {

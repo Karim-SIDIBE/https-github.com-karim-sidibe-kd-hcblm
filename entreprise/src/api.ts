@@ -69,6 +69,17 @@ export type ProgressRow = {
   userId: string; name: string; email: string; disabled: boolean; active7d: boolean;
   enrollments: { courseTitle: string; progressPercent: number; status: string; lastActivity: string | null; startedAt: string }[];
 };
+/** KPIs agrégés de l'organisation — le tableau de bord du DRH. */
+export type OrgKpis = {
+  seats: { total: number; used: number; available: number };
+  members: number; enrolled: number; enrollments: number; active7d: number;
+  avgProgressPct: number | null;
+  /** Inscriptions par bloc courant : [bloc 0, 1, 2, 3, 4, terminé]. */
+  blockDistribution: number[];
+  certified: number; inProgress: number; certificationRatePct: number | null;
+  badges: number; certificates: number;
+  inactive14d: { name: string; email: string; inactiveDays: number }[];
+};
 
 export const api = {
   myOrgs: () => req<Org[]>("GET", "/organizations"),
@@ -89,9 +100,16 @@ export const api = {
     req<{ userId: string; orgRole: string }>("POST", `/organizations/${orgId}/members`, { email, orgRole }),
   removeTeamMember: (orgId: string, userId: string) =>
     req<{ ok: boolean }>("DELETE", `/organizations/${orgId}/members/${userId}`),
+  kpis: (orgId: string) => req<OrgKpis>("GET", `/organizations/${orgId}/kpis`),
   async progressCsv(orgId: string): Promise<Blob> {
     const t = auth.token();
     const res = await fetch(`${BASE}/organizations/${orgId}/progress?format=csv`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Export échoué");
+    return res.blob();
+  },
+  async kpisCsv(orgId: string): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/organizations/${orgId}/kpis?format=csv`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
     if (!res.ok) throw new ApiError(res.status, "error", "Export échoué");
     return res.blob();
   },
