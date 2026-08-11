@@ -188,10 +188,15 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
   };
   const page = opts.page ?? 1;
   const pageSize = opts.pageSize ?? 500;
-  const [total, valid, revoked, creds] = await Promise.all([
+  // Décompte séparé : seul le titre de FIN DE PARCOURS (achievementType
+  // CERTIFICATE) est un « certificat » ; les jalons de fin de bloc (Badge
+  // Entrée, Compréhension, Pratique, Ancrage) sont des « badges ».
+  const [total, valid, revoked, certificates, blockBadges, creds] = await Promise.all([
     prisma.credential.count({ where }),
     prisma.credential.count({ where: { ...baseWhere, revokedAt: null } }),
     prisma.credential.count({ where: { ...baseWhere, revokedAt: { not: null } } }),
+    prisma.credential.count({ where: { ...baseWhere, achievementType: "CERTIFICATE" } }),
+    prisma.credential.count({ where: { ...baseWhere, achievementType: { not: "CERTIFICATE" } } }),
     prisma.credential.findMany({
       where, orderBy: { issuedAt: "desc" }, skip: (page - 1) * pageSize, take: pageSize,
       include: { badge: true, enrollment: { include: { user: { select: { name: true, email: true } }, courseVersion: { select: { title: true } } } } },
@@ -208,7 +213,7 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
     courseTitle: c.enrollment.courseVersion.title,
     verifyUrl: `${credentialUrl(c.id)}/verify`,
   }));
-  return { rows, total, valid, revoked };
+  return { rows, total, valid, revoked, certificates, badges: blockBadges };
 }
 
 // Header logo for the verification page, inlined so the page stays

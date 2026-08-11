@@ -46,7 +46,9 @@ export function badgeMessage(
     CERTIFICATE: "Vous avez démontré votre maîtrise. Félicitations pour votre certification de Niveau 1 !",
   };
 
-  return `🏅 ${badgeLabel} débloqué ! ${anchor}${profile} ${tail[badgeType]}`;
+  // Pas d'emoji dans le message : l'écran de célébration affiche déjà LE
+  // symbole du badge (clé, cerveau, biceps, ancre) en tête de fenêtre.
+  return `${badgeLabel} débloqué ! ${anchor}${profile} ${tail[badgeType]}`;
 }
 
 /** Peer notification text (Pilier 6.3). */
