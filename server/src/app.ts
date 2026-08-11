@@ -25,6 +25,7 @@ import { tutorRoutes } from "./modules/tutor/tutor.routes.js";
 import { sessionRoutes } from "./modules/sessions/sessions.routes.js";
 import { forumRoutes } from "./modules/forum/forum.routes.js";
 import { accreditationRoutes } from "./modules/accreditations/accreditations.routes.js";
+import { appealsRoutes } from "./modules/appeals/appeals.routes.js";
 import { mediaRoutes } from "./modules/media/media.routes.js";
 import { interopRoutes } from "./modules/interop/interop.routes.js";
 import { exportRoutes } from "./modules/export/export.routes.js";
@@ -175,6 +176,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await sessionRoutes(api);
       await forumRoutes(api);
       await accreditationRoutes(api);
+      await appealsRoutes(api);
       await mediaRoutes(api);
       await interopRoutes(api);
       await exportRoutes(api);

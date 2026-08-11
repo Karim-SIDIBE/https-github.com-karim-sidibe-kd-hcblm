@@ -14,6 +14,7 @@ import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/proj
 import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
+import { shouldDoubleMark } from "../../domain/engine/appeal.js";
 import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -870,6 +871,26 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
       enrollmentId, recipientKind: "LEARNER", recipient: ctx.enrollment.user.email,
       subject, body, provider: "project",
     });
+  }
+
+  // Surveillance continue (socle §9.3) : un dossier réel noté sur dix part en
+  // double notation à l'aveugle. Sélection déterministe au rang de PREMIÈRE
+  // notation du parcours (une re-notation — remise, recours — ne compte pas).
+  if (submission && !submission.evaluatedAt && breakdown) {
+    const gradedSeq = await prisma.projectSubmission.count({
+      where: { decision: { not: null }, enrollment: { courseId: ctx.enrollment.courseId } },
+    });
+    if (shouldDoubleMark(gradedSeq)) {
+      await prisma.doubleMarking.create({
+        data: {
+          enrollmentId, sequence: gradedSeq,
+          firstEvaluatorId: submission.evaluatorId ?? gradedBy ?? null,
+          firstScores: breakdown as unknown as Prisma.InputJsonValue,
+          firstTotal: scorePct,
+        },
+      });
+      await audit({ actorId: gradedBy ?? null, action: "qc.flagged", targetType: "Enrollment", targetId: enrollmentId, meta: { sequence: gradedSeq } });
+    }
   }
 
   // Journalisation §8.9 : lier la notation humaine finale à la dernière
