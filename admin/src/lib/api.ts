@@ -275,6 +275,31 @@ export type Accreditation = {
   notes: string | null;
   status: "active" | "expired" | "revoked";
 };
+/** Recours (socle §10) — le registre exigé : date, candidat, critères, écart,
+ *  décision finale, échéances des étapes. */
+export type AppealRow = {
+  id: string; enrollmentId: string;
+  candidate: { name: string; email: string };
+  openedAt: string; status: string;
+  contestedCriteria: string[]; statement: string;
+  firstTotal: number; secondTotal: number | null; thirdTotal: number | null;
+  gap: number | null; finalTotal: number | null; finalDecision: string | null; decidedAt: string | null;
+  secondEvaluatorId: string | null; thirdEvaluatorId: string | null;
+  step2DueAt: string | null; step3DueAt: string | null; step5DueAt: string | null;
+};
+export type AppealsRegister = { ratePct: number | null; rateAlert: boolean; graded: number; appeals: AppealRow[] };
+/** Double notation de surveillance (socle §9.3). */
+export type QcRow = {
+  id: string; enrollmentId: string; sequence: number; status: string;
+  candidate: { name: string; email: string };
+  firstTotal: number; secondTotal: number | null; gap: number | null;
+  secondEvaluatorId: string | null; thirdEvaluatorId: string | null; thirdTotal: number | null;
+  resolutionNotes: string | null; createdAt: string; gradedAt: string | null; resolvedAt: string | null;
+};
+export type QcRegister = {
+  summary: { count: number; medianGap: number | null; medianAlert: boolean; incidents: number };
+  rows: QcRow[];
+};
 export type ProjectDetail = {
   content: { sections?: Record<string, string> } | null;
   revisionStatus: string; scoreTotal: number | null; feedback: string | null;
@@ -482,6 +507,14 @@ export const api = {
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number; evidence?: string }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
   assignEvaluator: (enrollmentId: string, evaluatorId: string, f2fConflict?: boolean) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId, f2fConflict }),
+  appeals: () => req<AppealsRegister>("GET", "/appeals"),
+  assignAppeal: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/appeal/assign`, { evaluatorId }),
+  gradeAppeal: (enrollmentId: string, criteria: { index: number; points: number; evidence?: string }[]) =>
+    req<{ gap: number; needsThird: boolean; decision?: string; finalTotal?: number }>("POST", `/enrollments/${enrollmentId}/appeal/grade`, { criteria }),
+  qcList: () => req<QcRegister>("GET", "/qc/double-marking"),
+  qcAssign: (enrollmentId: string, evaluatorId: string) => req<QcRow>("POST", "/qc/double-marking", { enrollmentId, evaluatorId }),
+  qcGrade: (id: string, criteria: { index: number; points: number; evidence?: string }[]) => req<QcRow>("POST", `/qc/double-marking/${id}/grade`, { criteria }),
+  qcResolve: (id: string, body: { thirdEvaluatorId: string; thirdTotal: number; notes: string }) => req<QcRow>("POST", `/qc/double-marking/${id}/resolve`, body),
   accreditations: () => req<Accreditation[]>("GET", "/accreditations"),
   grantAccreditation: (evaluatorId: string, courseId: string, notes?: string) => req<Accreditation>("POST", "/accreditations", { evaluatorId, courseId, notes }),
   revokeAccreditation: (id: string) => req<unknown>("DELETE", `/accreditations/${id}`),

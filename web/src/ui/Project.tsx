@@ -24,14 +24,31 @@ export function Project({ eid }: { eid: string }) {
   const [state, setState] = useState<ProjectState | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
+  const [appeal, setAppeal] = useState<any | null>(null);
+  const [appealForm, setAppealForm] = useState<{ contested: string[]; statement: string } | null>(null);
+  const [appealMsg, setAppealMsg] = useState<string | null>(null);
 
   async function refresh() {
     try { const p = await api.project(eid); setStatus(p ?? null); } catch { setStatus(null); }
+    try { setAppeal(await api.get<any>(`/enrollments/${eid}/appeal`)); } catch { /* offline */ }
     try {
       const st = await api.get<ProjectState>(`/enrollments/${eid}/project/state`);
       setState(st ?? null);
       if (st) setValues((v) => Object.fromEntries(st.sections.filter((s) => !s.auto).map((s) => [s.key, v[s.key] ?? s.text ?? ""])));
     } catch { /* offline */ }
+  }
+
+  // Recours (socle §10, étape 1) : contestation écrite du candidat — le serveur
+  // fait respecter la fenêtre de 15 jours calendaires et l'unicité du recours.
+  async function submitAppeal() {
+    if (!appealForm || !appealForm.contested.length || !appealForm.statement.trim()) return;
+    setBusy("appeal"); setAppealMsg(null);
+    try {
+      await api.postChecked(`/enrollments/${eid}/appeal`, { contestedCriteria: appealForm.contested, statement: appealForm.statement.trim() });
+      setAppealForm(null);
+      await refresh();
+    } catch (e: any) { setAppealMsg(e?.message || "Erreur"); }
+    finally { setBusy(null); }
   }
 
   useEffect(() => {
@@ -69,6 +86,7 @@ export function Project({ eid }: { eid: string }) {
   if (status) {
     const STATUS_FR: Record<string, string> = { SUBMITTED: t("pj.st.submitted"), ASSIGNED: t("pj.st.assigned"), PASSED: t("pj.st.passed"), REVISION_REQUESTED: t("pj.st.revision"), NOT_CERTIFIED: t("pj.st.notCertified") };
     const pillCls = status.result === "PASS" ? "hf-pill--mint" : status.result === "FAIL" ? "hf-pill--orange" : "hf-pill--soft";
+    const hasDecision = ["PASSED", "REVISION_REQUESTED", "NOT_CERTIFIED"].includes(status.revisionStatus);
     return (
       <div className="stack">
         <Back />
@@ -83,6 +101,44 @@ export function Project({ eid }: { eid: string }) {
           )}
           {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">{t("pj.evalFeedback")}</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
         </div>
+
+        {/* Recours (socle §10) : suivi si déposé, sinon formulaire de
+            contestation — la fenêtre de 15 jours est arbitrée par le serveur. */}
+        {appeal ? (
+          <div className="hf-card stack">
+            <strong className="h4">{t("pj.appeal.title")}</strong>
+            <span className="hf-pill hf-pill--soft" style={{ alignSelf: "flex-start" }}>
+              {t(`pj.appeal.status.${appeal.status}`, { total: appeal.finalTotal ?? 0 })}
+            </span>
+            {appeal.decided && <p className="meta" style={{ margin: 0 }}>{t("pj.appeal.final")}</p>}
+          </div>
+        ) : hasDecision && (
+          <div className="hf-card stack">
+            <strong className="h4">{t("pj.appeal.title")}</strong>
+            {!appealForm ? (
+              <button className="hf-btn hf-btn--outline" onClick={() => setAppealForm({ contested: [], statement: "" })}>{t("pj.appeal.title")}</button>
+            ) : (
+              <>
+                <p className="meta" style={{ margin: 0 }}>{t("pj.appeal.intro")}</p>
+                {spec.rubric.criteria.map((c) => (
+                  <label key={c.label} className="row" style={{ gap: 8, cursor: "pointer" }}>
+                    <input type="checkbox" checked={appealForm.contested.includes(c.label)}
+                      onChange={(e) => setAppealForm((f) => f && ({ ...f, contested: e.target.checked ? [...f.contested, c.label] : f.contested.filter((x) => x !== c.label) }))} />
+                    <span className="body">{c.label}</span>
+                  </label>
+                ))}
+                <textarea className="hf-field" value={appealForm.statement} placeholder={t("pj.appeal.statementPh")}
+                  onChange={(e) => setAppealForm((f) => f && ({ ...f, statement: e.target.value }))} style={{ minHeight: 90 }} />
+                {appealForm.contested.length === 0 && <p className="meta" style={{ margin: 0 }}>{t("pj.appeal.pickOne")}</p>}
+                {appealMsg && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{appealMsg}</p>}
+                <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy === "appeal" || !appealForm.contested.length || !appealForm.statement.trim()}
+                  onClick={() => void submitAppeal()}>
+                  {busy === "appeal" ? "…" : t("pj.appeal.submit")}
+                </button>
+              </>
+            )}
+          </div>
+        )}
       </div>
     );
   }

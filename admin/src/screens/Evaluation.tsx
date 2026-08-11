@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, auth, type Accreditation, type AiCalibrationStatus, type AiComplianceIndicators, type EvalQueueItem, type ProjectDetail, type RubricSuggestion, type UserRow } from "../lib/api";
+import { api, auth, type Accreditation, type AiCalibrationStatus, type AiComplianceIndicators, type AppealsRegister, type EvalQueueItem, type ProjectDetail, type QcRegister, type RubricCriterion, type RubricSuggestion, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 import { modal } from "../lib/modal";
 
@@ -307,9 +307,242 @@ export function Evaluation() {
       </div>
 
       <AccreditationPanel />
+      <AppealsPanel queue={data ?? []} />
+      <QcPanel queue={data ?? []} />
       <AiGovernancePanel />
 
       {sel && <GradeDrawer item={sel} onClose={() => setSel(null)} onDone={() => { reload(); }} />}
+    </div>
+  );
+}
+
+/** Notation À L'AVEUGLE (recours §10 / double notation §9.3) : saisie points +
+ *  preuve par critère — jamais les scores de la première notation à l'écran. */
+function BlindGradeForm({ criteria, busy, onSubmit }: {
+  criteria: RubricCriterion[]; busy: boolean;
+  onSubmit: (scores: { index: number; points: number; evidence?: string }[]) => void;
+}) {
+  const [points, setPoints] = useState<number[]>(() => criteria.map(() => 0));
+  const [evidence, setEvidence] = useState<string[]>(() => criteria.map(() => ""));
+  const missing = evidence.some((e) => !e.trim());
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
+      {criteria.map((c, i) => (
+        <div key={c.label} className="row" style={{ gap: 8, alignItems: "flex-start", flexWrap: "wrap" }}>
+          <span style={{ fontSize: 12.5, minWidth: 220, flex: 1 }}>{c.label} <span className="muted">/ {c.weightPoints}{c.minPoints != null ? ` · min ${c.minPoints}` : ""}</span></span>
+          <input type="number" min={0} max={c.weightPoints} value={points[i]} style={{ width: 70 }}
+            onChange={(e) => setPoints((p) => p.map((v, j) => j === i ? Math.max(0, Math.min(c.weightPoints, Number(e.target.value) || 0)) : v))} />
+          <textarea value={evidence[i]} placeholder="Preuve (citation exacte ou déclaration d'absence)…"
+            onChange={(e) => setEvidence((ev) => ev.map((v, j) => j === i ? e.target.value : v))}
+            style={{ flex: 2, minWidth: 220, minHeight: 34, padding: "6px 8px", border: `1px solid ${evidence[i]?.trim() ? "var(--line-strong)" : "var(--danger, #b91c1c)"}`, borderRadius: 7, fontFamily: "inherit", fontSize: 12, resize: "vertical" }} />
+        </div>
+      ))}
+      <div className="row" style={{ gap: 8, alignItems: "center" }}>
+        <button className="btn btn--primary btn--sm" disabled={busy || missing}
+          onClick={() => onSubmit(points.map((p, i) => ({ index: i, points: p, evidence: evidence[i]!.trim() })))}>
+          {busy ? "…" : `Enregistrer la notation aveugle (${points.reduce((a, b) => a + b, 0)}/100)`}
+        </button>
+        {missing && <span className="muted" style={{ fontSize: 11.5 }}>Preuve obligatoire pour chaque critère (règle 3 du socle).</span>}
+      </div>
+    </div>
+  );
+}
+
+const APPEAL_ST: Record<string, { cls: string; label: string }> = {
+  OPEN: { cls: "pill--warn", label: "Étape 2 — désigner le 2e évaluateur" },
+  SECOND_ASSIGNED: { cls: "pill--info", label: "Étape 3 — notation aveugle en cours" },
+  THIRD_REQUIRED: { cls: "pill--red", label: "Étape 4 — 3e évaluateur requis (écart ≥ 10)" },
+  THIRD_ASSIGNED: { cls: "pill--info", label: "Étape 4 — décision du 3e attendue" },
+  DECIDED: { cls: "pill--green", label: "Décidé (final)" },
+};
+
+/** Registre des recours (§10) : étapes, échéances, assignation et notation
+ *  aveugle. Un taux > 5 % signale un défaut de grille, pas de candidats. */
+function AppealsPanel({ queue }: { queue: EvalQueueItem[] }) {
+  const me = auth.user();
+  const { data, reload } = useAsync<AppealsRegister>(() => api.appeals(), []);
+  const [evaluators, setEvaluators] = useState<UserRow[]>([]);
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { api.users().then((us) => setEvaluators(us.filter((u) => EVALUATOR_ROLES.has(u.role) && !u.disabled))).catch(() => {}); }, []);
+
+  async function assign(enrollmentId: string, evaluatorId: string) {
+    if (!evaluatorId) return;
+    setBusy(true); setMsg(null);
+    try { await api.assignAppeal(enrollmentId, evaluatorId); reload(); }
+    catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+  async function grade(enrollmentId: string, scores: { index: number; points: number; evidence?: string }[]) {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.gradeAppeal(enrollmentId, scores);
+      setMsg(r.needsThird ? `Écart de ${r.gap} points (≥ 10) : un troisième évaluateur doit trancher.` : `Décision finale appliquée : ${r.finalTotal}/100 (écart ${r.gap}).`);
+      setOpen(null); reload();
+    } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+
+  const rows = data?.appeals ?? [];
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-h">
+        <h3>Recours <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(socle §10 — second évaluateur aveugle ; écart &lt; 10 : la moyenne fait foi ; ≥ 10 : un troisième tranche ; la décision issue du recours est finale)</span></h3>
+        <span className={`pill ${data?.rateAlert ? "pill--red" : "pill--soft"}`}>{data?.ratePct ?? 0} % des dossiers{data?.rateAlert ? " — défaut de grille ?" : ""}</span>
+      </div>
+      <div className="card-b">
+        {msg && <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--navy-600)", margin: "0 0 10px" }}>{msg}</p>}
+        {rows.length === 0 ? <div className="empty" style={{ padding: "18px 10px" }}>Aucun recours déposé.</div> : (
+          <table className="table">
+            <thead><tr><th>Candidat</th><th>Déposé</th><th>Critères contestés</th><th>1re note</th><th>Écart</th><th>Décision finale</th><th>Étape</th><th /></tr></thead>
+            <tbody>
+              {rows.map((a) => {
+                const st = APPEAL_ST[a.status] ?? { cls: "pill--soft", label: a.status };
+                const rubric = queue.find((q) => q.enrollmentId === a.enrollmentId)?.rubric;
+                const mine = (a.status === "SECOND_ASSIGNED" && a.secondEvaluatorId === me?.id) || (a.status === "THIRD_ASSIGNED" && a.thirdEvaluatorId === me?.id);
+                return (
+                  <>
+                    <tr key={a.id}>
+                      <td><b style={{ fontSize: 13 }}>{a.candidate.name}</b></td>
+                      <td style={{ fontSize: 12.5 }}>{ago(a.openedAt)}</td>
+                      <td style={{ fontSize: 12 }}>{(a.contestedCriteria ?? []).join(" · ")}</td>
+                      <td style={{ fontSize: 12.5 }}>{a.firstTotal}/100</td>
+                      <td style={{ fontSize: 12.5 }}>{a.gap ?? "—"}</td>
+                      <td style={{ fontSize: 12.5 }}>{a.finalTotal != null ? `${a.finalTotal}/100 · ${a.finalDecision}` : "—"}</td>
+                      <td><span className={`pill pill--sm ${st.cls}`}>{st.label}</span></td>
+                      <td>
+                        {(a.status === "OPEN" || a.status === "THIRD_REQUIRED") && (
+                          <select className="select" defaultValue="" onChange={(e) => void assign(a.enrollmentId, e.target.value)} disabled={busy}>
+                            <option value="">{a.status === "OPEN" ? "2e évaluateur…" : "3e évaluateur…"}</option>
+                            {evaluators.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          </select>
+                        )}
+                        {mine && rubric && <button className="btn btn--sm" onClick={() => setOpen(open === a.id ? null : a.id)}>{open === a.id ? "Fermer" : "Noter à l'aveugle"}</button>}
+                      </td>
+                    </tr>
+                    {open === a.id && rubric && (
+                      <tr key={`${a.id}-form`}><td colSpan={8}>
+                        <p className="muted" style={{ fontSize: 12, margin: "4px 0" }}>Notation À L'AVEUGLE : les scores de la première notation ne vous sont pas montrés. Reportez VOS preuves. La suggestion automatisée est indisponible (§8.7).</p>
+                        <BlindGradeForm criteria={rubric.criteria} busy={busy} onSubmit={(s) => void grade(a.enrollmentId, s)} />
+                      </td></tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
+    </div>
+  );
+}
+
+const QC_ST: Record<string, { cls: string; label: string }> = {
+  REQUIRED: { cls: "pill--warn", label: "À assigner (sélection 1/10)" },
+  ASSIGNED: { cls: "pill--info", label: "Notation aveugle en cours" },
+  GRADED: { cls: "pill--green", label: "Notée" },
+  INCIDENT: { cls: "pill--red", label: "Incident (> 15 pts)" },
+  RESOLVED: { cls: "pill--soft", label: "Incident résolu" },
+};
+
+/** Contrôle qualité (§9.3) : 10 % des dossiers en double notation aveugle —
+ *  la note officielle ne change pas ; médiane trimestrielle et incidents. */
+function QcPanel({ queue }: { queue: EvalQueueItem[] }) {
+  const me = auth.user();
+  const { data, reload } = useAsync<QcRegister>(() => api.qcList(), []);
+  const [evaluators, setEvaluators] = useState<UserRow[]>([]);
+  const [addFor, setAddFor] = useState("");
+  const [open, setOpen] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+  useEffect(() => { api.users().then((us) => setEvaluators(us.filter((u) => EVALUATOR_ROLES.has(u.role) && !u.disabled))).catch(() => {}); }, []);
+
+  async function assign(enrollmentId: string, evaluatorId: string) {
+    if (!enrollmentId || !evaluatorId) return;
+    setBusy(true); setMsg(null);
+    try { await api.qcAssign(enrollmentId, evaluatorId); setAddFor(""); reload(); }
+    catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+  async function grade(id: string, scores: { index: number; points: number; evidence?: string }[]) {
+    setBusy(true); setMsg(null);
+    try {
+      const r = await api.qcGrade(id, scores);
+      setMsg(r.status === "INCIDENT" ? `Écart de ${r.gap} points (> 15) : incident consigné — un troisième évaluateur tranche.` : `Double notation consignée (écart ${r.gap} pts). La note officielle ne change pas.`);
+      setOpen(null); reload();
+    } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+  async function resolve(id: string) {
+    const evaluatorId = await modal.prompt({ title: "Troisième évaluateur (identifiant utilisateur)", body: "Il tranche l'incident ; tout est consigné au journal de calibration." });
+    if (!evaluatorId) return;
+    const totalStr = await modal.prompt({ title: "Total tranché (/100)" });
+    if (!totalStr) return;
+    const notes = await modal.prompt({ title: "Notes de résolution" });
+    if (!notes) return;
+    setBusy(true); setMsg(null);
+    try { await api.qcResolve(id, { thirdEvaluatorId: evaluatorId, thirdTotal: Number(totalStr) || 0, notes }); reload(); }
+    catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(false); }
+  }
+
+  const gradedQueue = queue.filter((q) => q.scoreTotal != null);
+  const s = data?.summary;
+  return (
+    <div className="card" style={{ marginTop: 16 }}>
+      <div className="card-h">
+        <h3>Contrôle qualité <span className="muted" style={{ fontWeight: 400, fontSize: 12 }}>(socle §9.3 — 10 % des dossiers notés en double à l'aveugle ; médiane trimestrielle &gt; 8 : réviser ou recalibrer ; écart &gt; 15 : un troisième tranche)</span></h3>
+        <span className={`pill ${s?.medianAlert ? "pill--red" : "pill--soft"}`}>médiane {s?.medianGap ?? "—"} pts · {s?.incidents ?? 0} incident(s)</span>
+      </div>
+      <div className="card-b">
+        <div className="row" style={{ gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <select className="select" value={addFor} onChange={(e) => setAddFor(e.target.value)}>
+            <option value="">Ajouter un dossier noté au contrôle…</option>
+            {gradedQueue.map((q) => <option key={q.enrollmentId} value={q.enrollmentId}>{q.learner.name} — {q.scoreTotal}/100</option>)}
+          </select>
+          <select className="select" defaultValue="" disabled={!addFor || busy} onChange={(e) => void assign(addFor, e.target.value)}>
+            <option value="">Second évaluateur…</option>
+            {evaluators.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+          </select>
+        </div>
+        {msg && <p style={{ fontSize: 12.5, fontWeight: 600, color: "var(--navy-600)", margin: "0 0 10px" }}>{msg}</p>}
+        {(data?.rows ?? []).length === 0 ? <div className="empty" style={{ padding: "18px 10px" }}>Aucune double notation pour l'instant — la sélection automatique marque un dossier noté sur dix.</div> : (
+          <table className="table">
+            <thead><tr><th>Candidat</th><th>Sélection</th><th>1re note</th><th>2e note</th><th>Écart</th><th>Statut</th><th /></tr></thead>
+            <tbody>
+              {(data?.rows ?? []).map((r) => {
+                const st = QC_ST[r.status] ?? { cls: "pill--soft", label: r.status };
+                const rubric = queue.find((q) => q.enrollmentId === r.enrollmentId)?.rubric;
+                const mine = r.status === "ASSIGNED" && r.secondEvaluatorId === me?.id;
+                return (
+                  <>
+                    <tr key={r.id}>
+                      <td><b style={{ fontSize: 13 }}>{r.candidate.name}</b></td>
+                      <td style={{ fontSize: 12.5 }}>{r.sequence > 0 ? `auto (n° ${r.sequence})` : "manuelle"}</td>
+                      <td style={{ fontSize: 12.5 }}>{r.firstTotal}/100</td>
+                      <td style={{ fontSize: 12.5 }}>{r.secondTotal != null ? `${r.secondTotal}/100` : "—"}</td>
+                      <td style={{ fontSize: 12.5 }}>{r.gap ?? "—"}{r.thirdTotal != null ? ` → tranché ${r.thirdTotal}/100` : ""}</td>
+                      <td><span className={`pill pill--sm ${st.cls}`}>{st.label}</span></td>
+                      <td className="row" style={{ gap: 6 }}>
+                        {r.status === "REQUIRED" && (
+                          <select className="select" defaultValue="" disabled={busy} onChange={(e) => void assign(r.enrollmentId, e.target.value)}>
+                            <option value="">Assigner…</option>
+                            {evaluators.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                          </select>
+                        )}
+                        {mine && rubric && <button className="btn btn--sm" onClick={() => setOpen(open === r.id ? null : r.id)}>{open === r.id ? "Fermer" : "Noter à l'aveugle"}</button>}
+                        {r.status === "INCIDENT" && <button className="btn btn--sm btn--ghost" disabled={busy} onClick={() => void resolve(r.id)}>Faire trancher</button>}
+                      </td>
+                    </tr>
+                    {open === r.id && rubric && (
+                      <tr key={`${r.id}-form`}><td colSpan={7}>
+                        <p className="muted" style={{ fontSize: 12, margin: "4px 0" }}>Notation À L'AVEUGLE de surveillance : la première note ne vous est pas montrée et la note officielle ne changera pas — l'écart alimente la médiane trimestrielle.</p>
+                        <BlindGradeForm criteria={rubric.criteria} busy={busy} onSubmit={(sc) => void grade(r.id, sc)} />
+                      </td></tr>
+                    )}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
+        )}
+      </div>
     </div>
   );
 }

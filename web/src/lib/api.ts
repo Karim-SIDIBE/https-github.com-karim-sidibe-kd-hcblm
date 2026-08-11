@@ -105,6 +105,13 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     },
     async get<T = any>(path: string): Promise<T> { return (await (await raw("GET", path)).json()).data as T; },
     async post<T = any>(path: string, body?: unknown): Promise<T> { return (await (await raw("POST", path, { body })).json()).data as T; },
+    /** POST qui remonte le message d'erreur du serveur (formulaires : recours…). */
+    async postChecked<T = any>(path: string, body?: unknown): Promise<T> {
+      const res = await raw("POST", path, { body });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(j.message || "Erreur");
+      return j.data as T;
+    },
     async listEnrollments(): Promise<EnrollmentSummary[]> {
       const res = await raw("GET", "/enrollments");
       if (!res.ok) return [];

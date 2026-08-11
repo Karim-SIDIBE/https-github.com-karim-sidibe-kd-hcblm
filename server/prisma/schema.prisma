@@ -785,8 +785,89 @@ model Enrollment {
   journalTriggers JournalTrigger[]
   quizDraws      QuizDraw[]
   projectSubmission ProjectSubmission?
+  appeal         Appeal?
+  doubleMarkings DoubleMarking[]
 
   @@unique([userId, courseId])
+  @@index([status])
+}
+
+/// Procédure de recours (socle §10) : contestation d'une décision devant une
+/// instance distincte de celle qui l'a prise. Un SEUL recours par dossier —
+/// la décision issue du recours est finale. Le registre exigé par le socle
+/// (date, candidat, critères contestés, écart, décision finale) est cette
+/// table, conservée sans limite de durée.
+model Appeal {
+  id                String     @id @default(cuid())
+  enrollmentId      String     @unique
+  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  openedAt          DateTime   @default(now())
+  /// Étape 1 : critères contestés (labels) + éléments non pris en compte.
+  contestedCriteria Json
+  statement         String
+  /// Photographie de la première notation au moment de l'ouverture.
+  firstEvaluatorId  String?
+  firstScores       Json
+  firstTotal        Int
+  /// Étape 2 : second évaluateur (n'a pas participé à la première notation,
+  /// ne connaît pas les scores attribués) — désigné sous 5 jours ouvrables.
+  secondEvaluatorId String?
+  secondAssignedAt  DateTime?
+  /// Étape 3 : notation à l'aveugle sous 10 jours ouvrables, avec preuves.
+  secondScores      Json?
+  secondTotal       Int?
+  secondGradedAt    DateTime?
+  /// Étape 4 : écart des totaux — < 10 : la moyenne fait foi ; ≥ 10 : un
+  /// troisième évaluateur tranche et sa décision est définitive.
+  gap               Int?
+  thirdEvaluatorId  String?
+  thirdAssignedAt   DateTime?
+  thirdScores       Json?
+  thirdTotal        Int?
+  /// Étape 5 : décision finale appliquée + notification motivée sous 3 jours
+  /// ouvrables.
+  finalScores       Json?
+  finalTotal        Int?
+  finalDecision     String?
+  decidedAt         DateTime?
+  /// OPEN → SECOND_ASSIGNED → THIRD_REQUIRED → THIRD_ASSIGNED → DECIDED.
+  status            String     @default("OPEN")
+  /// Échéances des étapes 2, 3 et 5 (jours ouvrables).
+  step2DueAt        DateTime?
+  step3DueAt        DateTime?
+  step5DueAt        DateTime?
+
+  @@index([status])
+}
+
+/// Surveillance continue (socle §9.3) : 10 % des dossiers réels notés en
+/// double à l'aveugle. La note officielle NE CHANGE PAS — l'écart alimente la
+/// médiane trimestrielle (> 8 : réviser la grille ou recalibrer) et les
+/// incidents individuels (> 15 : un troisième évaluateur tranche, consigné).
+model DoubleMarking {
+  id                String     @id @default(cuid())
+  enrollmentId      String
+  enrollment        Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  /// Rang du dossier noté qui a déclenché la sélection (0 = ajout manuel).
+  sequence          Int        @default(0)
+  firstEvaluatorId  String?
+  firstScores       Json
+  firstTotal        Int
+  secondEvaluatorId String?
+  assignedAt        DateTime?
+  secondScores      Json?
+  secondTotal       Int?
+  gradedAt          DateTime?
+  gap               Int?
+  /// REQUIRED → ASSIGNED → GRADED | INCIDENT → RESOLVED.
+  status            String     @default("REQUIRED")
+  thirdEvaluatorId  String?
+  thirdTotal        Int?
+  resolutionNotes   String?
+  resolvedAt        DateTime?
+  createdAt         DateTime   @default(now())
+
+  @@index([enrollmentId])
   @@index([status])
 }
 
