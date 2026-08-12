@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api, engine, store, getIdentity } from "../lib/app";
-import { setCachedPosition, setCachedProgress, getCachedPosition, getCachedProgress } from "../lib/cache";
+import { getCachedAiFeedback, setCachedAiFeedback, setCachedPosition, setCachedProgress, getCachedPosition, getCachedProgress } from "../lib/cache";
 import { currentConn, resolveSource, type Rendition } from "../lib/media";
 import { cachedUrlsOf } from "../lib/offline";
 import { previousSession } from "../lib/content";
@@ -152,10 +152,15 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
 
       {phase === "exercise" && session.exercise && (
         <Exercise exercise={session.exercise} frozen={doneItem?.data} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
-          aiFeedback={doneItem || session.exercise.type === "multi" ? undefined : async () => {
-            // Personalised formative feedback on the saved answer (AI when a key
-            // is configured server-side, deterministic heuristic otherwise).
+          aiFeedback={session.exercise.type === "multi" ? undefined : async () => {
+            // Personalised formative feedback on the saved answer. The server
+            // keeps the FIRST generated feedback (idempotent) — revisits of a
+            // frozen exercise re-show it; the local cache covers offline.
+            const cached = getCachedAiFeedback(eid, block, item);
+            if (cached) return cached;
+            if (!navigator.onLine) return null;
             const r = await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey: item });
+            if (r?.feedback) setCachedAiFeedback(eid, block, item, r.feedback);
             return r?.feedback ?? null;
           }} />
       )}

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { engine, store } from "../lib/app";
-import { clearDraft, getCachedProgress, loadDraft, saveDraft, setCachedProgress } from "../lib/cache";
+import { clearDraft, getCachedAiFeedback, getCachedProgress, loadDraft, saveDraft, setCachedAiFeedback, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
@@ -56,13 +56,27 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   const backToCourse = () => navigate(routes.cours(eid));
   const Back = () => <button className="hf-btn hf-btn--ghost hf-btn--sm" style={{ paddingLeft: 0 }} onClick={backToCourse}>{t("nav.backCourse")}</button>;
 
+  // Feedback IA formatif : le serveur conserve le PREMIER généré (idempotent) —
+  // les revisites le réaffichent ; le cache local couvre le hors-ligne.
+  const aiFb = async (): Promise<string | null> => {
+    const cached = getCachedAiFeedback(eid, block, itemKey);
+    if (cached) return cached;
+    if (!navigator.onLine) return null;
+    const r = await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey });
+    if (r?.feedback) setCachedAiFeedback(eid, block, itemKey, r.feedback);
+    return r?.feedback ?? null;
+  };
+
   if (!bundle || answers === null) return <div className="stack"><Back /><div className="skeleton line" style={{ width: "50%" }} /><div className="skeleton card" /></div>;
 
   if (done) {
+    // Seules les études de cas à réponses ouvertes ont reçu un feedback IA.
+    const open = (done.data as { open?: Record<string, string> } | null)?.open;
+    const hadAiFeedback = itemKey === "case" && open != null && Object.values(open).some((v) => v);
     return (
       <div className="stack">
         <Breadcrumb eid={eid} block={blk} itemKey={itemKey} />
-        <FrozenActivity t={t} data={done.data} onContinue={() => advance()} />
+        <FrozenActivity t={t} data={done.data} aiFeedback={hadAiFeedback ? aiFb : undefined} onContinue={() => advance()} />
       </div>
     );
   }
@@ -79,8 +93,7 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
     body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} intro={p.actionPlan30d.intro || ""} habits={p.actionPlan30d.habits} onFinish={async (d) => { advance(await complete("ACTION_PLAN", d)); }} />;
   } else if (caseSpec && (caseSpec.structuredSteps?.length ?? 0) > 0) {
     body = <StructuredCase t={t} caseStudy={caseSpec} draft={{ eid, slot: `act_${block}_${itemKey}` }}
-      aiFeedback={async () => (await api.post<{ feedback?: string }>(`/enrollments/${eid}/feedback`, { blockIndex: block, itemKey }))?.feedback ?? null}
-      onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
+      aiFeedback={aiFb} onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
   } else if (caseSpec) {
     body = <CaseStudy t={t} caseStudy={caseSpec as { title: string; steps: string[] }} onFinish={async (d) => { advance(await complete("CASE_STUDY", d)); }} />;
   }
@@ -94,7 +107,19 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
  * from the RECORDED payload (whatever its shape: ratings, habits, mcq counts,
  * open answers or free text). First submission is final (server-enforced).
  */
-function FrozenActivity({ t, data, onContinue }: { t: TFn; data: unknown; onContinue: () => void }) {
+function FrozenActivity({ t, data, aiFeedback, onContinue }: { t: TFn; data: unknown; aiFeedback?: () => Promise<string | null>; onContinue: () => void }) {
+  // Le feedback IA d'origine (conservé) se réaffiche sous les réponses figées.
+  const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
+  useEffect(() => {
+    if (!aiFeedback) return;
+    let alive = true;
+    setAi({ loading: true, text: null });
+    aiFeedback()
+      .then((text) => { if (alive) setAi({ loading: false, text }); })
+      .catch(() => { if (alive) setAi({ loading: false, text: null }); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const d = (data ?? {}) as {
     ratings?: { criterion: string; level: string }[];
     habits?: { title: string; values: Record<string, string> }[];
@@ -141,6 +166,13 @@ function FrozenActivity({ t, data, onContinue }: { t: TFn; data: unknown; onCont
         <div className="hf-card stack" style={{ gap: 6 }}>
           <div className="eyebrow">{t("frz.yourAnswer")}</div>
           <p className="body" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{d.text}</p>
+        </div>
+      )}
+      {ai.loading && <p className="meta">✨ {t("ex.aiLoading")}</p>}
+      {ai.text && (
+        <div className="hf-card hf-card--icy">
+          <div className="eyebrow">✨ {t("ex.aiTitle")}</div>
+          <p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{ai.text}</p>
         </div>
       )}
       <button className="hf-btn hf-btn--primary hf-btn--block" onClick={onContinue}>{t("common.continue")}</button>
