@@ -104,6 +104,9 @@ export const Exercise = z
           label: nonEmpty("intitulé du champ"),
           placeholder: z.string().default(""),
           prefillFromMomentAncrage: z.boolean().default(false),
+          /** Valeur de pré-remplissage calculée AU RENDU par le serveur
+           *  (honorant prefillFromMomentAncrage) — jamais stockée. */
+          prefill: z.string().optional(),
         }),
       )
       .optional(),
@@ -397,7 +400,14 @@ const PracticePayload = z.object({
         z.object({
           title: nonEmpty("titre d'étape"),
           intro: z.string().default(""), // supports {{moment_ancrage}}
-          fields: z.array(z.object({ label: nonEmpty("intitulé du champ"), placeholder: z.string().default("") })).min(1),
+          fields: z.array(z.object({
+            label: nonEmpty("intitulé du champ"),
+            placeholder: z.string().default(""),
+            /** Valeur de pré-remplissage calculée AU RENDU par le serveur
+             *  (Moment d'Ancrage, réponses des micro-exercices) — jamais
+             *  stockée dans le contenu, toujours éditable par l'apprenant. */
+            prefill: z.string().optional(),
+          })).min(1),
         }),
       )
       .optional(),

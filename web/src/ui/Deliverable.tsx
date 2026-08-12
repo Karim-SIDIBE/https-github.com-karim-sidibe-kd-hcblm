@@ -10,7 +10,7 @@ import { useT, useI18n } from "../lib/i18n";
 
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
-type FieldSpec = { label: string; placeholder?: string };
+type FieldSpec = { label: string; placeholder?: string; prefill?: string };
 type StepSpec = { title: string; intro?: string; fields: FieldSpec[] };
 type JournalState = { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean };
 
@@ -63,6 +63,21 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
   // Frozen results: a submitted deliverable is consultable, not re-editable.
   const answersMap = useAnswers(eid);
   const doneRow = answerOf(answersMap, block, itemKey);
+
+  // Pré-remplissage (promesse du parcours) : les champs annoncés « pré-remplis »
+  // arrivent du serveur avec les données réelles de l'apprenant (PAM, réponses
+  // des micro-exercices) — points de départ éditables, jamais écrasants.
+  useEffect(() => {
+    if (!spec || doneRow || !spec.steps.length) return;
+    setValues((v) => {
+      const next = { ...v };
+      for (const s of spec.steps) for (const f of s.fields) {
+        if (f.prefill && !(next[f.label] ?? "").trim()) next[f.label] = f.prefill;
+      }
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spec, doneRow]);
 
   const structured = (spec?.steps?.length ?? 0) > 0;
   const count = spec?.unit === "mots" ? words(text) : text.trim().length;
