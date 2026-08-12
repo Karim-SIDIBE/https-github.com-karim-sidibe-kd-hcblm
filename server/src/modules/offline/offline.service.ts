@@ -13,6 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
 import { seededShuffle } from "../../domain/engine/shuffle.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
@@ -79,19 +80,60 @@ async function resolveBoundMedia(content: CourseContentT) {
   }));
 }
 
-/** Stable content hash for ETag-based caching. Includes the PAM so that capturing
- *  it (which changes the injected text) invalidates a previously cached bundle. */
-function bundleVersion(versionId: string, updatedAt: Date, momentAncrage: string | null): string {
+/** Stable content hash for ETag-based caching. Includes the PAM (capturing it
+ *  changes the injected text) AND a fingerprint of the guided-form answers
+ *  (submitting a micro-exercise changes the pre-filled Application terrain). */
+function bundleVersion(versionId: string, updatedAt: Date, momentAncrage: string | null, prefillFingerprint: string): string {
   return createHash("sha256")
-    .update(`${versionId}:${updatedAt.toISOString()}:${momentAncrage ?? ""}`)
+    .update(`${versionId}:${updatedAt.toISOString()}:${momentAncrage ?? ""}:${prefillFingerprint}`)
     .digest("hex").slice(0, 32);
 }
 
 export async function buildBundle(enrollmentId: string) {
   const { enrollment, content } = await load(enrollmentId);
   const version = enrollment.courseVersion;
-  const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage);
+
+  // Réponses des micro-exercices guidés déjà soumises — source du
+  // pré-remplissage de l'Application terrain (promesse du parcours).
+  const completions = await prisma.itemCompletion.findMany({
+    where: { enrollmentId, itemType: "MICRO_SESSION" },
+    select: { blockIndex: true, itemKey: true, data: true, completedAt: true },
+  });
+  const savedForms: SavedForm[] = [];
+  let fingerprint = "";
+  for (const b of content.blocks) {
+    const p = b.payload as { microSessions?: { id: string; exercise?: { prompt?: string; fields?: { label?: string }[] } }[] };
+    for (const ms of p.microSessions ?? []) {
+      if (!ms.exercise?.fields?.length) continue;
+      const done = completions.find((c) => c.blockIndex === b.index && c.itemKey === ms.id);
+      const fields = (done?.data as { fields?: Record<string, string> } | null)?.fields;
+      if (fields && Object.keys(fields).length) {
+        // jsonb ne préserve pas l'ordre des clés → réordonner selon l'exercice.
+        const labels = ms.exercise.fields.map((f) => f.label ?? "");
+        savedForms.push({ prompt: ms.exercise.prompt ?? "", fields: orderFields(fields, labels) });
+        fingerprint += `${ms.id}@${done!.completedAt?.toISOString() ?? ""};`;
+      }
+    }
+  }
+
+  const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage, fingerprint);
   const rendered = injectMomentAncrage(content, enrollment.momentAncrage) as { blocks?: { type: string; payload?: Record<string, { pool?: unknown; questions?: unknown[] }> }[] };
+
+  // Pré-remplissage : Application terrain (PAM + réponses des micro-exercices)
+  // et champs guidés portant le drapeau prefillFromMomentAncrage.
+  const pam = enrollment.momentAncrage?.trim() || null;
+  for (const b of rendered.blocks ?? []) {
+    const p = b.payload as {
+      microSessions?: { exercise?: { fields?: { prefillFromMomentAncrage?: boolean; prefill?: string }[] } }[];
+      fieldApplication?: { steps?: Parameters<typeof decorateFieldApplication>[0] };
+    } | undefined;
+    if (pam) {
+      for (const ms of p?.microSessions ?? []) {
+        for (const f of ms.exercise?.fields ?? []) if (f.prefillFromMomentAncrage && !f.prefill) f.prefill = pam;
+      }
+    }
+    if (p?.fieldApplication?.steps) decorateFieldApplication(p.fieldApplication.steps, pam, savedForms);
+  }
 
   // Per-learner quizzes: materialise the question set (fixed + stable pool draw)
   // AND its stable per-learner random ORDER into the bundle, so offline rendering

@@ -6,7 +6,7 @@ import { assessText, assessmentReason } from "../lib/textcheck";
 import { useT, useI18n } from "../lib/i18n";
 
 type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: number };
-type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean };
+type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
 type ProjectState = { sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[]; journalStartedAt: string | null; finalSectionKey: string };
 
 /**
@@ -34,7 +34,9 @@ export function Project({ eid }: { eid: string }) {
     try {
       const st = await api.get<ProjectState>(`/enrollments/${eid}/project/state`);
       setState(st ?? null);
-      if (st) setValues((v) => Object.fromEntries(st.sections.filter((s) => !s.auto).map((s) => [s.key, v[s.key] ?? s.text ?? ""])));
+      // Pré-remplissage serveur (ex. Section 1 depuis le PAM + l'Application
+      // terrain) : point de départ éditable, seulement si rien n'est saisi.
+      if (st) setValues((v) => Object.fromEntries(st.sections.filter((s) => !s.auto).map((s) => [s.key, v[s.key] || s.text || s.prefill || ""])));
     } catch { /* offline */ }
   }
 

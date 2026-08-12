@@ -15,6 +15,7 @@ import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
 import { shouldDoubleMark } from "../../domain/engine/appeal.js";
+import { decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
 import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -1125,6 +1126,31 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
   // Inject the Moment d'Ancrage everywhere in the block before rendering.
   const rendered = injectMomentAncrage(block, enrollment.momentAncrage);
 
+  // Pré-remplissage (promesse du parcours) : les champs annoncés « pré-remplis »
+  // reçoivent les VRAIES données de l'apprenant au rendu — PAM et réponses des
+  // micro-exercices déjà soumis. Éditable côté PWA ; jamais stocké au contenu.
+  const payload = rendered.payload as { microSessions?: { id: string; exercise?: { fields?: { prefillFromMomentAncrage?: boolean; prefill?: string }[] } }[]; fieldApplication?: { steps?: Parameters<typeof decorateFieldApplication>[0] } };
+  const pam = enrollment.momentAncrage?.trim() || null;
+  if (pam) {
+    for (const ms of payload.microSessions ?? []) {
+      for (const f of ms.exercise?.fields ?? []) if (f.prefillFromMomentAncrage && !f.prefill) f.prefill = pam;
+    }
+  }
+  if (payload.fieldApplication?.steps) {
+    const savedForms: SavedForm[] = [];
+    for (const b of content.blocks) {
+      const p = b.payload as { microSessions?: { id: string; exercise?: { prompt?: string; fields?: { label?: string }[] } }[] };
+      for (const ms of p.microSessions ?? []) {
+        if (!ms.exercise?.fields?.length) continue;
+        const done = enrollment.completions.find((c) => c.blockIndex === b.index && c.itemKey === ms.id);
+        const fields = (done?.data as { fields?: Record<string, string> } | null)?.fields;
+        // jsonb ne préserve pas l'ordre des clés → réordonner selon l'exercice.
+        if (fields && Object.keys(fields).length) savedForms.push({ prompt: ms.exercise.prompt ?? "", fields: orderFields(fields, ms.exercise.fields.map((f) => f.label ?? "")) });
+      }
+    }
+    decorateFieldApplication(payload.fieldApplication.steps, pam, savedForms);
+  }
+
   // Bloc 2 (PRACTICE) surfaces the learner's diagnostic priorities (2 weakest
   // sub-areas) as priority prompts at entry (Pilier 2).
   let diagnosticPriorities: unknown = undefined;
@@ -1185,6 +1211,22 @@ export async function projectState(enrollmentId: string) {
     .map((e) => ({ day: e.day, text: textOfData(byKey.get(`J+${e.day}`)?.data) }))
     .filter((e) => e.text);
 
+  // Pré-remplissage de section (drapeau du contenu, ex. Section 1 : « Pré-rempli
+  // depuis votre Moment d'Ancrage et l'Application terrain du Bloc 2 ») : PAM +
+  // réponses de l'Étape 1 de l'Application terrain, comme point de départ.
+  const sectionPrefill = (): string | undefined => {
+    const parts: string[] = [];
+    if (ctx.enrollment.momentAncrage?.trim()) parts.push(ctx.enrollment.momentAncrage.trim());
+    const practice = ctx.content.blocks.find((b) => b.type === "PRACTICE");
+    const fieldDone = practice && ctx.enrollment.completions.find((c) => c.blockIndex === practice.index && c.itemKey === "field");
+    const fields = (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields;
+    if (practice?.type === "PRACTICE" && fields) {
+      const step1Labels = practice.payload.fieldApplication.steps?.[0]?.fields.map((f) => f.label) ?? [];
+      for (const label of step1Labels) if (fields[label]?.trim()) parts.push(`${label} : ${fields[label]!.trim()}`);
+    }
+    return parts.length ? parts.join("\n") : undefined;
+  };
+
   const sections = cert.payload.sections.map((sec, i) => {
     if (i === 3) return { key: "journal", title: sec.title, helpText: sec.helpText, auto: true as const, done: journalDone, text: composeJournalChapter(journalTexts), locked: false };
     const key = projectSectionKey(i);
@@ -1192,7 +1234,9 @@ export async function projectState(enrollmentId: string) {
     // final submission (K-HCBLM v2.2, Pilier 5) — missing entries are graded
     // down by rubric criterion S1 instead.
     const locked = i === 4 && [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k));
-    return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: textOfData(byKey.get(key)?.data), locked };
+    const saved = textOfData(byKey.get(key)?.data);
+    const prefill = sec.prefillFromMomentAncrage && !saved ? sectionPrefill() : undefined;
+    return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: saved, locked, ...(prefill ? { prefill } : {}) };
   });
 
   return { sections, journal, journalStartedAt: started ? started.toISOString() : null, finalSectionKey: PROJECT_FINAL_SECTION_KEY };

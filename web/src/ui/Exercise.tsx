@@ -29,7 +29,11 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
   const [phase, setPhase] = useState<"answer" | "feedback">(fz ? "feedback" : "answer");
   const [choice, setChoice] = useState<string>(fz?.choice ?? "");
   const [text, setText] = useState(fz?.text ?? "");
-  const [values, setValues] = useState<Record<string, string>>(fz?.fields ?? {});
+  // Pré-remplissage serveur (drapeau prefillFromMomentAncrage du contenu) :
+  // valeur initiale éditable, ignorée dès qu'une soumission existe.
+  const [values, setValues] = useState<Record<string, string>>(() => fz?.fields
+    ?? Object.fromEntries(((exercise.fields ?? []) as { label: string; prefill?: string }[])
+      .filter((f) => f.prefill).map((f) => [f.label, f.prefill!])));
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
