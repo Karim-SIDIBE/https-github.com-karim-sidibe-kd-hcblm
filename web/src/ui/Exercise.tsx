@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Exercise as ExerciseSpec } from "@kd/shared";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
 import { useT } from "../lib/i18n";
@@ -37,6 +37,20 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
+  // Le feedback personnalisé (IA) d'origine est CONSERVÉ — serveur idempotent +
+  // cache local. On le charge à chaque entrée en phase feedback : première
+  // validation comme revisite d'un exercice figé (il oriente le parcours).
+  useEffect(() => {
+    if (phase !== "feedback" || !aiFeedback || ai.loading || ai.text != null) return;
+    let alive = true;
+    setAi({ loading: true, text: null });
+    aiFeedback()
+      .then((text) => { if (alive) setAi({ loading: false, text }); })
+      .catch(() => { if (alive) setAi({ loading: false, text: null }); });
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
+
   const minChars = exercise.minChars ?? 200;
   // Text-quality gate (3e point) : the button stays blocked WITH THE REASON
   // until every answer reads as real French/English (numbers where expected).
@@ -74,12 +88,8 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
     const meta: ExerciseMeta = { timeMs: Date.now() - start.current, feedbackViewed: true, response: response(), correct };
     const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() } : { fields: values };
     try { await onComplete(data, meta); setPhase("feedback"); } finally { setBusy(false); }
-    // The answer is saved — now enrich the static feedback with a personalised
-    // one (AI or heuristic server-side). Best-effort: offline keeps static only.
-    if (aiFeedback && navigator.onLine) {
-      setAi({ loading: true, text: null });
-      try { setAi({ loading: false, text: await aiFeedback() }); } catch { setAi({ loading: false, text: null }); }
-    }
+    // The personalised feedback now loads via the phase effect above (shared
+    // with frozen revisits). Best-effort: offline keeps static feedback only.
   }
   const isCorrect = exercise.type === "multi" && choice === exercise.correctKey;
 

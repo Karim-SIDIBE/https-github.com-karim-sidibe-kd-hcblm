@@ -56,11 +56,20 @@ function submissionText(data: unknown): string {
   return "";
 }
 
-/** Formative feedback on a learner's open submission (advisory). */
+/** Formative feedback on a learner's open submission (advisory).
+ *  IDEMPOTENT par item : le premier feedback généré est celui que l'apprenant
+ *  a lu — il oriente la suite de son parcours, donc il est conservé et renvoyé
+ *  tel quel à chaque revisite (jamais régénéré, comme la réponse elle-même). */
 export async function requestFormativeFeedback(enrollmentId: string, blockIndex: number, itemKey: string) {
   const { enrollment, content } = await load(enrollmentId);
   const completion = enrollment.completions.find((c) => c.blockIndex === blockIndex && c.itemKey === itemKey);
   if (!completion) throw new FeedbackError(404, "no_submission", "Aucune soumission pour cet item");
+
+  const existing = await prisma.aiAssessment.findFirst({
+    where: { enrollmentId, blockIndex, itemKey, kind: "FORMATIVE" },
+    orderBy: { createdAt: "asc" },
+  });
+  if (existing) return existing;
   const text = submissionText(completion.data);
   if (!text) throw new FeedbackError(422, "empty_submission", "La soumission ne contient pas de texte à évaluer");
 

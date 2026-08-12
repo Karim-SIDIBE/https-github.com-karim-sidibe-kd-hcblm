@@ -74,6 +74,14 @@ export function clearDrafts(eid: string) {
   } catch { /* no storage */ }
 }
 
+// --- feedback IA formatif (consigne d'origine) --------------------------------
+// Le serveur conserve le PREMIER feedback généré (idempotent) ; ce cache local
+// permet de le réafficher hors-ligne lors des revisites d'un exercice figé.
+
+const fbKey = (eid: string, block: number, item: string) => `klms_aifb_${eid}_${block}_${item}`;
+export const getCachedAiFeedback = (eid: string, block: number, item: string) => read<string>(fbKey(eid, block, item));
+export const setCachedAiFeedback = (eid: string, block: number, item: string, text: string) => write(fbKey(eid, block, item), text);
+
 // --- badge "seen" tracking (powers the unlock celebration) -------------------
 
 export type BadgeSnapshot = { type: string; message?: string | null; peerNotified?: boolean };
