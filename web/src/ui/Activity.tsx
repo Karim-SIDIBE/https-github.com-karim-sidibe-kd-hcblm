@@ -300,16 +300,22 @@ function SelfAssessment({ t, title, criteria, scale, onFinish }: {
 /** 30-day action plan: the learner writes each habit's concrete anchoring.
  *  Fields come as plain strings (legacy) or { label, placeholder } — the
  *  placeholder is the in-field suggestion shown on the first attempt. */
-type PlanField = string | { label: string; placeholder?: string };
-const planField = (f: PlanField) => (typeof f === "string" ? { label: f, placeholder: "" } : { label: f.label, placeholder: f.placeholder ?? "" });
+type PlanField = string | { label: string; placeholder?: string; prefill?: string };
+const planField = (f: PlanField) => (typeof f === "string" ? { label: f, placeholder: "", prefill: undefined as string | undefined } : { label: f.label, placeholder: f.placeholder ?? "", prefill: f.prefill });
 
 function ActionPlan({ t, title, intro, habits, onFinish }: {
   t: TFn; title: string; intro?: string; habits: { title: string; fields: PlanField[] }[];
   onFinish: (data: unknown) => Promise<void>;
 }) {
-  const [values, setValues] = useState<Record<string, string>>({});
-  const [busy, setBusy] = useState(false);
   const vkey = (hi: number, label: string) => `${hi}:${label}`;
+  // Pré-remplissage serveur (réponses réelles des exercices précédents) :
+  // point de départ éditable des champs vides — la saisie prime toujours.
+  const [values, setValues] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    habits.forEach((h, hi) => h.fields.map(planField).forEach((f) => { if (f.prefill) init[vkey(hi, f.label)] = f.prefill; }));
+    return init;
+  });
+  const [busy, setBusy] = useState(false);
   const quality: string | null = (() => {
     for (const [hi, h] of habits.entries()) for (const f of h.fields.map(planField)) {
       const v = (values[vkey(hi, f.label)] ?? "").trim();

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coreOf, decorateFieldApplication, normalizeLabel, orderFields, prefillFromForms, type SavedForm, type StepLike } from "./prefill.js";
+import { coreOf, decorateActionPlan, decorateFieldApplication, normalizeLabel, orderFields, prefillFromForms, type HabitLike, type SavedForm, type StepLike } from "./prefill.js";
 
 const SAVED: SavedForm[] = [
   {
@@ -78,6 +78,57 @@ test("orderFields : les réponses reprennent l'ordre des champs du contenu (json
   const stored = { "Champ B": "b", "Champ A": "a", "Champ hors contenu": "x" };
   const ordered = orderFields(stored, ["Champ A", "Champ B", "Champ C absent"]);
   assert.deepEqual(Object.keys(ordered), ["Champ A", "Champ B", "Champ hors contenu"]);
+});
+
+const PLAN_HABITS = (): HabitLike[] => [
+  { title: "Habitude 1 — Semaines 1 et 2 : le rituel de lancement de journée", fields: [
+    { label: "L'habitude concrète : chaque matin, je passe … minutes à identifier ma priorité" },
+    { label: "L'obstacle africain que j'anticipe" },
+  ] },
+  { title: "Habitude 2 — Semaines 2 et 3 : le système de temps protégé", fields: [
+    { label: "L'habitude concrète : chaque semaine, je protège … plage(s) de … minutes" },
+    { label: "Ma formulation de communication" },
+    { label: "Mon signal de concentration adapté à mon bureau africain" },
+  ] },
+];
+const MS15_FORM: SavedForm = {
+  prompt: "Mon système de temps protégé adapté aux codes de mon organisation.",
+  fields: {
+    "Mon créneau (de … h à … h) et fréquence/semaine": "De 8 h à 9 h 30, 4 matins par semaine",
+    "Ma formulation pour ma hiérarchie": "Je bloque 90 min chaque matin",
+    "Ma formulation pour mes collègues": "Casque orange = focus, revenez à 10 h",
+    "Mon indicateur visuel + mon geste de réciprocité": "Casque orange + urgences couvertes 15 h-16 h",
+  },
+};
+
+test("plan d'action : l'habitude « temps protégé » repart des réponses du 1.5", () => {
+  const habits = PLAN_HABITS();
+  decorateActionPlan(habits, [MS15_FORM]);
+  const h2 = habits[1]!.fields as { label: string; prefill?: string }[];
+  assert.equal(h2[0]!.prefill, "De 8 h à 9 h 30, 4 matins par semaine");
+  assert.ok(h2[1]!.prefill?.includes("Ma formulation pour ma hiérarchie : Je bloque 90 min chaque matin"));
+  assert.ok(h2[1]!.prefill?.includes("Ma formulation pour mes collègues : Casque orange = focus, revenez à 10 h"));
+  assert.equal(h2[2]!.prefill, "Casque orange + urgences couvertes 15 h-16 h");
+  // L'habitude 1 (rituel du matin) n'a pas de source fiable → rien.
+  const h1 = habits[0]!.fields as { label: string; prefill?: string }[];
+  assert.ok(h1.every((f) => !f.prefill));
+});
+
+test("plan d'action : la version testée sur le terrain (Application terrain) prime sur le 1.5", () => {
+  const habits = PLAN_HABITS();
+  decorateActionPlan(habits, [MS15_FORM], {
+    "Mon système de temps protégé — mise en œuvre concrète": "Créneau tenu 3 matins sur 4, négocié avec ma directrice",
+    "Mon système de temps protégé — adaptation culturelle réalisée": "Signal repris en réunion d'équipe",
+  });
+  const h2 = habits[1]!.fields as { label: string; prefill?: string }[];
+  assert.equal(h2[0]!.prefill, "Créneau tenu 3 matins sur 4, négocié avec ma directrice");
+  assert.equal(h2[2]!.prefill, "Casque orange + urgences couvertes 15 h-16 h");
+});
+
+test("plan d'action : sans source, aucun préremplissage ; champs historiques (chaînes) ignorés sans plantage", () => {
+  const habits: HabitLike[] = [{ title: "Habitude 2 — le système de temps protégé", fields: ["Mon champ historique", { label: "Ma formulation de communication" }] }];
+  decorateActionPlan(habits, []);
+  assert.equal((habits[0]!.fields[1] as { prefill?: string }).prefill, undefined);
 });
 
 test("sans données sources : aucun préremplissage, aucun plantage", () => {

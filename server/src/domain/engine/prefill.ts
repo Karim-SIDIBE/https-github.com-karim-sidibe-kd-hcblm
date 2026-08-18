@@ -98,6 +98,54 @@ export function prefillFromForms(label: string, savedForms: SavedForm[]): string
 
 export type FieldSpecLike = { label: string; prefill?: string };
 export type StepLike = { title: string; intro?: string; fields: FieldSpecLike[] };
+/** Une habitude du Plan d'action 30 jours. Les champs « chaîne simple »
+ *  (historique) ne peuvent pas porter de prefill — ils sont ignorés. */
+export type HabitLike = { title: string; fields: (FieldSpecLike | string)[] };
+
+/**
+ * Décore (en place) le Plan d'action 30 jours (micro-session 3.2) — l'intro
+ * demande de « repartir des exercices précédents ». Conservateur : seule
+ * l'habitude « système de temps protégé » a une source fiable :
+ *   - habitude concrète ← la version TESTÉE SUR LE TERRAIN (Application
+ *     terrain du Bloc 2, « … — mise en œuvre concrète ») si soumise, sinon le
+ *     créneau formulé au micro-exercice 1.5 ;
+ *   - formulation de communication ← formulations hiérarchie/collègues (1.5) ;
+ *   - signal de concentration ← indicateur visuel + réciprocité (1.5).
+ * Les champs de réflexion (obstacles, indicateurs, priorités de la semaine,
+ * pair) restent à l'apprenant.
+ */
+export function decorateActionPlan(
+  habits: HabitLike[],
+  savedForms: SavedForm[],
+  fieldAppAnswers?: Record<string, string> | null,
+): void {
+  const habit = habits.find((h) => /temps prot[ée]g[ée]/i.test(h.title));
+  if (!habit) return;
+  const form = savedForms.find((f) => /temps prot[ée]g[ée]/i.test(f.prompt));
+  const fromForm = (re: RegExp): string | undefined => {
+    for (const [k, v] of Object.entries(form?.fields ?? {})) if (re.test(k) && v.trim()) return v.trim();
+    return undefined;
+  };
+  const tested = Object.entries(fieldAppAnswers ?? {})
+    .find(([k, v]) => /temps prot[ée]g[ée].*mise en (œ|oe)uvre/i.test(k) && v.trim())?.[1]?.trim();
+
+  for (const f of habit.fields) {
+    if (typeof f === "string" || f.prefill) continue;
+    if (/habitude concrète/i.test(f.label)) {
+      const v = tested ?? fromForm(/créneau/i);
+      if (v) f.prefill = v;
+    } else if (/formulation/i.test(f.label)) {
+      // Champ de saisie monoligne côté PWA → séparateur « · », pas de \n.
+      const lines = Object.entries(form?.fields ?? {})
+        .filter(([k, v]) => /formulation/i.test(k) && v.trim())
+        .map(([k, v]) => `${k} : ${v.trim()}`);
+      if (lines.length) f.prefill = lines.join(" · ");
+    } else if (/signal/i.test(f.label)) {
+      const v = fromForm(/indicateur visuel|signal/i);
+      if (v) f.prefill = v;
+    }
+  }
+}
 
 /**
  * Décore (en place) les étapes d'une Application terrain :

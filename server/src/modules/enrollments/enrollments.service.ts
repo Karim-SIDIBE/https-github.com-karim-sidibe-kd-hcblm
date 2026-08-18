@@ -15,7 +15,7 @@ import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
 import { shouldDoubleMark } from "../../domain/engine/appeal.js";
-import { decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
+import { decorateActionPlan, decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
 import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -1129,14 +1129,18 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
   // Pré-remplissage (promesse du parcours) : les champs annoncés « pré-remplis »
   // reçoivent les VRAIES données de l'apprenant au rendu — PAM et réponses des
   // micro-exercices déjà soumis. Éditable côté PWA ; jamais stocké au contenu.
-  const payload = rendered.payload as { microSessions?: { id: string; exercise?: { fields?: { prefillFromMomentAncrage?: boolean; prefill?: string }[] } }[]; fieldApplication?: { steps?: Parameters<typeof decorateFieldApplication>[0] } };
+  const payload = rendered.payload as {
+    microSessions?: { id: string; exercise?: { fields?: { prefillFromMomentAncrage?: boolean; prefill?: string }[] } }[];
+    fieldApplication?: { steps?: Parameters<typeof decorateFieldApplication>[0] };
+    actionPlan30d?: { habits?: Parameters<typeof decorateActionPlan>[0] };
+  };
   const pam = enrollment.momentAncrage?.trim() || null;
   if (pam) {
     for (const ms of payload.microSessions ?? []) {
       for (const f of ms.exercise?.fields ?? []) if (f.prefillFromMomentAncrage && !f.prefill) f.prefill = pam;
     }
   }
-  if (payload.fieldApplication?.steps) {
+  if (payload.fieldApplication?.steps || payload.actionPlan30d?.habits) {
     const savedForms: SavedForm[] = [];
     for (const b of content.blocks) {
       const p = b.payload as { microSessions?: { id: string; exercise?: { prompt?: string; fields?: { label?: string }[] } }[] };
@@ -1148,7 +1152,13 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
         if (fields && Object.keys(fields).length) savedForms.push({ prompt: ms.exercise.prompt ?? "", fields: orderFields(fields, ms.exercise.fields.map((f) => f.label ?? "")) });
       }
     }
-    decorateFieldApplication(payload.fieldApplication.steps, pam, savedForms);
+    if (payload.fieldApplication?.steps) decorateFieldApplication(payload.fieldApplication.steps, pam, savedForms);
+    if (payload.actionPlan30d?.habits) {
+      // Version testée sur le terrain (Application terrain du Bloc 2, si soumise).
+      const practice = content.blocks.find((b) => b.type === "PRACTICE");
+      const fieldDone = practice && enrollment.completions.find((c) => c.blockIndex === practice.index && c.itemKey === "field");
+      decorateActionPlan(payload.actionPlan30d.habits, savedForms, (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null);
+    }
   }
 
   // Bloc 2 (PRACTICE) surfaces the learner's diagnostic priorities (2 weakest

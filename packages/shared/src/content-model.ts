@@ -441,8 +441,10 @@ const AnchoringPayload = z.object({
           title: nonEmpty("titre d'habitude"),
           /// Chaîne simple (historique) OU { label, placeholder } pour porter la
           /// suggestion affichée dans le champ vide — rétro-compatible.
+          /// `prefill` : valeur de pré-remplissage calculée AU RENDU serveur
+          /// (réponses réelles de l'apprenant) — jamais stockée, toujours éditable.
           fields: z
-            .array(z.union([nonEmpty("champ"), z.object({ label: nonEmpty("champ"), placeholder: z.string().default("") })]))
+            .array(z.union([nonEmpty("champ"), z.object({ label: nonEmpty("champ"), placeholder: z.string().default(""), prefill: z.string().optional() })]))
             .min(1),
         }),
       )

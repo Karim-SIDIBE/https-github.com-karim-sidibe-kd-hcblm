@@ -13,7 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
-import { decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
+import { decorateActionPlan, decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
 import { seededShuffle } from "../../domain/engine/shuffle.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
@@ -93,10 +93,10 @@ export async function buildBundle(enrollmentId: string) {
   const { enrollment, content } = await load(enrollmentId);
   const version = enrollment.courseVersion;
 
-  // Réponses des micro-exercices guidés déjà soumises — source du
-  // pré-remplissage de l'Application terrain (promesse du parcours).
+  // Réponses des micro-exercices guidés + Application terrain déjà soumises —
+  // sources du pré-remplissage (Application terrain, Plan d'action 30 jours).
   const completions = await prisma.itemCompletion.findMany({
-    where: { enrollmentId, itemType: "MICRO_SESSION" },
+    where: { enrollmentId, itemType: { in: ["MICRO_SESSION", "FIELD_APPLICATION"] } },
     select: { blockIndex: true, itemKey: true, data: true, completedAt: true },
   });
   const savedForms: SavedForm[] = [];
@@ -115,6 +115,11 @@ export async function buildBundle(enrollmentId: string) {
       }
     }
   }
+  // Application terrain soumise : version testée du système de temps protégé —
+  // source prioritaire du Plan d'action 30 jours (entre aussi dans l'ETag).
+  const fieldDone = completions.find((c) => c.itemKey === "field");
+  const fieldAppAnswers = (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null;
+  if (fieldDone) fingerprint += `field@${fieldDone.completedAt?.toISOString() ?? ""};`;
 
   const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage, fingerprint);
   const rendered = injectMomentAncrage(content, enrollment.momentAncrage) as { blocks?: { type: string; payload?: Record<string, { pool?: unknown; questions?: unknown[] }> }[] };
@@ -126,6 +131,7 @@ export async function buildBundle(enrollmentId: string) {
     const p = b.payload as {
       microSessions?: { exercise?: { fields?: { prefillFromMomentAncrage?: boolean; prefill?: string }[] } }[];
       fieldApplication?: { steps?: Parameters<typeof decorateFieldApplication>[0] };
+      actionPlan30d?: { habits?: Parameters<typeof decorateActionPlan>[0] };
     } | undefined;
     if (pam) {
       for (const ms of p?.microSessions ?? []) {
@@ -133,6 +139,7 @@ export async function buildBundle(enrollmentId: string) {
       }
     }
     if (p?.fieldApplication?.steps) decorateFieldApplication(p.fieldApplication.steps, pam, savedForms);
+    if (p?.actionPlan30d?.habits) decorateActionPlan(p.actionPlan30d.habits, savedForms, fieldAppAnswers);
   }
 
   // Per-learner quizzes: materialise the question set (fixed + stable pool draw)
