@@ -11,14 +11,14 @@
  * Idempotent. À utiliser dès qu'il existe ≥ 1 inscription sur le cours.
  * Usage : docker compose -f deploy/docker-compose.yml exec api npx tsx prisma/patch-v2_1.ts
  */
-import { PrismaClient, CourseStatus } from "@prisma/client";
+import { CourseStatus } from "../src/generated/prisma/client.js";
+import { prisma } from "../src/db/prisma.js";
 import { validateShape, validatePolicy } from "../src/domain/validation.js";
 import { indexCourseVersion } from "../src/modules/search/search.service.js";
 import { courseUnitTotals } from "../src/domain/content-model.js";
 import { applyMediaBindings, collectMediaBindings, mergeBindings, unboundSlots } from "../src/domain/media-bindings.js";
 import { n1Full } from "../src/domain/fixtures/n1-full.js";
 
-const prisma = new PrismaClient();
 const SLUG = "gestion-du-temps-n1";
 
 async function main() {

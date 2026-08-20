@@ -1,7 +1,7 @@
 /**
  * notifications.service.ts — enqueue + dispatch outbound notifications.
  */
-import type { NotificationChannel, RecipientKind } from "@prisma/client";
+import type { NotificationChannel, RecipientKind } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { deliver } from "../../lib/notify/dispatcher.js";
 import { tokensForRecipient } from "../devices/devices.service.js";

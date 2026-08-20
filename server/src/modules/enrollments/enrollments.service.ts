@@ -5,7 +5,7 @@
  * progress recording (with quiz scoring) → block gating recomputation → badge
  * issuance (PAM-anchored, peer-notified) → PAM-injected block rendering.
  */
-import { Prisma, type ItemType } from "@prisma/client";
+import { Prisma, type ItemType } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { CourseContent, profileDivergence, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";

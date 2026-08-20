@@ -1,7 +1,7 @@
 /**
  * organizations.service.ts — tenants + memberships.
  */
-import { Prisma, type OrgRole } from "@prisma/client";
+import { Prisma, type OrgRole } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import type { Principal } from "../../lib/auth.js";
 import { hashPassword } from "../../lib/auth/password.js";

@@ -5,7 +5,7 @@
  * feedback module, and persists an AiAssessment (auditable, advisory). Never
  * writes a RUBRIC_EVALUATION — the human evaluator endpoint remains the gate.
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type Block, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { checkCalibration, verifyEvidence } from "../../domain/engine/ai-compliance.js";

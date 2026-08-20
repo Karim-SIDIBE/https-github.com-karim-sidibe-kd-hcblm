@@ -5,7 +5,7 @@
  * post in its forum. Moderators (forum:moderate) manage cohorts/memberships and
  * can lock threads + soft-delete any post; authors can edit/delete their own.
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { isStaff, hasPermission } from "../../domain/auth/permissions.js";
 import type { Principal } from "../../lib/auth.js";

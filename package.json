@@ -2,7 +2,7 @@
   "name": "kd-hcblm",
   "version": "0.1.0",
   "private": true,
-  "description": "KOMPETENCES DECLICK K-HCBLM v2.2 \u2014 monorepo (shared contract + backend + learner PWA).",
+  "description": "KOMPETENCES DECLICK K-HCBLM v2.2 — monorepo (shared contract + backend + learner PWA).",
   "workspaces": [
     "packages/*",
     "server",
@@ -14,5 +14,8 @@
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
     "test": "npm run test --workspaces --if-present"
+  },
+  "overrides": {
+    "deepmerge-ts": "^8.0.0"
   }
 }

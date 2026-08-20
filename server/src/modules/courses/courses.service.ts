@@ -5,7 +5,7 @@
  * course or saving a draft validates the SHAPE (a malformed document is always
  * rejected) but tolerates POLICY violations — those only block PUBLISH.
  */
-import { CourseStatus, type CourseLevel, type Prisma } from "@prisma/client";
+import { CourseStatus, type CourseLevel, type Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { validateShape, validatePolicy } from "../../domain/validation.js";
 import type { CourseContent } from "../../domain/content-model.js";

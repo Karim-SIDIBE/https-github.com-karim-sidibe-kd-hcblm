@@ -12,12 +12,16 @@
 // ---------------------------------------------------------------------------
 
 generator client {
-  provider = "prisma-client-js"
+  // Prisma 7 : générateur TypeScript pur (plus de moteur Rust) — le client est
+  // émis dans src/generated/prisma et consommé via le singleton src/db/prisma.ts.
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
+  // Prisma 7 : l'URL de connexion vit dans prisma.config.ts (Migrate) et dans
+  // l'adaptateur pg du client (src/db/prisma.ts) — plus dans le schéma.
   provider = "postgresql"
-  url      = env("DATABASE_URL")
 }
 
 // ===========================================================================

@@ -4,7 +4,7 @@
  * Aggregations are computed on the fly with Prisma + the engine's progress
  * computation. (At scale these become materialized views / a warehouse.)
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { blockRequirements, computeProgress, type CompletionRecord } from "../../domain/engine/progress.js";

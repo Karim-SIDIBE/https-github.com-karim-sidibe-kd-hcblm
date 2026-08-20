@@ -12,7 +12,7 @@
  * manuels ; la note officielle ne change jamais — les écarts alimentent la
  * médiane trimestrielle et les incidents (> 15 pts, tranché par un tiers).
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent } from "../../domain/content-model.js";
 import {

@@ -9,7 +9,7 @@
  * verify authenticity. Dispatch is best-effort and never blocks the learner path.
  */
 import { createHmac } from "node:crypto";
-import type { WebhookEvent } from "@prisma/client";
+import type { WebhookEvent } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { assertPublicUrl } from "../net/ssrf-guard.js";
 

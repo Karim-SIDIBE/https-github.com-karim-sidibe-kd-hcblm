@@ -10,7 +10,7 @@
  * the process list. It is briefly visible on your own screen as you type.
  */
 import { createInterface } from "node:readline";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../src/db/prisma.js";
 import { hashPassword } from "../src/lib/auth/password.js";
 
 async function main() {
@@ -21,7 +21,7 @@ async function main() {
     return;
   }
 
-  const prisma = new PrismaClient();
+  
   const rl = createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q: string): Promise<string> =>
     new Promise((resolve) => rl.question(q, (a) => resolve(a.trim())));

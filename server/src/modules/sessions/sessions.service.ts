@@ -6,7 +6,7 @@
  * course, attendance emits an xAPI `attended` statement for enrolled learners
  * (interoperable blended-learning analytics).
  */
-import { MeetingProvider, Prisma, type SessionStatus } from "@prisma/client";
+import { MeetingProvider, Prisma, type SessionStatus } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { provisionMeeting, type Provider } from "../../lib/meetings/provider.js";
 import { activityId, buildStatement } from "../../domain/engine/xapi.js";

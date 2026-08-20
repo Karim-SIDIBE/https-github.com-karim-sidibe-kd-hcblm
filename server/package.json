@@ -16,12 +16,13 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:seed": "tsx --env-file-if-exists=.env prisma/seed.ts",
     "keygen": "tsx scripts/keygen.ts",
-    "test": "node --test --import tsx --env-file=.env \"src/**/*.test.ts\""
-  },
-  "prisma": {
-    "seed": "tsx prisma/seed.ts"
+    "test": "node --test --import tsx --env-file=.env \"src/**/*.test.ts\"",
+    "predev": "prisma generate",
+    "pretest": "prisma generate",
+    "pretypecheck": "prisma generate",
+    "prebuild": "prisma generate"
   },
   "dependencies": {
     "@fastify/cors": "^11.3.0",
@@ -32,7 +33,8 @@
     "@kd/shared": "*",
     "@node-rs/argon2": "^2.1.0",
     "@node-saml/node-saml": "^5.1.0",
-    "@prisma/client": "^5.22.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "adm-zip": "^0.6.0",
     "fast-xml-parser": "^5.10.1",
     "fastify": "^5.12.0",
@@ -50,7 +52,7 @@
     "@types/nodemailer": "^8.0.1",
     "@types/pdfkit": "^0.17.6",
     "@types/qrcode": "^1.5.6",
-    "prisma": "^5.22.0",
+    "prisma": "^7.9.1",
     "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }

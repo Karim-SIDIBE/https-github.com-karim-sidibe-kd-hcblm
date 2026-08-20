@@ -4,7 +4,7 @@
  * On publish, a course version is chunked into meaningful units, embedded and
  * stored. Queries are embedded and ranked by cosine similarity in-process.
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { embed, cosine } from "../../lib/ai/embeddings.js";
