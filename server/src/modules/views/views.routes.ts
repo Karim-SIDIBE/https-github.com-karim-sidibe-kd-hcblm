@@ -27,7 +27,7 @@ export async function viewsRoutes(app: FastifyInstance) {
   // Create or update (upsert by name — saving under an existing name replaces it).
   app.put("/views", { preHandler: authenticate }, async (req) => {
     const { screen, name, config } = z.object({
-      screen: SCREEN, name: NAME, config: z.record(z.unknown()),
+      screen: SCREEN, name: NAME, config: z.record(z.string(), z.unknown()),
     }).parse(req.body);
     const userId = req.principal!.id;
     const data = await prisma.savedView.upsert({

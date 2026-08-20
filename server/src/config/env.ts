@@ -32,7 +32,7 @@ const EnvSchema = z.object({
   /// Skip TLS certificate-name verification for SMTP (still encrypted). Needed
   /// for shared hosts whose cert is for the panel domain (e.g. LWS *.lwspanel.com)
   /// while you connect via a vanity hostname (mail.yourdomain). "true" to enable.
-  SMTP_TLS_INSECURE: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+  SMTP_TLS_INSECURE: z.enum(["true", "false"]).transform((s) => s === "true").prefault("false"),
   /// Public base URL of the learner app (for links in invitations/verification).
   APP_BASE_URL: z.string().url().optional(),
   /// Brand name used in transactional messages. Optional.
@@ -96,7 +96,7 @@ const EnvSchema = z.object({
   // NB: use the enum→boolean transform, not z.coerce.boolean() — the latter maps
   // the string "false" to `true` (any non-empty string is truthy), so an operator
   // setting PASSWORD_BREACH_CHECK=false could never actually disable it.
-  PASSWORD_BREACH_CHECK: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  PASSWORD_BREACH_CHECK: z.enum(["true", "false"]).transform((s) => s === "true").prefault("true"),
   // --- RGPD data lifecycle (retention / erasure grace period), in days ---
   RGPD_GRACE_DAYS: z.coerce.number().int().nonnegative().default(30),     // restore window before a scheduled erasure is purged
   AUDIT_RETENTION_DAYS: z.coerce.number().int().positive().default(365),  // audit-log (incl. IP) retention
@@ -113,19 +113,19 @@ const EnvSchema = z.object({
   // If a scanner (CLAMAV_HOST) is configured but clamd is unreachable: true = block
   // the upload (secure default), false = allow it (heuristic still applied). Only
   // matters when CLAMAV_HOST is set; with no scanner every upload is heuristic-only.
-  AV_FAIL_CLOSED: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  AV_FAIL_CLOSED: z.enum(["true", "false"]).transform((s) => s === "true").prefault("true"),
   /// Trust the reverse proxy (Caddy) so req.ip is the real client IP (correct
   /// rate-limit isolation + audit) instead of the proxy's socket address.
-  TRUST_PROXY: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  TRUST_PROXY: z.enum(["true", "false"]).transform((s) => s === "true").prefault("true"),
   // --- observability ---
   /// Expose Prometheus metrics at GET /metrics (off by default). Scrape internally.
-  METRICS_ENABLED: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+  METRICS_ENABLED: z.enum(["true", "false"]).transform((s) => s === "true").prefault("false"),
   /// Optional bearer token required to scrape /metrics (recommended if exposed).
   METRICS_TOKEN: z.string().optional(),
   // --- internal job scheduler ---
   /// Run the delivery queues (60 s) + scheduled jobs (hourly) inside the API
   /// process — no external cron needed. "false" to disable (external cron mode).
-  JOBS_SCHEDULER: z.enum(["true", "false"]).transform((s) => s === "true").default("true"),
+  JOBS_SCHEDULER: z.enum(["true", "false"]).transform((s) => s === "true").prefault("true"),
   // --- horizontal scaling ---
   /// Number of Node cluster workers (uses the vCPUs). 1 = single process (default).
   API_WORKERS: z.coerce.number().int().positive().default(1),
@@ -142,14 +142,14 @@ const EnvSchema = z.object({
   OIDC_ISSUER: z.string().optional(),
   OIDC_JWKS_URI: z.string().url().optional(),
   OIDC_AUDIENCE: z.string().optional(),
-  OIDC_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+  OIDC_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").prefault("false"),
 
   // --- SAML 2.0 SSO (enterprise IdP via SAML). Optional. ---
   SAML_ENTRY_POINT: z.string().url().optional(), // IdP SSO URL
   SAML_ISSUER: z.string().default("declick-api"), // our SP entityID
   SAML_CALLBACK_URL: z.string().url().optional(), // our ACS URL
   SAML_IDP_CERT: z.string().optional(), // IdP signing certificate (PEM/base64)
-  SAML_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").default("false"),
+  SAML_JIT_PROVISION: z.enum(["true", "false"]).transform((s) => s === "true").prefault("false"),
 });
 
 // Treat empty-string env vars as "unset" so blank optional fields (e.g. the
