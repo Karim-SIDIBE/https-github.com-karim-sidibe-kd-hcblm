@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState, type JSX } from "react";
 import {
   IDash, ILearners, IEnrol, IReeng, ICourse, IEval, ICert, IOrg, ISession, IAudit, ISettings, ISearch,
 } from "./icons";

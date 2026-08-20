@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { isAnswerCorrect } from "@kd/shared/scoring";
 import { profileDivergence, type ProfileDivergence } from "@kd/shared/profile";
 import { engine, store } from "../lib/app";
