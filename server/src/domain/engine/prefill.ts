@@ -98,6 +98,32 @@ export function prefillFromForms(label: string, savedForms: SavedForm[]): string
 
 export type FieldSpecLike = { label: string; prefill?: string };
 export type StepLike = { title: string; intro?: string; fields: FieldSpecLike[] };
+
+// --- réponses « 💾 enregistrée pour le projet » (savedForProject) -------------
+
+/** Une réponse ouverte d'étude de cas marquée savedForProject, avec le type du
+ *  bloc d'origine (COMPREHENSION → situation, ANCHORING → solution/rituel). */
+export type ProjectSavedAnswer = { prompt: string; answer: string; blockType: string };
+
+type CaseLike = { structuredSteps?: { questions?: { id: string; kind?: string; prompt?: string; savedForProject?: boolean }[] }[] };
+
+/** Extrait d'UN bloc les réponses ouvertes marquées savedForProject déjà
+ *  soumises (data.open du CASE_STUDY). Pur : le bloc + la complétion. */
+export function savedProjectAnswers(
+  blockType: string,
+  caseSpec: CaseLike | undefined | null,
+  openAnswers: Record<string, string> | undefined | null,
+): ProjectSavedAnswer[] {
+  if (!caseSpec?.structuredSteps || !openAnswers) return [];
+  const out: ProjectSavedAnswer[] = [];
+  for (const st of caseSpec.structuredSteps) {
+    for (const q of st.questions ?? []) {
+      const answer = q.savedForProject && q.kind === "open" ? openAnswers[q.id]?.trim() : undefined;
+      if (answer) out.push({ prompt: q.prompt ?? "", answer, blockType });
+    }
+  }
+  return out;
+}
 /** Une habitude du Plan d'action 30 jours. Les champs « chaîne simple »
  *  (historique) ne peuvent pas porter de prefill — ils sont ignorés. */
 export type HabitLike = { title: string; fields: (FieldSpecLike | string)[] };
@@ -111,14 +137,23 @@ export type HabitLike = { title: string; fields: (FieldSpecLike | string)[] };
  *     créneau formulé au micro-exercice 1.5 ;
  *   - formulation de communication ← formulations hiérarchie/collègues (1.5) ;
  *   - signal de concentration ← indicateur visuel + réciprocité (1.5).
- * Les champs de réflexion (obstacles, indicateurs, priorités de la semaine,
- * pair) restent à l'apprenant.
+ * L'intro cite aussi le « rituel du Cas Sylvie » : la réponse savedForProject
+ * évoquant un rituel pré-remplit le 1er champ de la PREMIÈRE habitude
+ * « rituel » (le rituel de lancement de journée). Les champs de réflexion
+ * (obstacles, indicateurs, priorités de la semaine, pair) restent à l'apprenant.
  */
 export function decorateActionPlan(
   habits: HabitLike[],
   savedForms: SavedForm[],
   fieldAppAnswers?: Record<string, string> | null,
+  savedAnswers?: ProjectSavedAnswer[],
 ): void {
+  const ritual = (savedAnswers ?? []).find((a) => /rituel/i.test(a.prompt))?.answer;
+  if (ritual) {
+    const ritualHabit = habits.find((h) => /rituel/i.test(h.title));
+    const first = ritualHabit?.fields[0];
+    if (first && typeof first !== "string" && !first.prefill) first.prefill = ritual;
+  }
   const habit = habits.find((h) => /temps prot[ée]g[ée]/i.test(h.title));
   if (!habit) return;
   const form = savedForms.find((f) => /temps prot[ée]g[ée]/i.test(f.prompt));

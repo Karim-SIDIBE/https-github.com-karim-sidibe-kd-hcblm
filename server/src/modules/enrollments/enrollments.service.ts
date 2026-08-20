@@ -15,7 +15,7 @@ import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
 import { shouldDoubleMark } from "../../domain/engine/appeal.js";
-import { decorateActionPlan, decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
+import { decorateActionPlan, decorateFieldApplication, orderFields, savedProjectAnswers, type ProjectSavedAnswer, type SavedForm } from "../../domain/engine/prefill.js";
 import { accreditedEvaluatorIds, activeAccreditation } from "../accreditations/accreditations.service.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { badgeMessage, badgeTypeForBlock, peerNotificationText } from "../../domain/engine/badges.js";
@@ -1157,7 +1157,13 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
       // Version testée sur le terrain (Application terrain du Bloc 2, si soumise).
       const practice = content.blocks.find((b) => b.type === "PRACTICE");
       const fieldDone = practice && enrollment.completions.find((c) => c.blockIndex === practice.index && c.itemKey === "field");
-      decorateActionPlan(payload.actionPlan30d.habits, savedForms, (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null);
+      // Rituel 💾 du Cas Sylvie (l'intro du plan le cite nommément).
+      const savedAnswers: ProjectSavedAnswer[] = content.blocks.flatMap((b) => {
+        const bp = b.payload as { caseStudy?: unknown; transversalCase?: unknown };
+        const done = enrollment.completions.find((c) => c.blockIndex === b.index && c.itemKey === "case");
+        return savedProjectAnswers(b.type, (bp.caseStudy ?? bp.transversalCase) as Parameters<typeof savedProjectAnswers>[1], (done?.data as { open?: Record<string, string> } | null)?.open);
+      });
+      decorateActionPlan(payload.actionPlan30d.habits, savedForms, (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null, savedAnswers);
     }
   }
 
@@ -1221,19 +1227,43 @@ export async function projectState(enrollmentId: string) {
     .map((e) => ({ day: e.day, text: textOfData(byKey.get(`J+${e.day}`)?.data) }))
     .filter((e) => e.text);
 
+  // Réponses d'études de cas marquées « 💾 enregistrée pour le projet »
+  // (savedForProject) : promesse affichée à l'apprenant — elles réapparaissent
+  // ici. COMPREHENSION (Cas Nadia) → Section 1 (situation) ; ANCHORING
+  // (Cas Sylvie, rituel) → Section 2 (solution).
+  const savedAnswers: ProjectSavedAnswer[] = ctx.content.blocks.flatMap((b) => {
+    const p = b.payload as { caseStudy?: unknown; transversalCase?: unknown };
+    const caseSpec = (p.caseStudy ?? p.transversalCase) as Parameters<typeof savedProjectAnswers>[1];
+    const done = ctx.enrollment.completions.find((c) => c.blockIndex === b.index && c.itemKey === "case");
+    return savedProjectAnswers(b.type, caseSpec, (done?.data as { open?: Record<string, string> } | null)?.open);
+  });
+  const practice = ctx.content.blocks.find((b) => b.type === "PRACTICE");
+  const fieldDone = practice && ctx.enrollment.completions.find((c) => c.blockIndex === practice.index && c.itemKey === "field");
+  const fieldAppFields = (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields;
+
   // Pré-remplissage de section (drapeau du contenu, ex. Section 1 : « Pré-rempli
   // depuis votre Moment d'Ancrage et l'Application terrain du Bloc 2 ») : PAM +
-  // réponses de l'Étape 1 de l'Application terrain, comme point de départ.
+  // réponses de l'Étape 1 de l'Application terrain + réponses 💾 des cas de
+  // compréhension, comme point de départ.
   const sectionPrefill = (): string | undefined => {
     const parts: string[] = [];
     if (ctx.enrollment.momentAncrage?.trim()) parts.push(ctx.enrollment.momentAncrage.trim());
-    const practice = ctx.content.blocks.find((b) => b.type === "PRACTICE");
-    const fieldDone = practice && ctx.enrollment.completions.find((c) => c.blockIndex === practice.index && c.itemKey === "field");
-    const fields = (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields;
-    if (practice?.type === "PRACTICE" && fields) {
+    if (practice?.type === "PRACTICE" && fieldAppFields) {
       const step1Labels = practice.payload.fieldApplication.steps?.[0]?.fields.map((f) => f.label) ?? [];
-      for (const label of step1Labels) if (fields[label]?.trim()) parts.push(`${label} : ${fields[label]!.trim()}`);
+      for (const label of step1Labels) if (fieldAppFields[label]?.trim()) parts.push(`${label} : ${fieldAppFields[label]!.trim()}`);
     }
+    for (const a of savedAnswers) if (a.blockType === "COMPREHENSION") parts.push(a.answer);
+    return parts.length ? parts.join("\n") : undefined;
+  };
+
+  // Section 2 (« La solution mise en œuvre ») : rituel 💾 du cas d'ancrage +
+  // réponses « mise en œuvre » de l'Étape 2 de l'Application terrain.
+  const solutionPrefill = (): string | undefined => {
+    const parts: string[] = [];
+    for (const [label, v] of Object.entries(fieldAppFields ?? {})) {
+      if (/mise en (œ|oe)uvre/i.test(label) && v.trim()) parts.push(`${label} : ${v.trim()}`);
+    }
+    for (const a of savedAnswers) if (a.blockType === "ANCHORING") parts.push(a.answer);
     return parts.length ? parts.join("\n") : undefined;
   };
 
@@ -1245,7 +1275,7 @@ export async function projectState(enrollmentId: string) {
     // down by rubric criterion S1 instead.
     const locked = i === 4 && [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k));
     const saved = textOfData(byKey.get(key)?.data);
-    const prefill = sec.prefillFromMomentAncrage && !saved ? sectionPrefill() : undefined;
+    const prefill = saved ? undefined : sec.prefillFromMomentAncrage ? sectionPrefill() : i === 1 ? solutionPrefill() : undefined;
     return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: saved, locked, ...(prefill ? { prefill } : {}) };
   });
 
