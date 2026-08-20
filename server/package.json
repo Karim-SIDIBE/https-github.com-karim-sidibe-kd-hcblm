@@ -32,7 +32,7 @@
     "@kd/shared": "*",
     "@node-rs/argon2": "^2.1.0",
     "@node-saml/node-saml": "^5.1.0",
-    "@prisma/client": "^5.22.0",
+    "@prisma/client": "^7.9.1",
     "adm-zip": "^0.6.0",
     "fast-xml-parser": "^5.10.1",
     "fastify": "^5.12.0",
