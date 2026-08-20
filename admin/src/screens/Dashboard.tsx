@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type JSX } from "react";
 import { IUsersK, IPulse, ITrophy, ITarget, ICert } from "../icons";
 import { api, courseTitle, type CourseReport, type AtRiskLearner, type CourseCompetencies, type KhcblmTargets } from "../lib/api";
 import { avatarColor, initials, useAsync } from "../lib/ui";

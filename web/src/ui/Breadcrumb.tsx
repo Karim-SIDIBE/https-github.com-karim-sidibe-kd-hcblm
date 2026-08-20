@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, type JSX } from "react";
 import { blockItems, blockDurationSec } from "../lib/content";
 import { formatDuration } from "../lib/format";
 import { navigate, routes } from "../lib/router";

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type JSX } from "react";
 import { engine, store } from "../lib/app";
 import { clearDraft, getCachedAiFeedback, getCachedProgress, loadDraft, saveDraft, setCachedAiFeedback, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
