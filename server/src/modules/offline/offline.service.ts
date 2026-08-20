@@ -13,7 +13,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
-import { decorateActionPlan, decorateFieldApplication, orderFields, type SavedForm } from "../../domain/engine/prefill.js";
+import { decorateActionPlan, decorateFieldApplication, orderFields, savedProjectAnswers, type ProjectSavedAnswer, type SavedForm } from "../../domain/engine/prefill.js";
 import { seededShuffle } from "../../domain/engine/shuffle.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
@@ -93,10 +93,11 @@ export async function buildBundle(enrollmentId: string) {
   const { enrollment, content } = await load(enrollmentId);
   const version = enrollment.courseVersion;
 
-  // Réponses des micro-exercices guidés + Application terrain déjà soumises —
-  // sources du pré-remplissage (Application terrain, Plan d'action 30 jours).
+  // Réponses des micro-exercices guidés, de l'Application terrain et des
+  // études de cas (💾 savedForProject) déjà soumises — sources du
+  // pré-remplissage (Application terrain, Plan d'action 30 jours).
   const completions = await prisma.itemCompletion.findMany({
-    where: { enrollmentId, itemType: { in: ["MICRO_SESSION", "FIELD_APPLICATION"] } },
+    where: { enrollmentId, itemType: { in: ["MICRO_SESSION", "FIELD_APPLICATION", "CASE_STUDY"] } },
     select: { blockIndex: true, itemKey: true, data: true, completedAt: true },
   });
   const savedForms: SavedForm[] = [];
@@ -120,6 +121,13 @@ export async function buildBundle(enrollmentId: string) {
   const fieldDone = completions.find((c) => c.itemKey === "field");
   const fieldAppAnswers = (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null;
   if (fieldDone) fingerprint += `field@${fieldDone.completedAt?.toISOString() ?? ""};`;
+  // Réponses 💾 des études de cas (rituel du Cas Sylvie → Plan d'action).
+  const savedAnswers: ProjectSavedAnswer[] = content.blocks.flatMap((b) => {
+    const bp = b.payload as { caseStudy?: unknown; transversalCase?: unknown };
+    const done = completions.find((c) => c.blockIndex === b.index && c.itemKey === "case");
+    return savedProjectAnswers(b.type, (bp.caseStudy ?? bp.transversalCase) as Parameters<typeof savedProjectAnswers>[1], (done?.data as { open?: Record<string, string> } | null)?.open);
+  });
+  for (const c of completions) if (c.itemKey === "case") fingerprint += `case${c.blockIndex}@${c.completedAt?.toISOString() ?? ""};`;
 
   const etag = bundleVersion(version.id, version.updatedAt, enrollment.momentAncrage, fingerprint);
   const rendered = injectMomentAncrage(content, enrollment.momentAncrage) as { blocks?: { type: string; payload?: Record<string, { pool?: unknown; questions?: unknown[] }> }[] };
@@ -139,7 +147,7 @@ export async function buildBundle(enrollmentId: string) {
       }
     }
     if (p?.fieldApplication?.steps) decorateFieldApplication(p.fieldApplication.steps, pam, savedForms);
-    if (p?.actionPlan30d?.habits) decorateActionPlan(p.actionPlan30d.habits, savedForms, fieldAppAnswers);
+    if (p?.actionPlan30d?.habits) decorateActionPlan(p.actionPlan30d.habits, savedForms, fieldAppAnswers, savedAnswers);
   }
 
   // Per-learner quizzes: materialise the question set (fixed + stable pool draw)

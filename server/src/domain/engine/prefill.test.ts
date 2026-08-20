@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { coreOf, decorateActionPlan, decorateFieldApplication, normalizeLabel, orderFields, prefillFromForms, type HabitLike, type SavedForm, type StepLike } from "./prefill.js";
+import { coreOf, decorateActionPlan, decorateFieldApplication, normalizeLabel, orderFields, prefillFromForms, savedProjectAnswers, type HabitLike, type SavedForm, type StepLike } from "./prefill.js";
 
 const SAVED: SavedForm[] = [
   {
@@ -123,6 +123,30 @@ test("plan d'action : la version testée sur le terrain (Application terrain) pr
   const h2 = habits[1]!.fields as { label: string; prefill?: string }[];
   assert.equal(h2[0]!.prefill, "Créneau tenu 3 matins sur 4, négocié avec ma directrice");
   assert.equal(h2[2]!.prefill, "Casque orange + urgences couvertes 15 h-16 h");
+});
+
+test("savedProjectAnswers : seules les réponses ouvertes savedForProject soumises sortent", () => {
+  const caseSpec = { structuredSteps: [{ questions: [
+    { id: "q1", kind: "mcq", prompt: "QCM", savedForProject: false },
+    { id: "q2", kind: "open", prompt: "Réflexion libre", savedForProject: false },
+    { id: "q3", kind: "open", prompt: "Le rituel à installer en premier", savedForProject: true },
+    { id: "q4", kind: "open", prompt: "Autre réponse pour le projet", savedForProject: true },
+  ] }] };
+  const out = savedProjectAnswers("ANCHORING", caseSpec, { q2: "libre", q3: "Mon rituel du matin : 10 min avant WhatsApp.", q4: "  " });
+  assert.equal(out.length, 1);
+  assert.deepEqual(out[0], { prompt: "Le rituel à installer en premier", answer: "Mon rituel du matin : 10 min avant WhatsApp.", blockType: "ANCHORING" });
+  assert.deepEqual(savedProjectAnswers("COMPREHENSION", caseSpec, null), []);
+});
+
+test("plan d'action : le rituel du Cas Sylvie pré-remplit la PREMIÈRE habitude « rituel » (pas la planification hebdo)", () => {
+  const habits: HabitLike[] = [
+    { title: "Habitude 1 — le rituel de lancement de journée", fields: [{ label: "L'habitude concrète : chaque matin…" }, { label: "Le moment précis · la durée (min)" }] },
+    { title: "Habitude 3 — le rituel de planification hebdomadaire", fields: [{ label: "L'habitude concrète : chaque … (jour)" }] },
+  ];
+  decorateActionPlan(habits, [], null, [{ prompt: "Quel est le rituel de productivité que vous allez installer EN PREMIER ?", answer: "Chaque matin 7 h 45, 10 minutes cahier fermé.", blockType: "ANCHORING" }]);
+  assert.equal((habits[0]!.fields[0] as { prefill?: string }).prefill, "Chaque matin 7 h 45, 10 minutes cahier fermé.");
+  assert.equal((habits[0]!.fields[1] as { prefill?: string }).prefill, undefined);
+  assert.equal((habits[1]!.fields[0] as { prefill?: string }).prefill, undefined);
 });
 
 test("plan d'action : sans source, aucun préremplissage ; champs historiques (chaînes) ignorés sans plantage", () => {
