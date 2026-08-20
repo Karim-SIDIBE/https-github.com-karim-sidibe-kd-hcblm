@@ -4,7 +4,7 @@
  * Retrieves relevant passages from the enrolment's course (semantic search),
  * generates a grounded, PAM-personalized answer, and persists the conversation.
  */
-import { Prisma } from "@prisma/client";
+import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { search } from "../search/search.service.js";
 import { answer, type Turn, type RetrievedChunk } from "../../lib/ai/tutor.js";

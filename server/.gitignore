@@ -7,3 +7,6 @@ dist/
 prisma/*.db
 prisma/*.db-journal
 .prisma-engines/
+
+# Client Prisma 7 généré (prisma generate) — jamais versionné
+src/generated/

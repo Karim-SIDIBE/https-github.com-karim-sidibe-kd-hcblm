@@ -18,11 +18,11 @@
  *
  * Usage : docker compose -f deploy/docker-compose.yml exec api npx tsx prisma/relink-media.ts
  */
-import { PrismaClient, CourseStatus } from "@prisma/client";
+import { CourseStatus } from "../src/generated/prisma/client.js";
+import { prisma } from "../src/db/prisma.js";
 import { applyMediaBindings, collectMediaBindings, mergeBindings, unboundSlots, type VideoBinding } from "../src/domain/media-bindings.js";
 import { indexCourseVersion } from "../src/modules/search/search.service.js";
 
-const prisma = new PrismaClient();
 const SLUG = "gestion-du-temps-n1";
 
 type VideoLike = { mediaId?: string; url?: string; durationSec?: number };

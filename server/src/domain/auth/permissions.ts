@@ -4,7 +4,7 @@
  * Capability-based: routes require a permission; each role grants a set of them.
  * Keeps authorization declarative and testable, independent of the transport.
  */
-import type { Role } from "@prisma/client";
+import type { Role } from "../../generated/prisma/client.js";
 
 export type Permission =
   // authoring lifecycle

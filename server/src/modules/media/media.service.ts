@@ -2,7 +2,7 @@
  * media.service.ts — media ingest + adaptive playback.
  */
 import { Readable } from "node:stream";
-import type { MediaKind, Role } from "@prisma/client";
+import type { MediaKind, Role } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
 import { env } from "../../config/env.js";

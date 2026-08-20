@@ -5,7 +5,8 @@
  * a PUBLISHED CourseVersion authored by a Learning Designer. Idempotent: re-runs
  * reset the canonical course to a clean published v1.
  */
-import { PrismaClient, CourseStatus } from "@prisma/client";
+import { CourseStatus } from "../src/generated/prisma/client.js";
+import { prisma } from "../src/db/prisma.js";
 import { validateShape, validatePolicy } from "../src/domain/validation.js";
 import { hashPassword } from "../src/lib/auth/password.js";
 import { indexCourseVersion } from "../src/modules/search/search.service.js";
@@ -13,7 +14,6 @@ import { n1Full } from "../src/domain/fixtures/n1-full.js";
 
 const DEV_PASSWORD = "Declick!Dev2026";
 
-const prisma = new PrismaClient();
 const SLUG = "gestion-du-temps-n1";
 
 async function main() {

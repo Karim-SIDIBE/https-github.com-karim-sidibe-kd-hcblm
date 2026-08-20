@@ -3,7 +3,7 @@
  * CRUD over `Webhook`; event delivery lives in lib/webhooks.
  */
 import { randomBytes } from "node:crypto";
-import type { WebhookEvent } from "@prisma/client";
+import type { WebhookEvent } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 
 export const WEBHOOK_EVENTS: WebhookEvent[] = [

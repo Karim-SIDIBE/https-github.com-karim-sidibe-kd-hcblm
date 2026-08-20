@@ -6,7 +6,7 @@
  * authorization layer below is the deliverable and is transport-agnostic.
  */
 import type { FastifyReply, FastifyRequest, preHandlerHookHandler } from "fastify";
-import type { Role } from "@prisma/client";
+import type { Role } from "../generated/prisma/client.js";
 import { prisma } from "../db/prisma.js";
 import { authDevHeader, oidcEnabled } from "../config/env.js";
 import { hasPermission, isStaff, type Permission } from "../domain/auth/permissions.js";

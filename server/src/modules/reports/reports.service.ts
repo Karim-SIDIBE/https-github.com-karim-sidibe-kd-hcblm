@@ -5,7 +5,7 @@
  * cron hits POST /jobs/scheduled-reports/run, which builds the report over the
  * full dataset (reusing the analytics workbook) and e-mails it as an attachment.
  */
-import type { ReportFrequency } from "@prisma/client";
+import type { ReportFrequency } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { buildXlsx } from "../../lib/export/xlsx.js";
 import { sendSmtpEmail, smtpConfigured } from "../../lib/notify/email.js";

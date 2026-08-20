@@ -8,7 +8,7 @@
  */
 import AdmZip from "adm-zip";
 import { randomBytes } from "node:crypto";
-import { Prisma, type ImportType } from "@prisma/client";
+import { Prisma, type ImportType } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { env } from "../../config/env.js";
 import * as storage from "../../lib/storage/storage.js";
