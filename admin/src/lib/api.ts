@@ -197,6 +197,10 @@ export type IntegrationsStatus = {
   lti: { configUrl: string; jwksUrl: string; oidcInitiationUrl: string; targetLinkUri: string; platforms: { id: string; name: string | null; issuer: string; clientId: string; deploymentId: string | null; createdAt: string }[] };
   scim: { baseUrl: string; organizations: { id: string; name: string; slug: string; tokenProvisioned: boolean }[] };
 };
+export type PayPrice = { id: string; currency: string; amountMinor: number; active: boolean; display?: string };
+export type PayProduct = { id: string; type: "COURSE" | "SEATS"; title: string; courseId: string | null; seatCount: number | null; active: boolean; prices: PayPrice[] };
+export type PayOrderRow = { id: string; status: string; quantity: number; amountMinor: number; currency: string; display: string; createdAt: string; product?: { title: string; type: string }; buyerUser?: { email: string; name: string } | null; buyerOrg?: { name: string } | null };
+export type PayGift = { id: string; scope: string; seats: number | null; grantedAt: string; revokedAt: string | null; holderUser?: { email: string; name: string } | null; holderOrg?: { name: string } | null; course?: { slug: string } | null };
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; joinUrl?: string | null; _count?: { registrations: number } };
@@ -315,6 +319,16 @@ export type ProjectDetail = {
 export const api = {
   me: () => req<Principal>("GET", "/auth/me"),
   courses: () => req<CourseSummary[]>("GET", "/courses"),
+  /// Paiement (spec PAY-2) — produits, prix par devise, cadeaux Super Admin.
+  payProducts: () => req<PayProduct[]>("GET", "/payments/products"),
+  payCreateProduct: (b: { type: "COURSE" | "SEATS"; title: string; courseId?: string; seatCount?: number }) => req<PayProduct>("POST", "/payments/products", b),
+  paySetPrice: (productId: string, currency: string, amountMajor: string) => req<PayPrice>("PUT", `/payments/products/${productId}/prices/${currency}`, { amountMajor }),
+  payGifts: () => req<PayGift[]>("GET", "/payments/gifts"),
+  payGift: (b: { productId: string; email?: string; organizationId?: string }) => req<PayGift>("POST", "/payments/gifts", b),
+  payRevoke: (entitlementId: string) => req<{ id: string; revoked: boolean; seatsClamped: boolean }>("DELETE", `/payments/entitlements/${entitlementId}`),
+  payProviders: () => req<{ key: string; available: boolean; active: boolean }[]>("GET", "/payments/providers"),
+  payOrders: (status?: string) => req<PayOrderRow[]>("GET", `/payments/orders${status ? `?status=${status}` : ""}`),
+  payMarkPaid: (orderId: string, reference: string) => req<unknown>("POST", `/payments/orders/${orderId}/mark-paid`, { reference }),
   courseReport: (courseId: string, range: { since?: string; until?: string } = {}) => {
     const qs = new URLSearchParams();
     if (range.since) qs.set("since", range.since);

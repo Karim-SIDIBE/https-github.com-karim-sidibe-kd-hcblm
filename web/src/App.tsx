@@ -25,6 +25,8 @@ const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
 const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Account })));
 const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Revision })));
+const Purchase = lazy(() => import("./ui/Purchase").then((m) => ({ default: m.Purchase })));
+const OrderStatus = lazy(() => import("./ui/OrderStatus").then((m) => ({ default: m.OrderStatus })));
 
 /** The eid of a course-scoped route (null on the enrolments list). */
 function eidOf(route: Route): string | null {
@@ -58,6 +60,8 @@ function Screen({ route }: { route: Route }) {
     case "project": return <Project eid={route.eid} />;
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
+    case "purchase": return <Purchase key={`buy:${route.courseId}`} courseId={route.courseId} />;
+    case "order": return <OrderStatus key={`ord:${route.orderId}`} orderId={route.orderId} />;
     case "block": return <Course eid={route.eid} />;
     case "account": return <Account />;
     case "revision": return <Revision eid={route.eid} />;

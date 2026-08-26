@@ -15,7 +15,10 @@ export type EnrollmentSummary = {
   startedAt: string;
 };
 
-export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean };
+export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; paid?: boolean; prices?: { currency: string; display: string }[] };
+export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
+export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
 
 export type ConsentState = { type: string; label: string; required: boolean; currentVersion: string; granted: boolean; acceptedVersion: string | null; grantedAt: string | null };
 
@@ -148,12 +151,44 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       if (!res.ok) return [];
       return ((await res.json()).data ?? []) as CatalogItem[];
     },
-    /** Self-enrol the caller into a catalogue course; returns the new enrolment. */
+    /** Self-enrol the caller into a catalogue course; returns the new enrolment.
+     *  L'erreur transporte le `code` serveur (ex. entitlement_required → écran d'achat). */
     async selfEnroll(courseId: string): Promise<{ id: string }> {
       const res = await raw("POST", "/enrollments/self", { body: { courseId } });
       const j = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(j.message || "Inscription impossible");
+      if (!res.ok) throw Object.assign(new Error(j.message || "Inscription impossible"), { code: j.error as string | undefined });
       return j.data as { id: string };
+    },
+    // --- achat B2C (spec paiement, lot PAY-2) --------------------------------
+    async payCatalog(courseId: string): Promise<CourseCatalog> {
+      const res = await raw("GET", `/payments/catalog/${encodeURIComponent(courseId)}`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Catalogue indisponible"), { code: j.error as string | undefined });
+      return j.data as CourseCatalog;
+    },
+    async payCreateOrder(productId: string, currency: string): Promise<PayOrder> {
+      const res = await raw("POST", "/payments/orders", { body: { productId, currency } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Commande impossible"), { code: j.error as string | undefined });
+      return j.data as PayOrder;
+    },
+    async payGetOrder(orderId: string): Promise<PayOrder> {
+      const res = await raw("GET", `/payments/orders/${encodeURIComponent(orderId)}`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Commande introuvable"), { code: j.error as string | undefined });
+      return j.data as PayOrder;
+    },
+    async payCheckout(orderId: string): Promise<CheckoutInfo> {
+      const res = await raw("POST", `/payments/orders/${encodeURIComponent(orderId)}/checkout`);
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Paiement impossible"), { code: j.error as string | undefined });
+      return j.data as CheckoutInfo;
+    },
+    /** Reçu PDF (Bearer requis → récupéré en Blob, ouvert via URL objet). */
+    async payReceipt(orderId: string): Promise<Blob> {
+      const res = await raw("GET", `/payments/orders/${encodeURIComponent(orderId)}/receipt.pdf`);
+      if (!res.ok) throw new Error("Reçu indisponible");
+      return res.blob();
     },
     /** Register/unregister this device's push token (native app). Best-effort. */
     async registerDevice(token: string, platform: string): Promise<void> {

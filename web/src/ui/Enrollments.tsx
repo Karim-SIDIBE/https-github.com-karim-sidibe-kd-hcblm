@@ -27,7 +27,11 @@ export function Enrollments() {
   async function enroll(c: CatalogItem) {
     setEnrolling(c.courseId); setError(null);
     try { const e = await api.selfEnroll(c.courseId); rememberEnrollment(e.id); navigate(routes.course(e.id)); }
-    catch (err) { setError(err instanceof Error ? err.message : t("enr.enrollFail")); }
+    catch (err) {
+      // Cours payant sans droit d'accès → écran d'achat (spec paiement PAY-2).
+      if ((err as { code?: string }).code === "entitlement_required") { navigate(routes.purchase(c.courseId)); return; }
+      setError(err instanceof Error ? err.message : t("enr.enrollFail"));
+    }
     finally { setEnrolling(null); }
   }
 
@@ -89,8 +93,9 @@ export function Enrollments() {
                   <h3 style={{ margin: 0 }}>{c.title}</h3>
                   <span className="chip">{levelLabel(c.level)}</span>
                 </div>
+                {c.paid && c.prices?.[0] && <p className="muted" style={{ margin: "6px 0 0" }}>💳 {c.prices[0].display}</p>}
                 <button className="block" style={{ marginTop: 10 }} disabled={enrolling === c.courseId} onClick={() => enroll(c)}>
-                  {enrolling === c.courseId ? t("enr.enrolling") : t("enr.enroll")}
+                  {enrolling === c.courseId ? t("enr.enrolling") : c.paid ? t("pay.buy") : t("enr.enroll")}
                 </button>
               </article>
             ))}

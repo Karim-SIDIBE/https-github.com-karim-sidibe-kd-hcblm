@@ -8,7 +8,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, createOrder, createProduct, getOrder, handleProviderWebhook, listProducts, markPaidManual, providersOverview, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -56,6 +56,11 @@ export async function paymentRoutes(app: FastifyInstance) {
     } catch (err) { return handle(reply, err); }
   });
 
+  app.get("/payments/orders", { preHandler: guard("order:read") }, async (req) => {
+    const { status } = z.object({ status: z.enum(["PENDING", "PAID", "FAILED"]).optional() }).parse(req.query ?? {});
+    return { data: await listOrders(status) };
+  });
+
   app.get("/payments/orders/:id", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     try { return { data: await getOrder(req.principal!, id) }; } catch (err) { return handle(reply, err); }
@@ -71,6 +76,35 @@ export async function paymentRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const { reference } = z.object({ reference: z.string().min(3).max(120) }).parse(req.body);
     try { return { data: await markPaidManual(req.principal!, id, reference) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // --- catalogue d'achat (écran d'achat PWA) ---------------------------------------
+  app.get("/payments/catalog/:courseId", { preHandler: authenticate }, async (req) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    return { data: await courseCatalog(courseId, req.principal!.id) };
+  });
+
+  // --- reçu PDF (commande réglée — acheteur ou staff) ------------------------------
+  app.get("/payments/orders/:id/receipt.pdf", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try {
+      const pdf = await orderReceipt(req.principal!, id);
+      return reply.header("content-type", "application/pdf")
+        .header("content-disposition", `inline; filename="recu-${id}.pdf"`).send(pdf);
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // --- « Offrir l'accès » (Super Admin uniquement — Q4) ----------------------------
+  app.post("/payments/gifts", { preHandler: guard("entitlement:gift") }, async (req, reply) => {
+    const body = z.object({ productId: z.string(), email: z.string().email().optional(), organizationId: z.string().optional() }).parse(req.body);
+    try { return reply.status(201).send({ data: await giftAccess(req.principal!, body) }); } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/payments/gifts", { preHandler: guard("entitlement:gift") }, async () => ({ data: await listGifts() }));
+
+  app.delete("/payments/entitlements/:id", { preHandler: guard("entitlement:gift") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await revokeEntitlement(req.principal!, id) }; } catch (err) { return handle(reply, err); }
   });
 
   // --- fournisseurs ----------------------------------------------------------------

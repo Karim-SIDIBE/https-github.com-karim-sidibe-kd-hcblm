@@ -7,6 +7,7 @@
  */
 import { CourseStatus, type CourseLevel, type Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
+import { formatAmount, type Currency } from "../../domain/payments/money.js";
 import { validateShape, validatePolicy } from "../../domain/validation.js";
 import type { CourseContent } from "../../domain/content-model.js";
 import { randomBytes } from "node:crypto";
@@ -87,9 +88,19 @@ export async function listCatalog(userId: string, memberOrgIds: string[]) {
     include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true } } },
   });
   const enrolled = new Set((await prisma.enrollment.findMany({ where: { userId }, select: { courseId: true } })).map((e) => e.courseId));
+  // Cours payants (spec paiement) : produit actif + prix actifs → le catalogue
+  // porte le prix affichable par devise ; sans produit/prix, le cours est libre.
+  const products = await prisma.product.findMany({
+    where: { courseId: { in: courses.map((c) => c.id) }, active: true },
+    include: { prices: { where: { active: true } } },
+  });
+  const paywalls = new Map(products.filter((p) => p.prices.length > 0).map((p) => [p.courseId!, p.prices.map((pr) => ({ currency: pr.currency as Currency, display: formatAmount(pr.amountMinor, pr.currency as Currency) }))]));
   return courses
     .filter((c) => c.versions.length > 0)
-    .map((c) => ({ courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level as string, enrolled: enrolled.has(c.id) }));
+    .map((c) => ({
+      courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level as string, enrolled: enrolled.has(c.id),
+      paid: paywalls.has(c.id), prices: paywalls.get(c.id) ?? [],
+    }));
 }
 
 export async function getCourse(id: string) {

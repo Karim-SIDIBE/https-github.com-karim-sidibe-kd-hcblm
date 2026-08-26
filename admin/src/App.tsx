@@ -27,6 +27,7 @@ const Cours = lazy(() => import("./screens/Cours").then((m) => ({ default: m.Cou
 const Medias = lazy(() => import("./screens/Medias").then((m) => ({ default: m.Medias })));
 const QuestionBank = lazy(() => import("./screens/QuestionBank").then((m) => ({ default: m.QuestionBank })));
 const Settings = lazy(() => import("./screens/Settings").then((m) => ({ default: m.Settings })));
+const Tarifs = lazy(() => import("./screens/Tarifs").then((m) => ({ default: m.Tarifs })));
 const UiTexts = lazy(() => import("./screens/UiTexts").then((m) => ({ default: m.UiTexts })));
 const Security = lazy(() => import("./screens/Security").then((m) => ({ default: m.Security })));
 const Jobs = lazy(() => import("./screens/Jobs").then((m) => ({ default: m.Jobs })));
@@ -54,6 +55,7 @@ const NAV: { group: string; items: NavItem[] }[] = [
   ]},
   { group: "Organisation", items: [
     { id: "entreprises", label: "Entreprises & licences", Icon: IOrg, roles: [A, C] },
+    { id: "tarifs", label: "Tarifs & accès", Icon: IOrg, roles: [A, C] },
     { id: "orgs", label: "Cohortes & clients", Icon: IOrg, roles: [A, C, I] },
     { id: "sessions", label: "Sessions live", Icon: ISession, roles: [A, C, I] },
   ]},
@@ -190,7 +192,7 @@ export function App() {
           </label>
         </header>
         <Suspense fallback={<div className="content"><div className="card"><div className="card-b">Chargement…</div></div></div>}>
-        {!courseId && !["settings", "security", "entreprises", "users", "courses", "medias", "uitexts", "jobs", "webhooks", "integrations", "audit"].includes(view) ? (
+        {!courseId && !["settings", "security", "entreprises", "users", "courses", "medias", "uitexts", "jobs", "webhooks", "integrations", "audit", "tarifs"].includes(view) ? (
           <div className="content"><div className="card"><div className="card-b">Chargement des cours…</div></div></div>
         ) : view === "dashboard" ? <Dashboard ctx={ctx} />
           : view === "insights" ? <Insights ctx={ctx} />
@@ -211,6 +213,7 @@ export function App() {
           : view === "jobs" ? <Jobs />
           : view === "webhooks" ? <Webhooks />
           : view === "integrations" ? <Integrations />
+          : view === "tarifs" ? <Tarifs />
           : view === "settings" ? <Settings />
           : view === "security" ? <Security />
           : <Dashboard ctx={ctx} />}
