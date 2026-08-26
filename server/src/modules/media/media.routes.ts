@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { MediaError, assertAssetAccessible, assetIdFromKey, attachCaptions, createFolder, createFromUpload, deleteFolder, deleteMedia, generateCaptions, getAsset, listFolders, listMedia, playbackManifest, registerExternal, removeCaptions, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
+import { SubtitleError } from "../../lib/ai/subtitles.js";
 import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
 import { env } from "../../config/env.js";
 import { authenticate, guard } from "../../lib/auth.js";
@@ -10,6 +11,9 @@ import { envelope, pageQuery } from "../../lib/paging.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof MediaError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
+  // Échecs des fournisseurs de sous-titres (Whisper/traduction) : rendre le
+  // message explicite au lieu d'une 500 générique.
+  if (err instanceof SubtitleError) return reply.status(err.statusCode).send({ error: err.code, message: err.message });
   throw err;
 }
 

@@ -83,9 +83,19 @@ export async function transcribeToVtt(media: Buffer, filename: string, language:
   form.append("model", "whisper-1");
   form.append("language", language);
   form.append("response_format", "vtt");
-  const res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
-    method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: form,
-  });
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+      method: "POST", headers: { authorization: `Bearer ${env.OPENAI_API_KEY}` }, body: form,
+    });
+  } catch (e) {
+    throw new SubtitleError(502, "transcription_unreachable",
+      `Impossible de joindre api.openai.com depuis le serveur (${e instanceof Error ? e.message : "réseau"}) — vérifiez la sortie réseau du conteneur.`);
+  }
+  if (res.status === 401) {
+    throw new SubtitleError(502, "transcription_auth",
+      "OpenAI a refusé la clé (401) : la valeur d'OPENAI_API_KEY sur le serveur est invalide (clé d'exemple non remplacée, clé révoquée ou tronquée). Remplacez-la dans deploy/.env puis reconstruisez l'API.");
+  }
   if (!res.ok) throw new SubtitleError(502, "transcription_failed", `Whisper a répondu ${res.status} : ${(await res.text()).slice(0, 300)}`);
   const vtt = (await res.text()).trim();
   if (!vtt.includes("-->")) throw new SubtitleError(502, "transcription_empty", "La transcription ne contient aucune cue");
@@ -104,11 +114,17 @@ async function providerTranslate(texts: string[]): Promise<string[]> {
       messages: [{ role: "user", content: joined }],
     });
   } else if (env.OPENAI_API_KEY) {
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: TRANSLATE_BRIEF }, { role: "user", content: joined }] }),
-    });
+    let res: Response;
+    try {
+      res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: { authorization: `Bearer ${env.OPENAI_API_KEY}`, "content-type": "application/json" },
+        body: JSON.stringify({ model: "gpt-4o-mini", messages: [{ role: "system", content: TRANSLATE_BRIEF }, { role: "user", content: joined }] }),
+      });
+    } catch (e) {
+      throw new SubtitleError(502, "translation_unreachable", `Traduction : api.openai.com injoignable (${e instanceof Error ? e.message : "réseau"})`);
+    }
+    if (res.status === 401) throw new SubtitleError(502, "translation_auth", "Traduction : OpenAI a refusé la clé (401) — OPENAI_API_KEY invalide sur le serveur");
     if (!res.ok) throw new SubtitleError(502, "translation_failed", `Traduction : le fournisseur a répondu ${res.status}`);
     out = (await res.json() as { choices?: { message?: { content?: string } }[] }).choices?.[0]?.message?.content ?? "";
   } else {
