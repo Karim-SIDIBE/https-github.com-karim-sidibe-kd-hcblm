@@ -7,6 +7,7 @@
  */
 import { Prisma, type ItemType } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
+import { coursePaywall, hasCourseEntitlement } from "../payments/payments.service.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { CourseContent, profileDivergence, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
 import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
@@ -167,12 +168,19 @@ export async function enroll(userId: string, courseId: string, isEnterprise = fa
 }
 
 /** B2C self-enrolment: a learner enrols THEMSELVES, restricted to platform
- *  courses or courses of an org they belong to (tenant isolation). */
+ *  courses or courses of an org they belong to (tenant isolation).
+ *  Contrôle d'accès payant (spec paiement §06) : un cours porteur d'un produit
+ *  actif avec prix exige un droit d'accès valide — quelle que soit son origine
+ *  (PURCHASE, GIFT, LEGACY). Un cours sans produit/prix reste libre. */
 export async function selfEnroll(userId: string, courseId: string, memberOrgIds: string[]) {
   const course = await prisma.course.findUnique({ where: { id: courseId }, select: { organizationId: true } });
   if (!course) throw new EngineError(404, "no_course", "Parcours introuvable");
   if (course.organizationId && !memberOrgIds.includes(course.organizationId)) {
     throw new EngineError(403, "course_forbidden", "Parcours non disponible");
+  }
+  const paywall = await coursePaywall(courseId);
+  if (paywall.paid && !(await hasCourseEntitlement(userId, courseId))) {
+    throw new EngineError(403, "entitlement_required", "Ce parcours est payant : un droit d'accès est nécessaire pour s'y inscrire");
   }
   return enroll(userId, courseId, false);
 }

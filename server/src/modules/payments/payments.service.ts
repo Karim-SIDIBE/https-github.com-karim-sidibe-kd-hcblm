@@ -19,6 +19,7 @@ import { isStaff } from "../../domain/auth/permissions.js";
 import { formatAmount, isCurrency, toAmountMinor, type Currency } from "../../domain/payments/money.js";
 import { ProviderError, type ProviderKey } from "../../lib/payments/provider.js";
 import { PROVIDERS, PROVIDER_ENUM, getActiveProvider } from "../../lib/payments/registry.js";
+import { receiptPdf } from "../../lib/payments/receipt.js";
 
 export class PaymentError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -120,6 +121,16 @@ export async function createOrder(principal: Principal, input: { productId: stri
   return { order, reused: false };
 }
 
+/** Commandes récentes (écran admin « Tarifs & accès » — constat des virements). */
+export async function listOrders(status?: "PENDING" | "PAID" | "FAILED") {
+  const rows = await prisma.order.findMany({
+    where: status ? { status } : undefined,
+    include: { product: { select: { title: true, type: true } }, buyerUser: { select: { email: true, name: true } }, buyerOrg: { select: { name: true } }, payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+    orderBy: { createdAt: "desc" }, take: 100,
+  });
+  return rows.map((o) => ({ ...o, display: formatAmount(o.amountMinor, o.currency as Currency) }));
+}
+
 export async function getOrder(principal: Principal, orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
@@ -150,7 +161,9 @@ export async function startCheckout(principal: Principal, orderId: string) {
     amountMinor: order.amountMinor,
     currency: order.currency as Currency,
     description: `${order.product.title} × ${order.quantity}`,
-    returnUrl: `${env.APP_BASE_URL ?? env.PUBLIC_BASE_URL}/paiement/retour?order=${order.id}`,
+    // Retour navigateur → l'écran de suivi de commande de la PWA (routeur hash).
+    // Ce retour n'accorde JAMAIS l'accès — seul le webhook vérifié le fait.
+    returnUrl: `${env.APP_BASE_URL ?? env.PUBLIC_BASE_URL}/#/order/${order.id}`,
     customer: buyer ? { email: buyer.email, name: buyer.name } : undefined,
   });
   await prisma.payment.update({ where: { id: payment.id }, data: { providerRef: checkout.providerRef } });
@@ -282,6 +295,132 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
   await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { paymentId: payment.id, processedAt: new Date() } });
   await audit({ action: "payment.webhook.processed", targetType: "Payment", targetId: payment.id, ip, meta: { provider: key, eventId: v.eventId, result } });
   return { httpStatus: 200, body: { data: { processed: true, result } } };
+}
+
+// --- catalogue & contrôle d'accès (PAY-2) --------------------------------------
+
+/** Un cours est « payant » s'il a un produit ACTIF portant au moins un prix
+ *  actif. Un cours sans produit/prix reste librement accessible : la gratuité
+ *  est un cas explicite, pas un défaut de configuration. */
+export async function coursePaywall(courseId: string): Promise<{ paid: boolean; product: { id: string; title: string } | null; prices: { currency: Currency; amountMinor: number; display: string }[] }> {
+  const product = await prisma.product.findFirst({ where: { courseId, active: true }, include: { prices: { where: { active: true } } } });
+  if (!product || product.prices.length === 0) return { paid: false, product: null, prices: [] };
+  return {
+    paid: true,
+    product: { id: product.id, title: product.title },
+    prices: product.prices.map((p) => ({ currency: p.currency as Currency, amountMinor: p.amountMinor, display: formatAmount(p.amountMinor, p.currency as Currency) })),
+  };
+}
+
+/** L'utilisateur détient-il un droit COURSE_ACCESS valide pour ce cours —
+ *  directement, ou via une organisation dont il est membre ? Toutes origines
+ *  (PURCHASE, GIFT, LEGACY) équivalentes ; un droit révoqué ne compte pas. */
+export async function hasCourseEntitlement(userId: string, courseId: string): Promise<boolean> {
+  const direct = await prisma.entitlement.findFirst({ where: { holderUserId: userId, scope: "COURSE_ACCESS", courseId, revokedAt: null } });
+  if (direct) return true;
+  const orgIds = (await prisma.organizationMembership.findMany({ where: { userId }, select: { organizationId: true } })).map((m) => m.organizationId);
+  if (!orgIds.length) return false;
+  return Boolean(await prisma.entitlement.findFirst({ where: { holderOrgId: { in: orgIds }, scope: "COURSE_ACCESS", courseId, revokedAt: null } }));
+}
+
+/** Catalogue d'un cours pour l'écran d'achat : paywall + droit du demandeur. */
+export async function courseCatalog(courseId: string, userId?: string) {
+  const paywall = await coursePaywall(courseId);
+  const entitled = paywall.paid && userId ? await hasCourseEntitlement(userId, courseId) : !paywall.paid;
+  return { ...paywall, entitled };
+}
+
+// --- reçu PDF (commande payée) ---------------------------------------------------
+
+export async function orderReceipt(principal: Principal, orderId: string): Promise<Buffer> {
+  const order = await prisma.order.findUnique({
+    where: { id: orderId },
+    include: { product: true, payments: { orderBy: { createdAt: "desc" } }, buyerUser: true, buyerOrg: true },
+  });
+  if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
+  assertOrderAccess(principal, order);
+  if (order.status !== "PAID") throw new PaymentError(409, "not_paid", "Le reçu n'est disponible que pour une commande réglée");
+  const pay = order.payments.find((p) => p.status === "SUCCEEDED") ?? order.payments[0];
+  return receiptPdf({
+    orderId: order.id,
+    paidAt: order.updatedAt,
+    buyerName: order.buyerUser?.name ?? order.buyerOrg?.name ?? "—",
+    buyerEmail: order.buyerUser?.email,
+    productTitle: order.product.title,
+    quantity: order.quantity,
+    amountMinor: order.amountMinor,
+    currency: order.currency as Currency,
+    method: pay?.method,
+    provider: pay?.provider ?? "MANUAL",
+    providerRef: pay?.providerRef,
+  });
+}
+
+// --- « Offrir l'accès » (GIFT, Super Admin — Q4) --------------------------------
+
+export async function giftAccess(principal: Principal, input: { productId: string; email?: string; organizationId?: string }) {
+  const product = await prisma.product.findUnique({ where: { id: input.productId } });
+  if (!product?.active) throw new PaymentError(404, "product_not_found", "Produit introuvable ou inactif");
+
+  if (product.type === "COURSE") {
+    if (!input.email) throw new PaymentError(422, "email_required", "Un accès cours s'offre à un apprenant (e-mail requis)");
+    const user = await prisma.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
+    if (!user) throw new PaymentError(404, "user_not_found", "Aucun compte avec cet e-mail");
+    if (await hasCourseEntitlement(user.id, product.courseId!)) throw new PaymentError(409, "already_entitled", "Cet apprenant a déjà un droit d'accès valide pour ce cours");
+    const ent = await prisma.entitlement.create({
+      data: { holderUserId: user.id, scope: "COURSE_ACCESS", courseId: product.courseId, source: "GIFT", grantedById: principal.id },
+    });
+    await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId } });
+    return { ...ent, holderEmail: user.email };
+  }
+
+  // SEATS → une organisation, sièges crédités immédiatement.
+  if (!input.organizationId) throw new PaymentError(422, "org_required", "Un lot de sièges s'offre à une organisation");
+  const org = await prisma.organization.findUnique({ where: { id: input.organizationId } });
+  if (!org) throw new PaymentError(404, "org_not_found", "Organisation introuvable");
+  const seats = product.seatCount ?? 0;
+  const ent = await prisma.$transaction(async (tx) => {
+    const created = await tx.entitlement.create({
+      data: { holderOrgId: org.id, scope: "SEATS", seats, source: "GIFT", grantedById: principal.id },
+    });
+    await tx.organization.update({ where: { id: org.id }, data: { seats: { increment: seats } } });
+    return created;
+  });
+  await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderOrgId: org.id, seats } });
+  return { ...ent, holderOrgName: org.name };
+}
+
+/** Révoque un droit (cadeau retiré, suite de remboursement…). Pour un droit
+ *  SEATS, décrémente les sièges de l'organisation sans passer sous le nombre
+ *  de sièges déjà occupés — le dépassement éventuel est signalé. */
+export async function revokeEntitlement(principal: Principal, entitlementId: string) {
+  const ent = await prisma.entitlement.findUnique({ where: { id: entitlementId } });
+  if (!ent) throw new PaymentError(404, "entitlement_not_found", "Droit d'accès introuvable");
+  if (ent.revokedAt) throw new PaymentError(409, "already_revoked", "Droit déjà révoqué");
+
+  let clamped = false;
+  await prisma.$transaction(async (tx) => {
+    await tx.entitlement.update({ where: { id: ent.id }, data: { revokedAt: new Date(), revokedById: principal.id } });
+    if (ent.scope === "SEATS" && ent.holderOrgId && ent.seats) {
+      const org = await tx.organization.findUniqueOrThrow({ where: { id: ent.holderOrgId } });
+      const used = await tx.organizationMembership.count({ where: { organizationId: org.id, orgRole: "MEMBER" } });
+      const target = Math.max(used, org.seats - ent.seats);
+      clamped = target > org.seats - ent.seats;
+      await tx.organization.update({ where: { id: org.id }, data: { seats: target } });
+    }
+  });
+  await audit({ actorId: principal.id, action: "entitlement.revoke", targetType: "Entitlement", targetId: ent.id, meta: { scope: ent.scope, holderUserId: ent.holderUserId, holderOrgId: ent.holderOrgId, seatsClamped: clamped } });
+  return { id: ent.id, revoked: true, seatsClamped: clamped };
+}
+
+/** Cadeaux existants (pour l'écran admin « Offrir l'accès »). */
+export async function listGifts() {
+  const rows = await prisma.entitlement.findMany({
+    where: { source: "GIFT" },
+    include: { holderUser: { select: { email: true, name: true } }, holderOrg: { select: { name: true } }, course: { select: { slug: true } } },
+    orderBy: { grantedAt: "desc" }, take: 100,
+  });
+  return rows;
 }
 
 // --- vue d'ensemble fournisseurs -----------------------------------------------
