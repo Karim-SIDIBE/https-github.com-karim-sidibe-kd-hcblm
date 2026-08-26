@@ -30,7 +30,13 @@ export type Permission =
   | "credential:revoke" // revoke issued verifiable credentials
   | "lti:manage" // register / manage LTI platforms
   | "org:manage" // create / oversee organizations (platform level)
-  | "uitexts:manage"; // edit the learner-app interface texts (SUPER_ADMIN only)
+  | "uitexts:manage" // edit the learner-app interface texts (SUPER_ADMIN only)
+  // paiement (spec « Architecture paiement v3 », §06)
+  | "order:read" // lire toutes les commandes (l'acheteur lit les siennes par propriété)
+  | "order:manage" // produits/prix, constat de virement (manual), annulation
+  | "payment:read" // lire les paiements et événements de webhook
+  | "refund:create" // remboursements — staff uniquement (Q3)
+  | "entitlement:gift"; // « Offrir l'accès » — Super Admin uniquement (Q4)
 
 const ALL: Permission[] = [
   "course:create", "course:read", "course:update", "course:submit_review",
@@ -38,6 +44,7 @@ const ALL: Permission[] = [
   "enrollment:create", "enrollment:read_any", "evaluation:grade", "evaluation:assign",
   "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
   "uitexts:manage",
+  "order:read", "order:manage", "payment:read", "refund:create", "entitlement:gift",
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
@@ -46,6 +53,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "course:create", "course:read", "course:update", "course:submit_review",
     "course:review", "course:publish", "course:archive",
     "enrollment:create", "enrollment:read_any", "evaluation:assign", "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
+    "order:read", "order:manage", "payment:read", "refund:create", // paiement : staff, sans "entitlement:gift" (Super Admin seul)
   ],
   LEARNING_DESIGNER: ["course:create", "course:read", "course:update", "course:submit_review", "media:manage"],
   REVIEWER: ["course:read", "course:review", "course:publish"],

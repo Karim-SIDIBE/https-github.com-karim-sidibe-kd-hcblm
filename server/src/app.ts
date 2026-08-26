@@ -38,6 +38,7 @@ import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 import { uiTextRoutes } from "./modules/uitexts/uitexts.routes.js";
+import { paymentRoutes } from "./modules/payments/payments.routes.js";
 import { viewsRoutes } from "./modules/views/views.routes.js";
 import { settingsRoutes } from "./modules/settings/settings.routes.js";
 import { integrationsRoutes } from "./modules/integrations/integrations.routes.js";
@@ -120,12 +121,16 @@ export async function buildApp(): Promise<FastifyInstance> {
   }
 
   // Parse application/x-www-form-urlencoded (SAML IdP posts the ACS form-encoded).
-  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (_req, body, done) => {
+  // Les webhooks de paiement entrants vérifient une signature HMAC calculée sur
+  // le CORPS BRUT — on le conserve donc sur la requête avant tout parsing.
+  app.addContentTypeParser("application/x-www-form-urlencoded", { parseAs: "string" }, (req, body, done) => {
+    (req as unknown as { rawBody?: string }).rawBody = body as string;
     try { done(null, Object.fromEntries(new URLSearchParams(body as string))); }
     catch (e) { done(e as Error); }
   });
   // Tolerate empty JSON bodies (no-body POSTs like /publish, /scim/token).
-  app.addContentTypeParser("application/json", { parseAs: "string" }, (_req, body, done) => {
+  app.addContentTypeParser("application/json", { parseAs: "string" }, (req, body, done) => {
+    (req as unknown as { rawBody?: string }).rawBody = body as string;
     try { done(null, body && (body as string).length ? JSON.parse(body as string) : {}); }
     catch (e) { (e as { statusCode?: number }).statusCode = 400; done(e as Error); }
   });
@@ -189,6 +194,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await docsRoutes(api);
       await jobRoutes(api);
       await uiTextRoutes(api);
+      await paymentRoutes(api);
     },
     { prefix: "/api/v1" },
   );

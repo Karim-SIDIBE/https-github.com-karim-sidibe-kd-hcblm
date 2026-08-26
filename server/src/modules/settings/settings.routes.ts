@@ -14,11 +14,16 @@ import { audit } from "../../lib/audit.js";
 /** Whitelisted keys and their value schema — no free-form writes. */
 const KNOWN = {
   require_staff_2fa: z.boolean(),
+  /// Fournisseur de paiement ACTIF pour les nouveaux checkouts (spec paiement
+  /// §09) — bascule Super Admin sans redéploiement ; les webhooks des deux
+  /// agrégateurs restent toujours acceptés. Défaut : « manual » (aucun compte
+  /// marchand requis).
+  payment_provider: z.enum(["manual", "cinetpay", "flutterwave"]),
 } as const;
 type SettingKey = keyof typeof KNOWN;
 const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
 
-const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false };
+const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual" };
 
 export async function getSetting<T>(key: SettingKey): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } });

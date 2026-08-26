@@ -100,60 +100,62 @@ enum ItemType {
 // ===========================================================================
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String
-  role      Role     @default(LEARNER)
+  id                  String    @id @default(cuid())
+  email               String    @unique
+  name                String
+  role                Role      @default(LEARNER)
   /// Mobile number for SMS / WhatsApp re-engagement (§7.2). Optional.
-  phone     String?
+  phone               String?
   /// Argon2id hash for first-party password auth (null = SSO-only / no password).
-  passwordHash String?
+  passwordHash        String?
   /// Brute-force lockout (OWASP): failed-attempt counter + temporary lock.
-  failedLoginCount Int       @default(0)
-  lockedUntil      DateTime?
+  failedLoginCount    Int       @default(0)
+  lockedUntil         DateTime?
   /// Account deactivation (B2B seat lifecycle). Non-null = disabled: blocked at
   /// login/refresh and frees its organization seat. Re-enabling re-checks quota.
-  disabledAt       DateTime?
+  disabledAt          DateTime?
   /// B2C self-registration: set when the e-mail has been verified (OTP). Null =
   /// unverified → first-party login is blocked. Staff/SSO-created accounts are
   /// set verified at creation; existing accounts were backfilled at migration.
-  emailVerifiedAt  DateTime?
+  emailVerifiedAt     DateTime?
   /// 2FA TOTP (RFC 6238). `totpSecret` is the base32 secret (set at setup);
   /// `totpEnabledAt` non-null = 2FA active (login requires a code). Backup codes
   /// are stored as SHA-256 hashes and consumed on use.
-  totpSecret       String?
-  totpEnabledAt    DateTime?
-  totpBackupCodes  String[]  @default([])
+  totpSecret          String?
+  totpEnabledAt       DateTime?
+  totpBackupCodes     String[]  @default([])
   /// RGPD Art. 17 (right to erasure): set when the account has been anonymised —
   /// direct identifiers scrubbed and sessions revoked. Learning history is kept
   /// de-identified for analytics integrity. Distinct from a hard delete.
-  anonymizedAt     DateTime?
+  anonymizedAt        DateTime?
   /// Scheduled (reversible) erasure: when set, the account is disabled immediately
   /// but data is destroyed only after the grace period, by the retention job —
   /// `deletionMode` ("anonymize" | "delete") decides how. An admin can restore
   /// (clearing these) any time before the purge runs.
   deletionRequestedAt DateTime?
   deletionMode        String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
-  authoredCourses  Course[]              @relation("CourseAuthor")
-  reviewedVersions CourseVersion[]       @relation("VersionReviewer")
-  enrollments      Enrollment[]
-  refreshTokens    RefreshToken[]
-  orgMemberships   OrganizationMembership[]
-  hostedSessions   LiveSession[]         @relation("SessionHost")
-  sessionRegistrations SessionRegistration[]
-  cohortMemberships CohortMembership[]
-  authoredThreads  ForumThread[]         @relation("ThreadAuthor")
-  authoredPosts    ForumPost[]           @relation("PostAuthor")
-  evaluatorAssignments ProjectSubmission[] @relation("EvaluatorAssignments")
-  accreditations       EvaluatorAccreditation[] @relation("AccreditationHolder")
+  authoredCourses       Course[]                 @relation("CourseAuthor")
+  reviewedVersions      CourseVersion[]          @relation("VersionReviewer")
+  enrollments           Enrollment[]
+  refreshTokens         RefreshToken[]
+  orgMemberships        OrganizationMembership[]
+  hostedSessions        LiveSession[]            @relation("SessionHost")
+  sessionRegistrations  SessionRegistration[]
+  cohortMemberships     CohortMembership[]
+  authoredThreads       ForumThread[]            @relation("ThreadAuthor")
+  authoredPosts         ForumPost[]              @relation("PostAuthor")
+  evaluatorAssignments  ProjectSubmission[]      @relation("EvaluatorAssignments")
+  accreditations        EvaluatorAccreditation[] @relation("AccreditationHolder")
   accreditationsGranted EvaluatorAccreditation[] @relation("AccreditationGranter")
-  verificationCodes VerificationCode[]
-  consents          Consent[]
-  devices           Device[]
-  savedViews        SavedView[]
+  verificationCodes     VerificationCode[]
+  consents              Consent[]
+  devices               Device[]
+  savedViews            SavedView[]
+  orders                Order[]                  @relation("OrderBuyerUser")
+  entitlements          Entitlement[]            @relation("EntitlementHolderUser")
 
   @@index([role])
 }
@@ -201,8 +203,8 @@ model Consent {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String    // "terms" | "privacy" | "marketing"
-  version   String    // policy version accepted, e.g. "2026-06"
+  type      String // "terms" | "privacy" | "marketing"
+  version   String // policy version accepted, e.g. "2026-06"
   grantedAt DateTime  @default(now())
   revokedAt DateTime?
   ip        String?
@@ -256,20 +258,22 @@ model AuditLog {
 /// A tenant (organization / workspace). Org-scoped resources are isolated to it;
 /// resources with no organization are the shared platform catalog.
 model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  slug      String   @unique
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
   /// SCIM provisioning bearer-token hash (set when SCIM is enabled for the org).
   scimTokenHash String?
   /// Licensed learner seats (B2B). Set by the platform; an org admin may create
   /// learners only up to this count. 0 = no self-service seats configured.
   /// Seats consumed = memberships with orgRole MEMBER (the org's own admins are free).
-  seats     Int      @default(0)
-  createdAt DateTime @default(now())
+  seats         Int      @default(0)
+  createdAt     DateTime @default(now())
 
-  memberships OrganizationMembership[]
-  courses     Course[]
-  webhooks    Webhook[]
+  memberships  OrganizationMembership[]
+  courses      Course[]
+  webhooks     Webhook[]
+  orders       Order[]                  @relation("OrderBuyerOrg")
+  entitlements Entitlement[]            @relation("EntitlementHolderOrg")
 }
 
 /// Outbound webhook subscription (§8.2) — integrates with employer HR systems,
@@ -339,24 +343,26 @@ model OrganizationMembership {
 }
 
 model Course {
-  id        String   @id @default(cuid())
+  id             String        @id @default(cuid())
   /// Stable human-readable identifier, e.g. "gestion-du-temps-n1".
-  slug      String   @unique
+  slug           String        @unique
   /// Owning tenant; null = shared platform catalog.
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
 
   authorId String?
   author   User?   @relation("CourseAuthor", fields: [authorId], references: [id], onDelete: SetNull)
 
-  versions     CourseVersion[]
-  enrollments  Enrollment[]
+  versions       CourseVersion[]
+  enrollments    Enrollment[]
   accreditations EvaluatorAccreditation[]
   aiCalibrations AiCalibration[]
-  liveSessions LiveSession[]
-  cohorts      Cohort[]
+  liveSessions   LiveSession[]
+  cohorts        Cohort[]
+  product        Product?
+  entitlements   Entitlement[]
 
   @@index([authorId])
 }
@@ -390,16 +396,16 @@ model CohortMembership {
 }
 
 model ForumThread {
-  id        String      @id @default(cuid())
+  id        String   @id @default(cuid())
   cohortId  String
-  cohort    Cohort      @relation(fields: [cohortId], references: [id], onDelete: Cascade)
+  cohort    Cohort   @relation(fields: [cohortId], references: [id], onDelete: Cascade)
   authorId  String?
-  author    User?       @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  author    User?    @relation("ThreadAuthor", fields: [authorId], references: [id], onDelete: SetNull)
   title     String
-  locked    Boolean     @default(false)
-  pinned    Boolean     @default(false)
-  createdAt DateTime    @default(now())
-  updatedAt DateTime    @updatedAt
+  locked    Boolean  @default(false)
+  pinned    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   posts ForumPost[]
 
@@ -457,14 +463,14 @@ enum ImportType {
 }
 
 model ImportedPackage {
-  id           String              @id @default(cuid())
-  type         ImportType
-  title        String
+  id            String     @id @default(cuid())
+  type          ImportType
+  title         String
   storagePrefix String // object-key prefix where the package files live
-  launchHref   String // entry file relative to the prefix
-  structure    Json? // parsed manifest structure (items / AUs)
-  createdById  String?
-  createdAt    DateTime            @default(now())
+  launchHref    String // entry file relative to the prefix
+  structure     Json? // parsed manifest structure (items / AUs)
+  createdById   String?
+  createdAt     DateTime   @default(now())
 
   registrations ScormRegistration[]
   inbound       InboundStatement[]
@@ -576,15 +582,15 @@ model MediaFolder {
 }
 
 model MediaAsset {
-  id               String      @id @default(cuid())
-  kind             MediaKind   @default(VIDEO)
+  id               String       @id @default(cuid())
+  kind             MediaKind    @default(VIDEO)
   originalFilename String?
   mime             String
   sizeBytes        Int?
   durationSec      Int?
   width            Int?
   height           Int?
-  status           MediaStatus @default(UPLOADED)
+  status           MediaStatus  @default(UPLOADED)
   storageKey       String // source object key
   error            String?
   createdById      String?
@@ -592,8 +598,8 @@ model MediaAsset {
   /// non-empty folder (SetNull is the schema-level safety net).
   folderId         String?
   folder           MediaFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   renditions MediaRendition[]
 
@@ -602,21 +608,21 @@ model MediaAsset {
 }
 
 model MediaRendition {
-  id          String     @id @default(cuid())
-  assetId     String
-  asset       MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
-  label       String // "source", "480p", "240p-lite", "audio", "captions-fr"
-  kind        MediaKind
-  mime        String
-  storageKey  String? // local/object key (null when external)
-  url         String? // external/provider URL (null when stored)
-  bitrateKbps Int?
-  width       Int?
-  height      Int?
-  language    String? // for captions
-  sizeBytes   Int?
-  downloadable Boolean   @default(false) // suitable for offline download
-  available    Boolean   @default(true) // false = planned but not yet transcoded
+  id           String     @id @default(cuid())
+  assetId      String
+  asset        MediaAsset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  label        String // "source", "480p", "240p-lite", "audio", "captions-fr"
+  kind         MediaKind
+  mime         String
+  storageKey   String? // local/object key (null when external)
+  url          String? // external/provider URL (null when stored)
+  bitrateKbps  Int?
+  width        Int?
+  height       Int?
+  language     String? // for captions
+  sizeBytes    Int?
+  downloadable Boolean    @default(false) // suitable for offline download
+  available    Boolean    @default(true) // false = planned but not yet transcoded
   createdAt    DateTime   @default(now())
 
   @@index([assetId])
@@ -751,10 +757,10 @@ model Enrollment {
   momentAncrage String?
 
   /// Progress peer (Pilier 6.3) — notified at each badge.
-  peerName  String?
-  peerEmail String?
+  peerName    String?
+  peerEmail   String?
   /// Peer mobile number for SMS / WhatsApp delivery (§7.1 — African reach).
-  peerPhone String?
+  peerPhone   String?
   /// Consentement au partage de progression avec le pair, recueilli au moment
   /// de la désignation (K-HCBLM v2.2, Pilier 6.3). Conditionne toute
   /// notification au pair. `true` par défaut pour les désignations antérieures
@@ -776,21 +782,21 @@ model Enrollment {
   startedAt   DateTime  @default(now())
   completedAt DateTime?
 
-  badges         Badge[]
-  completions    ItemCompletion[]
-  reEngagements  ReEngagementMessage[]
-  xapi           XapiStatement[]
-  notifications  Notification[]
-  aiAssessments  AiAssessment[]
-  syncOperations SyncOperation[]
-  credentials    Credential[]
-  tutorSessions  TutorSession[]
-  mediaPositions MediaPosition[]
-  journalTriggers JournalTrigger[]
-  quizDraws      QuizDraw[]
+  badges            Badge[]
+  completions       ItemCompletion[]
+  reEngagements     ReEngagementMessage[]
+  xapi              XapiStatement[]
+  notifications     Notification[]
+  aiAssessments     AiAssessment[]
+  syncOperations    SyncOperation[]
+  credentials       Credential[]
+  tutorSessions     TutorSession[]
+  mediaPositions    MediaPosition[]
+  journalTriggers   JournalTrigger[]
+  quizDraws         QuizDraw[]
   projectSubmission ProjectSubmission?
-  appeal         Appeal?
-  doubleMarkings DoubleMarking[]
+  appeal            Appeal?
+  doubleMarkings    DoubleMarking[]
 
   @@unique([userId, courseId])
   @@index([status])
@@ -1130,23 +1136,23 @@ model QuizDraw {
 /// Reusable question bank — a stored ScoredQuestion (validated on write) that
 /// authors insert into course quizzes. Tagged by sub-area for filtering/draws.
 model BankQuestion {
-  id          String   @id @default(cuid())
-  question    Json // a ScoredQuestion (validated against @kd/shared on write)
-  subArea     String   @default("")
-  level       String   @default("")
+  id               String   @id @default(cuid())
+  question         Json // a ScoredQuestion (validated against @kd/shared on write)
+  subArea          String   @default("")
+  level            String   @default("")
   /// "approved" (usable by pools/draws) or "pending" (awaiting human review).
-  status      String   @default("approved")
+  status           String   @default("approved")
   /// Where the question came from: "manual" | "course" (harvested at publish/
   /// import) | "ai" (generated variant awaiting review).
-  origin      String   @default("manual")
+  origin           String   @default("manual")
   /// Provenance for idempotent course harvesting and variant traceability.
   sourceCourseId   String?
   sourceQuestionId String?
   /// Free label, e.g. the imposed angle of an AI variant ("contexte terrain").
-  note        String   @default("")
-  createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  note             String   @default("")
+  createdById      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
 
   @@unique([sourceCourseId, sourceQuestionId])
   @@index([subArea])
@@ -1313,4 +1319,203 @@ model Notification {
 
   @@index([status])
   @@index([enrollmentId])
+}
+
+/// ============================================================================
+/// PAIEMENT (spec « Architecture paiement v3 », lot PAY-1 — socle bi-fournisseur)
+/// Règles : montants en ENTIERS d'unité mineure (jamais de flottant), un prix
+/// rédigé PAR DEVISE (aucune conversion), la commande fige montant + devise,
+/// seul un droit d'accès (Entitlement) débloque réellement le contenu.
+/// ============================================================================
+
+/// Devises encaissables — prix rédigés par devise (XOF/XAF : 0 décimale, EUR : 2).
+enum Currency {
+  XOF
+  XAF
+  EUR
+}
+
+/// Ce qui est vendable : un cours (B2C) ou un lot de sièges (B2B).
+enum ProductType {
+  COURSE
+  SEATS
+}
+
+enum OrderStatus {
+  PENDING // intention d'achat créée, paiement attendu
+  PAID // réglée — le droit d'accès a été émis
+  FAILED // tentative(s) de paiement refusée(s)
+  CANCELLED // annulée avant règlement
+  REFUNDED // remboursée (droit révoqué)
+}
+
+/// Fournisseur porté par CHAQUE paiement — condition de la bascule bi-fournisseur
+/// (un paiement engagé sur un fournisseur se termine et se réconcilie sur lui).
+enum PaymentProviderId {
+  CINETPAY
+  FLUTTERWAVE
+  MANUAL // constat staff : virements B2B, ventes hors-ligne, dév & tests
+}
+
+enum PaymentStatus {
+  INITIATED // checkout créé chez le fournisseur (ou références de virement émises)
+  SUCCEEDED // confirmé par webhook vérifié + contre-vérification, ou constat staff
+  FAILED
+}
+
+enum EntitlementScope {
+  COURSE_ACCESS // accès à un cours (B2C)
+  SEATS // crédit de sièges à une organisation (B2B)
+}
+
+/// Origine du droit : achat réglé, offert par le Super Admin, ou hérité de la
+/// migration des accès existants à l'activation du paiement (jamais coupés).
+enum EntitlementSource {
+  PURCHASE
+  GIFT
+  LEGACY
+}
+
+enum RefundStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+model Product {
+  id        String      @id @default(cuid())
+  type      ProductType
+  title     String
+  /// Pour type COURSE : le cours vendu (un cours a au plus un produit).
+  courseId  String?     @unique
+  course    Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  /// Pour type SEATS : nombre de sièges du lot (ex. 10, 25, 50).
+  seatCount Int?
+  active    Boolean     @default(true)
+  createdAt DateTime    @default(now())
+
+  prices Price[]
+  orders Order[]
+}
+
+/// Un prix rédigé PAR DEVISE (au plus un par devise) — aucune conversion
+/// automatique : le positionnement par zone monétaire est une décision humaine.
+model Price {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  currency    Currency
+  amountMinor Int
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@unique([productId, currency])
+}
+
+/// Intention d'achat : montant et devise FIGÉS à la création (relus depuis
+/// Price côté serveur, jamais acceptés du client), acheteur = user OU org.
+model Order {
+  id          String        @id @default(cuid())
+  productId   String
+  product     Product       @relation(fields: [productId], references: [id], onDelete: Restrict)
+  buyerUserId String?
+  buyerUser   User?         @relation("OrderBuyerUser", fields: [buyerUserId], references: [id], onDelete: SetNull)
+  buyerOrgId  String?
+  buyerOrg    Organization? @relation("OrderBuyerOrg", fields: [buyerOrgId], references: [id], onDelete: SetNull)
+  quantity    Int           @default(1)
+  amountMinor Int
+  currency    Currency
+  status      OrderStatus   @default(PENDING)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  payments     Payment[]
+  entitlements Entitlement[]
+
+  @@index([buyerUserId])
+  @@index([buyerOrgId])
+  @@index([status, createdAt])
+}
+
+/// Une tentative de règlement — par agrégateur OU virement (MANUAL). Mémorise
+/// son fournisseur pour la réconciliation et la bascule.
+model Payment {
+  id             String            @id @default(cuid())
+  orderId        String
+  order          Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  provider       PaymentProviderId
+  /// Référence chez le fournisseur (transaction_id CinetPay, tx_ref Flutterwave,
+  /// référence bancaire du virement pour MANUAL).
+  providerRef    String?
+  method         String? // momo | carte | virement | …
+  amountMinor    Int
+  currency       Currency
+  status         PaymentStatus     @default(INITIATED)
+  /// Clé anti double-débit : un checkout réutilise le paiement INITIATED existant.
+  idempotencyKey String            @unique @default(cuid())
+  meta           Json?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  refunds Refund[]
+
+  @@index([provider, providerRef])
+  @@index([orderId])
+}
+
+/// Journal des webhooks reçus (vérité, idempotence, audit) : un même événement
+/// fournisseur n'est traité qu'une fois (@@unique provider+eventId).
+model PaymentEvent {
+  id          String            @id @default(cuid())
+  provider    PaymentProviderId
+  eventId     String
+  signatureOk Boolean
+  rawPayload  Json
+  paymentId   String?
+  processedAt DateTime?
+  receivedAt  DateTime          @default(now())
+
+  @@unique([provider, eventId])
+  @@index([receivedAt])
+}
+
+/// LE droit d'accès — seul objet qui débloque un cours ou crédite des sièges.
+/// Distinct de l'inscription : acheter n'est pas suivre. Révocable (remboursement).
+model Entitlement {
+  id           String            @id @default(cuid())
+  holderUserId String?
+  holderUser   User?             @relation("EntitlementHolderUser", fields: [holderUserId], references: [id], onDelete: Cascade)
+  holderOrgId  String?
+  holderOrg    Organization?     @relation("EntitlementHolderOrg", fields: [holderOrgId], references: [id], onDelete: Cascade)
+  scope        EntitlementScope
+  courseId     String?
+  course       Course?           @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  /// Pour scope SEATS : nombre de sièges crédités par ce droit.
+  seats        Int?
+  source       EntitlementSource
+  orderId      String?
+  order        Order?            @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  /// Auteur d'un GIFT (Super Admin) — id simple, la traçabilité fine est dans l'audit.
+  grantedById  String?
+  grantedAt    DateTime          @default(now())
+  revokedAt    DateTime?
+  revokedById  String?
+
+  @@index([holderUserId, scope])
+  @@index([holderOrgId, scope])
+  @@index([courseId])
+}
+
+/// Remboursement — création réservée au staff ; confirmé → révoque le droit.
+model Refund {
+  id          String       @id @default(cuid())
+  paymentId   String
+  payment     Payment      @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  amountMinor Int
+  reason      String?
+  status      RefundStatus @default(PENDING)
+  actorId     String
+  createdAt   DateTime     @default(now())
+
+  @@index([paymentId])
 }
