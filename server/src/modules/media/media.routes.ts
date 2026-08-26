@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, assertAssetAccessible, assetIdFromKey, attachCaptions, createFolder, createFromUpload, deleteFolder, deleteMedia, generateCaptions, getAsset, listFolders, listMedia, playbackManifest, registerExternal, removeCaptions, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, attachCaptions, captionsStatus, createFolder, createFromUpload, deleteFolder, deleteMedia, generateCaptions, getAsset, listFolders, listMedia, playbackManifest, registerExternal, removeCaptions, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { SubtitleError } from "../../lib/ai/subtitles.js";
 import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
@@ -154,9 +154,19 @@ export async function mediaRoutes(app: FastifyInstance) {
   });
 
   // Sous-titres — génération « une fois pour toutes » (Whisper FR + traduction EN).
+  // OpenAI : synchrone (200 avec les pistes). Whisper local : arrière-plan
+  // (202 { started: true }), suivi via GET /media/:id/captions/status.
   app.post("/media/:id/captions/generate", { preHandler: guard("media:manage") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    try { return { data: await generateCaptions(id) }; } catch (err) { return handle(reply, err); }
+    try {
+      const data = await generateCaptions(id);
+      return reply.status("started" in data ? 202 : 200).send({ data });
+    } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/media/:id/captions/status", { preHandler: guard("media:manage") }, async (req) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    return { data: captionsStatus(id) };
   });
 
   app.delete("/media/:id/captions/:language", { preHandler: guard("media:manage") }, async (req, reply) => {

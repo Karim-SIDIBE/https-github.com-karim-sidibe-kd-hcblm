@@ -1,5 +1,22 @@
 # K-HCBLM API — production image (monorepo-aware).
 # Build context = repo ROOT:  docker build -f deploy/Dockerfile -t kd-api .
+
+# --- Stage 1: whisper.cpp — local, free speech-to-text for subtitle generation.
+# Compiled once at image build (cached layer); the quantized small model gives
+# decent French at ~190 MB / ~600 MB inference RAM on CPU. No OpenAI account
+# needed — OPENAI_API_KEY, when set, still takes precedence (faster).
+FROM node:22-slim AS whisper
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git cmake g++ make ca-certificates wget \
+ && rm -rf /var/lib/apt/lists/*
+RUN git clone --depth 1 --branch v1.7.4 https://github.com/ggerganov/whisper.cpp /tmp/whisper.cpp \
+ && cmake -S /tmp/whisper.cpp -B /tmp/whisper.cpp/build \
+      -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF -DGGML_OPENMP=OFF \
+ && cmake --build /tmp/whisper.cpp/build -j"$(nproc)" --target whisper-cli
+RUN wget -q -O /tmp/ggml-small-q5_1.bin \
+      https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small-q5_1.bin
+
+# --- Stage 2: the API itself.
 FROM node:22-slim
 
 WORKDIR /app
@@ -10,6 +27,14 @@ WORKDIR /app
 RUN apt-get update \
  && apt-get install -y --no-install-recommends openssl ca-certificates wget ffmpeg gosu \
  && rm -rf /var/lib/apt/lists/*
+
+# Local subtitle transcription (whisper.cpp) — binary + model baked in, wired up
+# via env so it works out of the box; unset these to disable, or set
+# OPENAI_API_KEY to use the (faster) hosted Whisper API instead.
+COPY --from=whisper /tmp/whisper.cpp/build/bin/whisper-cli /usr/local/bin/whisper-cli
+COPY --from=whisper /tmp/ggml-small-q5_1.bin /opt/whisper/ggml-small-q5_1.bin
+ENV WHISPER_CPP_BIN=/usr/local/bin/whisper-cli \
+    WHISPER_CPP_MODEL=/opt/whisper/ggml-small-q5_1.bin
 
 # 1) Install dependencies using the workspace manifests (better layer caching).
 COPY package.json package-lock.json ./
