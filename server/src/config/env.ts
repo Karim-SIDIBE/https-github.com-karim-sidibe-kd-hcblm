@@ -79,6 +79,19 @@ const EnvSchema = z.object({
 
   // --- public base + verifiable credentials (Open Badges 2.0 / 3.0) ---
   PUBLIC_BASE_URL: z.string().url().default("http://localhost:4000"),
+
+  /// --- paiement (spec « Architecture paiement v3 »). Tout est optionnel : sans
+  /// clés, le fournisseur « manual » (constat staff) couvre virements et tests.
+  /// Les URL de base sont surchargables pour la sandbox et les tests E2E.
+  CINETPAY_API_KEY: z.string().optional(),
+  CINETPAY_SITE_ID: z.string().optional(),
+  /// SECRET KEY du back-office CinetPay — vérifie l'en-tête `x-token` (HMAC) des notifications.
+  CINETPAY_SECRET_KEY: z.string().optional(),
+  CINETPAY_BASE_URL: z.string().url().default("https://api-checkout.cinetpay.com"),
+  FLUTTERWAVE_SECRET_KEY: z.string().optional(),
+  /// Valeur secrète de l'en-tête `verif-hash` (dashboard Flutterwave → Webhooks).
+  FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
+  FLUTTERWAVE_BASE_URL: z.string().url().default("https://api.flutterwave.com"),
   CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES SOFT SKILLS"),
   CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
 
