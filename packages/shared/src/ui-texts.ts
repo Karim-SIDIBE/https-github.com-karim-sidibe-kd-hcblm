@@ -238,6 +238,7 @@ const fr: UiDict = {
   "rev.goodAnswer": " — bonne réponse", "rev.yourAnswer": " — votre réponse", "rev.why": "Pourquoi", "rev.resume": "Reprendre le parcours →",
   // video player
   "vp.speed": "Vitesse", "vp.speedAria": "Vitesse de lecture", "vp.quality": "Qualité", "vp.auto": "Auto",
+  "vp.subtitles": "Sous-titres", "vp.stOff": "Désactivés",
   "vp.source": "Source (max)", "vp.720p": "720p (HD)", "vp.480p": "480p", "vp.240p": "240p — éco data", "vp.audio": "Audio seul",
   // course item labels
   "ci.onboarding": "Introduction & point de départ", "ci.case": "Étude de cas", "ci.scenarios": "Mises en situation guidées",
@@ -456,6 +457,7 @@ const en: UiDict = {
   "rev.intro": "The questions you missed in the diagnostic. Re-read the correct answer and the explanation to reinforce your learning (ungraded).",
   "rev.goodAnswer": " — correct answer", "rev.yourAnswer": " — your answer", "rev.why": "Why", "rev.resume": "Resume the course →",
   "vp.speed": "Speed", "vp.speedAria": "Playback speed", "vp.quality": "Quality", "vp.auto": "Auto",
+  "vp.subtitles": "Subtitles", "vp.stOff": "Off",
   "vp.source": "Source (max)", "vp.720p": "720p (HD)", "vp.480p": "480p", "vp.240p": "240p — data saver", "vp.audio": "Audio only",
   "ci.onboarding": "Introduction & starting point", "ci.case": "Case study", "ci.scenarios": "Guided scenarios",
   "ci.self": "Self-assessment", "ci.plan": "30-day action plan", "ci.journal": "Logbook D+{day}",

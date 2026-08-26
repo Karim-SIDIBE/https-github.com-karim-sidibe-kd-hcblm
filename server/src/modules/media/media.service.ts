@@ -7,6 +7,7 @@ import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
 import { env } from "../../config/env.js";
 import { processVideo, ffmpegAvailable } from "../../lib/media/transcode.js";
+import { srtToVtt, transcribeToVtt, transcriptionAvailable, translateVttFrToEn } from "../../lib/ai/subtitles.js";
 import { signMediaToken } from "../../lib/auth/jwt.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { computeProgress } from "../../domain/engine/progress.js";
@@ -278,6 +279,80 @@ export async function getAsset(id: string) {
   const a = await prisma.mediaAsset.findUnique({ where: { id }, include: { renditions: true } });
   if (!a) throw new MediaError(404, "not_found", "Média introuvable");
   return a;
+}
+
+// --- sous-titres (pistes CAPTIONS d'un média vidéo) --------------------------
+
+const CAPTION_LABELS: Record<string, string> = { fr: "Français", en: "English" };
+
+/** Attache (ou remplace) UNE piste de sous-titres à un média vidéo. Le fichier
+ *  est stocké une fois pour toutes puis servi statiquement — l'import manuel
+ *  d'un .vtt/.srt corrigé passe par ici, comme la génération. */
+export async function attachCaptions(assetId: string, params: { language: string; content: string; format?: "vtt" | "srt"; label?: string }) {
+  const asset = await getAsset(assetId);
+  if (asset.kind !== "VIDEO") throw new MediaError(422, "not_a_video", "Les sous-titres s'attachent à un média vidéo");
+  const language = params.language.toLowerCase();
+  if (!/^[a-z]{2}$/.test(language)) throw new MediaError(422, "bad_language", "Code langue attendu sur 2 lettres (ex. fr, en)");
+  const vtt = params.format === "srt" ? srtToVtt(params.content) : params.content.trim().startsWith("WEBVTT") ? params.content : srtToVtt(params.content);
+  if (!vtt.includes("-->")) throw new MediaError(422, "bad_captions", "Le fichier ne contient aucune cue de sous-titre (VTT/SRT attendu)");
+
+  const key = `media/${assetId}/captions-${language}.vtt`;
+  const { sizeBytes } = await storage.put(key, Buffer.from(vtt, "utf8"));
+  // Remplacement idempotent : une seule piste par langue. Le label est le
+  // libellé humain montré dans le sélecteur du lecteur (« Français », « English »).
+  await prisma.mediaRendition.deleteMany({ where: { assetId, kind: "CAPTIONS", language } });
+  return prisma.mediaRendition.create({
+    data: {
+      assetId, label: params.label ?? CAPTION_LABELS[language] ?? language.toUpperCase(),
+      kind: "CAPTIONS", mime: "text/vtt", storageKey: key, language,
+      sizeBytes, downloadable: true, available: true,
+    },
+  });
+}
+
+export async function removeCaptions(assetId: string, language: string) {
+  const rows = await prisma.mediaRendition.findMany({ where: { assetId, kind: "CAPTIONS", language: language.toLowerCase() } });
+  if (!rows.length) throw new MediaError(404, "not_found", "Aucune piste de sous-titres dans cette langue");
+  for (const r of rows) if (r.storageKey) await storage.remove(r.storageKey).catch(() => {});
+  await prisma.mediaRendition.deleteMany({ where: { id: { in: rows.map((r) => r.id) } } });
+}
+
+/** Génération « une fois pour toutes » : transcription Whisper (FR) puis
+ *  traduction EN, stockées comme pistes du média. Sans clé de transcription →
+ *  409 explicite ; sans fournisseur de traduction → la piste FR est quand même
+ *  produite et l'erreur EN est rapportée (l'import manuel reste possible). */
+export async function generateCaptions(assetId: string) {
+  const asset = await getAsset(assetId);
+  if (asset.kind !== "VIDEO") throw new MediaError(422, "not_a_video", "La génération de sous-titres s'applique à un média vidéo");
+  if (!transcriptionAvailable()) {
+    throw new MediaError(409, "transcription_unavailable",
+      "Transcription indisponible : configurez OPENAI_API_KEY sur le serveur (Whisper). L'import manuel de fichiers .vtt/.srt reste possible.");
+  }
+  // Entrée audio : la rendition « audio » (64 kbps, légère) si le transcodage
+  // l'a produite, sinon le fichier source.
+  const audio = asset.renditions.find((r) => r.label === "audio" && r.available && r.storageKey)
+    ?? asset.renditions.find((r) => r.label === "source" && r.storageKey);
+  if (!audio?.storageKey) throw new MediaError(422, "no_local_media", "Aucun fichier local à transcrire (média externe ?) — importez un .vtt/.srt manuellement");
+  const MAX = 24 * 1024 * 1024; // limite Whisper ~25 Mo
+  if ((await storage.sizeOf(audio.storageKey)) > MAX) {
+    throw new MediaError(422, "media_too_large", "Fichier trop volumineux pour la transcription (25 Mo max) — attendez la rendition audio du transcodage ou importez un .vtt");
+  }
+  const chunks: Buffer[] = [];
+  for await (const c of storage.read(audio.storageKey)) chunks.push(c as Buffer);
+  const media = Buffer.concat(chunks);
+
+  const vttFr = await transcribeToVtt(media, audio.label === "audio" ? "audio.m4a" : (asset.originalFilename ?? "source.mp4"), "fr");
+  const fr = await attachCaptions(assetId, { language: "fr", content: vttFr });
+
+  let en: Awaited<ReturnType<typeof attachCaptions>> | null = null;
+  let enError: string | null = null;
+  try {
+    const vttEn = await translateVttFrToEn(vttFr);
+    en = await attachCaptions(assetId, { language: "en", content: vttEn });
+  } catch (e) {
+    enError = e instanceof Error ? e.message : "Traduction échouée";
+  }
+  return { fr: { label: fr.label, language: fr.language }, en: en ? { label: en.label, language: en.language } : null, enError };
 }
 
 /** Adaptive manifest: available renditions lowest-bitrate first + a recommended

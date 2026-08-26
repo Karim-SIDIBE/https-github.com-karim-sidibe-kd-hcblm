@@ -18,7 +18,7 @@ type Bundle = { content: { blocks: any[] }; mediaAssets?: { mediaId: string; ren
 export function SessionScreen({ eid, block, item }: { eid: string; block: number; item: string }) {
   const t = useT();
   const [bundle, setBundle] = useState<Bundle | null>(null);
-  const [source, setSource] = useState<{ url: string | null; captionsUrl: string | null; quality: string | null } | null>(null);
+  const [source, setSource] = useState<import("../lib/media").VideoSource | null>(null);
   const [ladder, setLadder] = useState<Rendition[]>([]);
   const [startAt, setStartAt] = useState(0);
   const [phase, setPhase] = useState<"video" | "exercise" | "tquiz">("video");
@@ -130,7 +130,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
             ) : null;
           })()}
           <VideoPlayer
-            src={source.url} captionsUrl={source.captionsUrl} title={session.title} renditions={ladder}
+            src={source.url} captionsUrl={source.captionsUrl} captionTracks={source.captionTracks} title={session.title} renditions={ladder}
             startAt={startAt} durationSec={session.video?.durationSec} quality={source.quality}
             watermark={(() => { const me = getIdentity(); return me ? `${me.name} · ${me.email}` : null; })()}
             onHeartbeat={heartbeat}
