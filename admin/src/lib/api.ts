@@ -174,7 +174,9 @@ export type InviteResult = { tempPassword: string; delivered: boolean; channels:
 export type UserRow = { id: string; name: string; email: string; role: string; verified: boolean; disabled: boolean; locked: boolean; anonymized: boolean; deletionDaysLeft: number | null; enrollments: number; createdAt: string };
 export type MediaAsset = { id: string; kind: string; filename: string | null; mime: string; sizeBytes: number | null; durationSec: number | null; status: string; error?: string | null; folderId: string | null; renditions: string[]; createdAt: string };
 export type MediaFolder = { id: string; name: string; assetCount: number; createdAt: string };
-export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[] };
+export type CaptionTrack = { label: string; language?: string | null; url: string };
+export type MediaPlayback = { assetId: string; status: string; durationSec: number | null; renditions: { label: string; kind: string; url: string; bitrateKbps?: number | null }[]; captions?: CaptionTrack[] };
+export type CaptionsGenerated = { fr: { label: string; language: string | null }; en: { label: string; language: string | null } | null; enError: string | null };
 export type Seats = { seats: number; used: number; available: number };
 export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
 export type BankQuestion = { id: string; question: any; subArea: string; level: string; status: string; origin: string; note: string; sourceCourseId: string | null; createdAt: string };
@@ -391,6 +393,10 @@ export const api = {
   deleteMediaFolder: (id: string) => req<{ id: string }>("DELETE", `/media/folders/${id}`),
   updateMedia: (id: string, patch: { filename?: string; folderId?: string | null }) => req<MediaAsset>("PATCH", `/media/${id}`, patch),
   deleteMedia: (id: string) => req<{ id: string; removedObjects: number }>("DELETE", `/media/${id}`),
+  // Sous-titres : import manuel (.vtt/.srt en texte), génération IA, suppression.
+  attachCaptions: (id: string, body: { language: string; content: string; format?: "vtt" | "srt"; label?: string }) => req<{ id: string }>("POST", `/media/${id}/captions`, body),
+  generateCaptions: (id: string) => req<CaptionsGenerated>("POST", `/media/${id}/captions/generate`),
+  deleteCaptions: (id: string, language: string) => req<void>("DELETE", `/media/${id}/captions/${language}`),
   async mediaPlayback(id: string): Promise<MediaPlayback> {
     const data = await req<any>("GET", `/media/${id}/playback`);
     // Absolutise the API-relative + signed URLs so a native <video> can stream them.

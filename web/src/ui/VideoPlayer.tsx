@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 
+import type { CaptionTrack } from "../lib/media";
 import { useT } from "../lib/i18n";
 
 const SPEEDS = [0.75, 1, 1.25, 1.5];
-const CAP_KEY = "klms_captions"; // "on" | "off" — default on for first-time viewers
+// "on" (1re piste) | "off" | code langue ("fr"/"en") — mémorisé par apprenant.
+const CAP_KEY = "klms_captions";
 const QUAL_KEY = "klms_video_quality"; // "auto" | a rendition label — sticky per learner
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 // Rendition label → i18n key for the quality picker (low-bandwidth choices explicit).
@@ -17,10 +19,13 @@ const QKEY: Record<string, string> = { source: "vp.source", "720p": "vp.720p", "
  * (play button + quality/ST/1× chips + scrub) so the session flow still works.
  */
 export function VideoPlayer({
-  src, captionsUrl, title, startAt = 0, durationSec, quality, watermark, onHeartbeat, onEnded, renditions,
+  src, captionsUrl, captionTracks, title, startAt = 0, durationSec, quality, watermark, onHeartbeat, onEnded, renditions,
 }: {
   src: string | null;
   captionsUrl: string | null;
+  /** Toutes les pistes de sous-titres du média (ex. Français + English) —
+   *  quand absent, captionsUrl sert de piste FR unique (rétro-compatible). */
+  captionTracks?: CaptionTrack[];
   title: string;
   startAt?: number;
   durationSec?: number;
@@ -38,7 +43,12 @@ export function VideoPlayer({
   const ref = useRef<HTMLVideoElement>(null);
   const lastBeat = useRef(0);
   const [speed, setSpeed] = useState(1);
-  const [captions, setCaptions] = useState(() => (localStorage.getItem(CAP_KEY) ?? "on") === "on");
+  // Pistes réelles : liste multilingue si fournie, sinon l'URL unique héritée.
+  const tracks: CaptionTrack[] = (captionTracks?.length ? captionTracks : captionsUrl ? [{ label: "Français", language: "fr", url: captionsUrl }] : []).filter((c) => c.url);
+  const [capSel, setCapSel] = useState(() => localStorage.getItem(CAP_KEY) ?? "on");
+  const captions = capSel !== "off";
+  // Index de la piste affichée : langue choisie si présente, sinon la première.
+  const shownIndex = captions ? Math.max(0, tracks.findIndex((c) => (c.language ?? "") === capSel)) : -1;
   const [qual, setQual] = useState<string>(() => localStorage.getItem(QUAL_KEY) || "auto");
   const [wmPos, setWmPos] = useState({ top: "12%", left: "8%" });
   // Manual quality: pick the chosen rendition's URL, else the auto-resolved src.
@@ -64,13 +74,13 @@ export function VideoPlayer({
 
   useEffect(() => {
     const v = ref.current; if (!v) return;
-    const apply = () => { const t = v.textTracks?.[0]; if (t) t.mode = captions ? "showing" : "disabled"; };
+    const apply = () => { for (let i = 0; i < (v.textTracks?.length ?? 0); i++) v.textTracks[i]!.mode = i === shownIndex ? "showing" : "disabled"; };
     apply();
     v.textTracks?.addEventListener?.("addtrack", apply);
     return () => v.textTracks?.removeEventListener?.("addtrack", apply);
-  }, [captions, captionsUrl, src]);
+  }, [capSel, shownIndex, tracks.length, src]);
 
-  useEffect(() => { localStorage.setItem(CAP_KEY, captions ? "on" : "off"); }, [captions]);
+  useEffect(() => { localStorage.setItem(CAP_KEY, capSel); }, [capSel]);
   useEffect(() => { if (ref.current) ref.current.playbackRate = speed; }, [speed]);
 
   useEffect(() => {
@@ -88,7 +98,7 @@ export function VideoPlayer({
     const resume = pendingSeek.current ?? (startAt > 0 ? startAt : 0);
     if (resume > 0 && resume < (v.duration || Infinity)) v.currentTime = resume;
     if (pendingSeek.current != null) { if (wasPlaying.current) void v.play().catch(() => {}); pendingSeek.current = null; }
-    const t = v.textTracks?.[0]; if (t) t.mode = captions ? "showing" : "disabled";
+    for (let i = 0; i < (v.textTracks?.length ?? 0); i++) v.textTracks[i]!.mode = i === shownIndex ? "showing" : "disabled";
   }
   function onTime() {
     const v = ref.current!;
@@ -113,10 +123,20 @@ export function VideoPlayer({
             </select>
           </label>
         )}
-        {captionsUrl && (
-          <button className={`hf-btn hf-btn--sm ${captions ? "hf-btn--primary" : "hf-btn--outline"}`} aria-pressed={captions} onClick={() => setCaptions((c) => !c)}>
+        {tracks.length === 1 && (
+          <button className={`hf-btn hf-btn--sm ${captions ? "hf-btn--primary" : "hf-btn--outline"}`} aria-pressed={captions} onClick={() => setCapSel(captions ? "off" : "on")}>
             ST {captions ? "on" : "off"}
           </button>
+        )}
+        {tracks.length > 1 && (
+          <label className="row" style={{ gap: 6, alignItems: "center" }}>
+            <span className="meta">ST</span>
+            <select className="hf-field" style={{ width: "auto", padding: "4px 8px" }} aria-label={t("vp.subtitles")}
+              value={captions ? (tracks[shownIndex]?.language ?? "on") : "off"} onChange={(e) => setCapSel(e.target.value)}>
+              <option value="off">{t("vp.stOff")}</option>
+              {tracks.map((c, i) => <option key={i} value={c.language ?? "on"}>{c.label}</option>)}
+            </select>
+          </label>
         )}
       </div>
     </div>
@@ -152,7 +172,9 @@ export function VideoPlayer({
           onPause={() => { const v = ref.current!; onHeartbeat(v.currentTime, Number.isFinite(v.duration) ? v.duration : null); }}
           onEnded={onEnded}
         >
-          {captionsUrl && <track default kind="subtitles" srcLang="fr" label="Français" src={captionsUrl} />}
+          {tracks.map((c, i) => (
+            <track key={`${c.language ?? i}:${c.url}`} default={i === shownIndex} kind="subtitles" srcLang={c.language ?? "fr"} label={c.label} src={c.url} />
+          ))}
         </video>
         {(quality || hasChoice) && <div className="topchip">{qual === "auto" ? `${t("vp.auto")}${quality ? " " + qlabel(quality) : ""}` : qlabel(qual)}</div>}
         {watermark && (

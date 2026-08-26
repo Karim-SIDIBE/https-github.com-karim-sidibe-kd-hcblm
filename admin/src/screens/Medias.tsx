@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
-import { api, type MediaAsset, type MediaFolder, ApiError } from "../lib/api";
+import { api, type CaptionTrack, type MediaAsset, type MediaFolder, ApiError } from "../lib/api";
 import { ago } from "../lib/ui";
 import { Pager } from "../lib/widgets";
 import { modal } from "../lib/modal";
@@ -105,17 +105,48 @@ export function Medias() {
     catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
   }
 
-  const [preview, setPreview] = useState<{ asset: MediaAsset; renditions: Rend[]; sel: string } | null>(null);
+  const [preview, setPreview] = useState<{ asset: MediaAsset; renditions: Rend[]; sel: string; captions: CaptionTrack[] } | null>(null);
+  const [capBusy, setCapBusy] = useState(false);
+  const capFileRef = useRef<HTMLInputElement>(null);
+  const capLangRef = useRef<"fr" | "en">("fr");
   async function openPreview(m: MediaAsset) {
-    setNote(null); setPreview({ asset: m, renditions: [], sel: "" });
+    setNote(null); setPreview({ asset: m, renditions: [], sel: "", captions: [] });
     try {
       const pb = await api.mediaPlayback(m.id);
       const rends = (pb.renditions ?? []) as Rend[];
       // Default to the best VIDEO rendition (admins want to SEE the picture, not
       // land on audio-only because it sorts first); fall back to whatever exists.
       const def = [...rends].filter((r) => r.kind === "VIDEO").sort((a, b) => (b.bitrateKbps ?? 0) - (a.bitrateKbps ?? 0))[0] ?? rends[0];
-      setPreview({ asset: m, renditions: rends, sel: def?.label ?? "" });
-    } catch (e) { setPreview({ asset: m, renditions: [], sel: "" }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
+      setPreview({ asset: m, renditions: rends, sel: def?.label ?? "", captions: pb.captions ?? [] });
+    } catch (e) { setPreview({ asset: m, renditions: [], sel: "", captions: [] }); setNote(e instanceof Error ? e.message : "Aperçu indisponible"); }
+  }
+
+  // --- sous-titres (générés une fois pour toutes, puis servis statiquement) ---
+  async function generateCaps(m: MediaAsset) {
+    setCapBusy(true);
+    try {
+      const r = await api.generateCaptions(m.id);
+      setNote(`💬 Sous-titres générés : ${r.fr.label}${r.en ? ` + ${r.en.label}` : ""}.${r.enError ? ` ⚠️ Anglais : ${r.enError}` : ""}`);
+      openPreview(m);
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Génération impossible"}`); }
+    finally { setCapBusy(false); }
+  }
+  async function importCaps(m: MediaAsset, file: File | null) {
+    if (!file) return;
+    setCapBusy(true);
+    try {
+      const content = await file.text();
+      const format = file.name.toLowerCase().endsWith(".srt") ? "srt" as const : "vtt" as const;
+      await api.attachCaptions(m.id, { language: capLangRef.current, content, format });
+      setNote(`💬 Piste ${capLangRef.current.toUpperCase()} importée (${file.name}).`);
+      openPreview(m);
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Import impossible"}`); }
+    finally { setCapBusy(false); if (capFileRef.current) capFileRef.current.value = ""; }
+  }
+  async function removeCaps(m: MediaAsset, c: CaptionTrack) {
+    if (!c.language || !(await modal.confirm({ title: `Supprimer la piste « ${c.label} » ?`, danger: true, okLabel: "Supprimer" }))) return;
+    try { await api.deleteCaptions(m.id, c.language); setNote(`🗑️ Piste « ${c.label} » supprimée.`); openPreview(m); }
+    catch (e) { setNote(e instanceof ApiError ? e.message : "Suppression impossible"); }
   }
 
   const visible = rows ?? []; // server-filtered (folder + search) and paged
@@ -231,10 +262,36 @@ export function Medias() {
                   )}
                   {active.kind === "AUDIO"
                     ? <audio key={active.url} controls src={active.url} style={{ width: "100%" }} />
-                    : <video key={active.url} controls src={active.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }} />}
+                    : <video key={active.url} controls src={active.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }}>
+                        {preview.captions.map((c) => <track key={c.url} kind="subtitles" srcLang={c.language ?? "fr"} label={c.label} src={c.url} />)}
+                      </video>}
                 </>
               );
             })()}
+            {preview.asset.kind === "VIDEO" && (
+              <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px solid var(--border, #e3e6ec)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                  <b style={{ fontSize: 13 }}>💬 Sous-titres</b>
+                  {preview.captions.length === 0 && <span className="muted" style={{ fontSize: 12 }}>aucune piste</span>}
+                  {preview.captions.map((c) => (
+                    <span key={c.url} className="pill pill--info" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                      {c.label}
+                      <button className="btn btn--sm" style={{ padding: "0 4px", border: "none" }} title={`Supprimer la piste ${c.label}`} onClick={() => removeCaps(preview.asset, c)}>✕</button>
+                    </span>
+                  ))}
+                </div>
+                <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <button className="btn btn--sm btn--primary" disabled={capBusy} title="Transcription Whisper (FR) puis traduction (EN) — une seule fois, puis servies statiquement"
+                    onClick={() => generateCaps(preview.asset)}>{capBusy ? "Génération…" : "⚡ Générer FR + EN (IA)"}</button>
+                  <button className="btn btn--sm" disabled={capBusy} onClick={() => { capLangRef.current = "fr"; capFileRef.current?.click(); }}>⤴ Importer FR (.vtt/.srt)</button>
+                  <button className="btn btn--sm" disabled={capBusy} onClick={() => { capLangRef.current = "en"; capFileRef.current?.click(); }}>⤴ Importer EN (.vtt/.srt)</button>
+                  <input ref={capFileRef} type="file" accept=".vtt,.srt,text/vtt" hidden onChange={(e) => importCaps(preview.asset, e.target.files?.[0] ?? null)} />
+                </div>
+                <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0" }}>
+                  Générés une fois pour toutes, réutilisés par tous les apprenants (et hors ligne). Un fichier importé remplace la piste de la même langue.
+                </p>
+              </div>
+            )}
           </div>
         </div>
       )}

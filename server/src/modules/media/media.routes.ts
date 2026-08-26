@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
-import { MediaError, assertAssetAccessible, assetIdFromKey, createFolder, createFromUpload, deleteFolder, deleteMedia, getAsset, listFolders, listMedia, playbackManifest, registerExternal, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
+import { MediaError, assertAssetAccessible, assetIdFromKey, attachCaptions, createFolder, createFromUpload, deleteFolder, deleteMedia, generateCaptions, getAsset, listFolders, listMedia, playbackManifest, registerExternal, removeCaptions, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
 import { env } from "../../config/env.js";
@@ -135,6 +135,29 @@ export async function mediaRoutes(app: FastifyInstance) {
   app.delete("/media/:id", { preHandler: guard("media:manage") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     try { return reply.send({ data: await deleteMedia(id) }); } catch (err) { return handle(reply, err); }
+  });
+
+  // Sous-titres — import manuel d'une piste (.vtt/.srt en texte, une par langue).
+  app.post("/media/:id/captions", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const body = z.object({
+      language: z.string().min(2).max(2),
+      content: z.string().min(1).max(2_000_000),
+      format: z.enum(["vtt", "srt"]).optional(),
+      label: z.string().min(1).max(40).optional(),
+    }).parse(req.body);
+    try { return reply.status(201).send({ data: await attachCaptions(id, body) }); } catch (err) { return handle(reply, err); }
+  });
+
+  // Sous-titres — génération « une fois pour toutes » (Whisper FR + traduction EN).
+  app.post("/media/:id/captions/generate", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await generateCaptions(id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.delete("/media/:id/captions/:language", { preHandler: guard("media:manage") }, async (req, reply) => {
+    const { id, language } = z.object({ id: z.string(), language: z.string().min(2).max(2) }).parse(req.params);
+    try { await removeCaptions(id, language); return reply.status(204).send(); } catch (err) { return handle(reply, err); }
   });
 
   // Adaptive playback manifest (lowest-bitrate first + recommended lite + captions).
