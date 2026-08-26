@@ -122,14 +122,38 @@ export function Medias() {
   }
 
   // --- sous-titres (générés une fois pour toutes, puis servis statiquement) ---
+  const capPollRef = useRef<number | null>(null);
+  useEffect(() => () => { if (capPollRef.current) window.clearInterval(capPollRef.current); }, []);
+  const doneNote = (r?: { fr: { label: string }; en: { label: string } | null; enError: string | null }) =>
+    `💬 Sous-titres générés : ${r?.fr.label ?? "Français"}${r?.en ? ` + ${r.en.label}` : ""}.${r?.enError ? ` ⚠️ Anglais : ${r.enError}` : ""}`;
+  /// Whisper local : la génération tourne côté serveur (plusieurs minutes) —
+  /// on interroge le statut jusqu'à done/error puis on rafraîchit l'aperçu.
+  function startCapPoll(m: MediaAsset) {
+    if (capPollRef.current) window.clearInterval(capPollRef.current);
+    capPollRef.current = window.setInterval(async () => {
+      try {
+        const s = await api.captionsStatus(m.id);
+        if (s.state === "done" || s.state === "error") {
+          window.clearInterval(capPollRef.current!); capPollRef.current = null; setCapBusy(false);
+          setNote(s.state === "done" ? doneNote(s.result) : `✗ Génération échouée : ${s.error ?? "erreur inconnue"}`);
+          if (s.state === "done") openPreview(m);
+        }
+      } catch { /* réseau transitoire — on réessaie au tick suivant */ }
+    }, 8000);
+  }
   async function generateCaps(m: MediaAsset) {
     setCapBusy(true);
     try {
       const r = await api.generateCaptions(m.id);
-      setNote(`💬 Sous-titres générés : ${r.fr.label}${r.en ? ` + ${r.en.label}` : ""}.${r.enError ? ` ⚠️ Anglais : ${r.enError}` : ""}`);
+      if ("started" in r) {
+        setNote("⏳ Génération lancée en arrière-plan (Whisper local) — comptez plusieurs minutes par vidéo, les pistes s'ajouteront toutes seules.");
+        startCapPoll(m); // capBusy reste actif jusqu'à la fin
+        return;
+      }
+      setNote(doneNote(r));
       openPreview(m);
-    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Génération impossible"}`); }
-    finally { setCapBusy(false); }
+      setCapBusy(false);
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Génération impossible"}`); setCapBusy(false); }
   }
   async function importCaps(m: MediaAsset, file: File | null) {
     if (!file) return;

@@ -17,6 +17,13 @@ const EnvSchema = z.object({
   OPENAI_API_KEY: z.string().optional(),
   EMBEDDING_MODEL: z.string().optional(),
 
+  /// --- transcription locale des sous-titres (whisper.cpp). Optionnel : sans
+  /// OPENAI_API_KEY ni binaire local, la génération renvoie un 409 explicite
+  /// et l'import manuel .vtt/.srt reste la voie. L'image Docker de production
+  /// embarque le binaire + le modèle et positionne ces deux variables.
+  WHISPER_CPP_BIN: z.string().optional(),
+  WHISPER_CPP_MODEL: z.string().optional(),
+
   // --- notification delivery. Optional: defaults to console. ---
   NOTIFY_WEBHOOK_URL: z.string().url().optional(),
   /// Allowed CORS origins (comma-separated). Unset → reflect any origin (dev).

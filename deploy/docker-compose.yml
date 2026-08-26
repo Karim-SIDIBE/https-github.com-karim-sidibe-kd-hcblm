@@ -55,7 +55,10 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     restart: unless-stopped
-    mem_limit: 768m
+    # Raised from 768m for the embedded whisper.cpp subtitle transcription
+    # (~600 MB peak during a generation, on top of the Node heap). Transcription
+    # is rare (once per video) and runs in the background.
+    mem_limit: 1536m
     env_file: .env
     environment:
       # The API reaches Postgres over the compose network (service name "db").
