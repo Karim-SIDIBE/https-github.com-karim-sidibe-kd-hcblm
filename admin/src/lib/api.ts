@@ -200,6 +200,18 @@ export type IntegrationsStatus = {
 export type PayPrice = { id: string; currency: string; amountMinor: number; active: boolean; display?: string };
 export type PayProduct = { id: string; type: "COURSE" | "SEATS"; title: string; courseId: string | null; seatCount: number | null; active: boolean; prices: PayPrice[] };
 export type PayOrderRow = { id: string; status: string; quantity: number; amountMinor: number; currency: string; display: string; createdAt: string; product?: { title: string; type: string }; buyerUser?: { email: string; name: string } | null; buyerOrg?: { name: string } | null };
+export type PayRecheck = { orderId: string; status: string; results: { paymentId: string; provider: string; check: string; action: string }[] };
+export type PayStats = {
+  days: number; created: number; paid: number; pending: number; failed: number; conversionPct: number | null;
+  revenue: { currency: string; orders: number; amountMinor: number; display: string }[];
+  byProvider: { provider: string; payments: number }[];
+};
+export type PayReconciliation = {
+  staleOrders: { id: string; createdAt: string; display: string; product: string; buyer: string; provider: string | null }[];
+  succeededUnsettled: { paymentId: string; orderId: string; orderStatus: string; provider: string }[];
+  paidWithoutEntitlement: { id: string; product: string }[];
+  invalidWebhooks: { total: number; recent: { id: string; provider: string; receivedAt: string }[] };
+};
 export type PayGift = { id: string; scope: string; seats: number | null; grantedAt: string; revokedAt: string | null; holderUser?: { email: string; name: string } | null; holderOrg?: { name: string } | null; course?: { slug: string } | null };
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
@@ -328,6 +340,10 @@ export const api = {
   payRevoke: (entitlementId: string) => req<{ id: string; revoked: boolean; seatsClamped: boolean }>("DELETE", `/payments/entitlements/${entitlementId}`),
   payProviders: () => req<{ key: string; available: boolean; active: boolean }[]>("GET", "/payments/providers"),
   payOrders: (status?: string) => req<PayOrderRow[]>("GET", `/payments/orders${status ? `?status=${status}` : ""}`),
+  // --- console paiements (PAY-4) ---
+  payRecheck: (orderId: string) => req<PayRecheck>("POST", `/payments/orders/${orderId}/recheck`),
+  payStats: (days: number) => req<PayStats>("GET", `/payments/stats?days=${days}`),
+  payReconciliation: () => req<PayReconciliation>("GET", "/payments/reconciliation"),
   payMarkPaid: (orderId: string, reference: string) => req<unknown>("POST", `/payments/orders/${orderId}/mark-paid`, { reference }),
   courseReport: (courseId: string, range: { since?: string; until?: string } = {}) => {
     const qs = new URLSearchParams();

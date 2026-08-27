@@ -19,11 +19,14 @@ const KNOWN = {
   /// agrégateurs restent toujours acceptés. Défaut : « manual » (aucun compte
   /// marchand requis).
   payment_provider: z.enum(["manual", "cinetpay", "flutterwave"]),
+  /// Mentions légales imprimées en pied des reçus PDF (PAY-4) : n° contribuable,
+  /// RCCM, régime de TVA… Texte libre multi-lignes, rédigé par le Super Admin.
+  receipt_legal: z.string().max(2000),
 } as const;
 type SettingKey = keyof typeof KNOWN;
 const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
 
-const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual" };
+const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual", receipt_legal: "" };
 
 export async function getSetting<T>(key: SettingKey): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } });

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -112,6 +112,21 @@ export async function paymentRoutes(app: FastifyInstance) {
   app.delete("/payments/entitlements/:id", { preHandler: guard("entitlement:gift") }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     try { return { data: await revokeEntitlement(req.principal!, id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // --- console paiements (PAY-4) ----------------------------------------------------
+  // Override « Re-vérifier » : interroge le fournisseur (fetchStatus) et applique
+  // la vérité obtenue — le filet quand un webhook s'est perdu.
+  app.post("/payments/orders/:id/recheck", { preHandler: guard("order:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await recheckOrder(req.principal!, id) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/payments/reconciliation", { preHandler: guard("order:read") }, async () => ({ data: await paymentsReconciliation() }));
+
+  app.get("/payments/stats", { preHandler: guard("order:read") }, async (req) => {
+    const { days } = z.object({ days: z.coerce.number().int().min(1).max(365).default(30) }).parse(req.query ?? {});
+    return { data: await paymentsStats(days) };
   });
 
   // --- fournisseurs ----------------------------------------------------------------

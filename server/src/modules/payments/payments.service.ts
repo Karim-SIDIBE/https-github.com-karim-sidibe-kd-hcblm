@@ -23,6 +23,7 @@ import { receiptPdf } from "../../lib/payments/receipt.js";
 import { signOrderToken, verifyOrderToken } from "../../lib/auth/jwt.js";
 import { sendEmail } from "../../lib/notify/send.js";
 import { magicLinkFor } from "../auth/auth.service.js";
+import { getSetting } from "../settings/settings.routes.js";
 
 export class PaymentError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -416,6 +417,7 @@ export async function orderReceipt(principal: Principal, orderId: string): Promi
     method: pay?.method,
     provider: pay?.provider ?? "MANUAL",
     providerRef: pay?.providerRef,
+    legal: await getSetting<string>("receipt_legal"),
   });
 }
 
@@ -558,6 +560,100 @@ export async function guestResumeCheckout(orderId: string, token: string) {
 }
 export async function guestReceipt(orderId: string, token: string): Promise<Buffer> {
   return orderReceipt(await guestPrincipal(orderId, token), orderId);
+}
+
+// --- console paiements (PAY-4) : re-vérification, réconciliation, conversion ---
+
+/** Override staff « Re-vérifier » : interroge le fournisseur de CHAQUE paiement
+ *  engagé de la commande (fetchStatus) et applique la vérité obtenue — règle si
+ *  SUCCEEDED, échoue si FAILED, ne touche à rien sinon. C'est le filet quand un
+ *  webhook s'est perdu ; `manual` reste du ressort du constat. Audité. */
+export async function recheckOrder(principal: Principal, orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { payments: true } });
+  if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
+
+  const results: { paymentId: string; provider: string; check: string; action: string }[] = [];
+  for (const p of order.payments) {
+    const key = p.provider.toLowerCase() as ProviderKey;
+    if (key === "manual") { results.push({ paymentId: p.id, provider: key, check: "—", action: "manual_constat_requis" }); continue; }
+    if (p.status !== "INITIATED") { results.push({ paymentId: p.id, provider: key, check: "—", action: `deja_${p.status.toLowerCase()}` }); continue; }
+
+    const check = await PROVIDERS[key].fetchStatus(p.id).catch((e: unknown) => ({
+      status: "UNKNOWN" as const, raw: e instanceof Error ? e.message : String(e),
+    }));
+    let action: string;
+    if (check.status === "SUCCEEDED") {
+      const settled = await settleOrder(order.id, p.id);
+      action = settled ? "settled" : "already_settled";
+    } else if (check.status === "FAILED") {
+      await prisma.payment.update({ where: { id: p.id }, data: { status: "FAILED" } });
+      const others = await prisma.payment.count({ where: { orderId: order.id, status: { in: ["INITIATED", "SUCCEEDED"] }, NOT: { id: p.id } } });
+      if (others === 0) await prisma.order.updateMany({ where: { id: order.id, status: "PENDING" }, data: { status: "FAILED" } });
+      action = "failed";
+    } else {
+      action = check.status.toLowerCase(); // pending / unknown : rien n'est accordé
+    }
+    results.push({ paymentId: p.id, provider: key, check: check.status, action });
+  }
+
+  await audit({ actorId: principal.id, action: "payment.recheck", targetType: "Order", targetId: order.id, meta: { results } });
+  const fresh = await prisma.order.findUniqueOrThrow({ where: { id: order.id } });
+  return { orderId: order.id, status: fresh.status, results };
+}
+
+/** Réconciliation : les écarts qui méritent un œil humain. Chaque liste est
+ *  bornée — c'est un tableau de bord d'anomalies, pas un export. */
+export async function paymentsReconciliation() {
+  const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+  const [staleOrders, succeededUnsettled, paidWithoutEntitlement, invalidWebhooks, invalidCount] = await Promise.all([
+    // Commandes en attente depuis plus de 24 h — virement pas encore constaté,
+    // ou paiement agrégateur dont le webhook s'est perdu (→ « Re-vérifier »).
+    prisma.order.findMany({
+      where: { status: "PENDING", createdAt: { lt: dayAgo } },
+      include: { product: { select: { title: true } }, buyerUser: { select: { email: true } }, buyerOrg: { select: { name: true } }, payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+      orderBy: { createdAt: "asc" }, take: 50,
+    }),
+    // Paiement réussi mais commande non payée — ne devrait jamais arriver.
+    prisma.payment.findMany({ where: { status: "SUCCEEDED", order: { status: { not: "PAID" } } }, include: { order: { select: { id: true, status: true } } }, take: 50 }),
+    // Commande payée sans AUCUN droit émis — ne devrait jamais arriver
+    // (un droit révoqué reste en base : la révocation n'est pas une anomalie).
+    prisma.order.findMany({ where: { status: "PAID", entitlements: { none: {} } }, include: { product: { select: { title: true } } }, take: 50 }),
+    // Webhooks à signature invalide — tentatives de fraude ou clé mal posée.
+    prisma.paymentEvent.findMany({ where: { signatureOk: false }, orderBy: { receivedAt: "desc" }, take: 20, select: { id: true, provider: true, receivedAt: true } }),
+    prisma.paymentEvent.count({ where: { signatureOk: false } }),
+  ]);
+  return {
+    staleOrders: staleOrders.map((o) => ({
+      id: o.id, createdAt: o.createdAt, display: formatAmount(o.amountMinor, o.currency as Currency),
+      product: o.product.title, buyer: o.buyerUser?.email ?? o.buyerOrg?.name ?? "—",
+      provider: o.payments[0]?.provider.toLowerCase() ?? null,
+    })),
+    succeededUnsettled: succeededUnsettled.map((p) => ({ paymentId: p.id, orderId: p.order.id, orderStatus: p.order.status, provider: p.provider.toLowerCase() })),
+    paidWithoutEntitlement: paidWithoutEntitlement.map((o) => ({ id: o.id, product: o.product.title })),
+    invalidWebhooks: { total: invalidCount, recent: invalidWebhooks.map((e) => ({ id: e.id, provider: e.provider.toLowerCase(), receivedAt: e.receivedAt })) },
+  };
+}
+
+/** Compteur de conversion : commandes créées vs payées sur la période, revenu
+ *  par devise, règlements par fournisseur. */
+export async function paymentsStats(days: number) {
+  const since = new Date(Date.now() - days * 24 * 3600 * 1000);
+  const byStatus = await prisma.order.groupBy({ by: ["status"], where: { createdAt: { gte: since } }, _count: { _all: true } });
+  const count = (s: string) => byStatus.find((r) => r.status === s)?._count._all ?? 0;
+  const created = byStatus.reduce((n, r) => n + r._count._all, 0);
+  const paid = count("PAID");
+  const revenueRows = await prisma.order.groupBy({
+    by: ["currency"], where: { createdAt: { gte: since }, status: "PAID" }, _sum: { amountMinor: true }, _count: { _all: true },
+  });
+  const providerRows = await prisma.payment.groupBy({
+    by: ["provider"], where: { status: "SUCCEEDED", createdAt: { gte: since } }, _count: { _all: true },
+  });
+  return {
+    days, created, paid, pending: count("PENDING"), failed: count("FAILED"),
+    conversionPct: created > 0 ? Math.round((paid / created) * 1000) / 10 : null,
+    revenue: revenueRows.map((r) => ({ currency: r.currency, orders: r._count._all, amountMinor: r._sum.amountMinor ?? 0, display: formatAmount(r._sum.amountMinor ?? 0, r.currency as Currency) })),
+    byProvider: providerRows.map((r) => ({ provider: r.provider.toLowerCase(), payments: r._count._all })),
+  };
 }
 
 // --- vue d'ensemble fournisseurs -----------------------------------------------

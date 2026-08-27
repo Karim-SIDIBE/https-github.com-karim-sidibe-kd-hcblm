@@ -19,6 +19,8 @@ export type ReceiptData = {
   method?: string | null;
   provider: string;
   providerRef?: string | null;
+  /** Mentions légales configurées (réglage `receipt_legal`, PAY-4). */
+  legal?: string | null;
 };
 
 export async function receiptPdf(d: ReceiptData): Promise<Buffer> {
@@ -56,6 +58,10 @@ export async function receiptPdf(d: ReceiptData): Promise<Buffer> {
 
   doc.font("Helvetica").fontSize(9).fillColor(muted)
     .text("Reçu généré automatiquement par la plateforme K-LMS — il atteste du règlement de la commande référencée ci-dessus. Conservez-le comme justificatif.", 56, doc.y, { width: 483 });
+  if (d.legal?.trim()) {
+    doc.moveDown(0.8);
+    doc.font("Helvetica").fontSize(9).fillColor(muted).text(d.legal.trim(), 56, doc.y, { width: 483 });
+  }
 
   doc.end();
   return done;
