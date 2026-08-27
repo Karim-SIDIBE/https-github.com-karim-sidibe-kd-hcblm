@@ -376,6 +376,41 @@ export async function verifyEmail(email: string, code: string, ip?: string) {
   return { ...(await tokensFor(user)), user: { id: user.id, name: user.name, email: user.email, role: user.role } };
 }
 
+// --- lien magique (tunnel d'achat invité — spec paiement PAY-2bis) -----------
+// Un jeton opaque à usage unique, envoyé par e-mail après un paiement réussi :
+// le clic connecte l'acheteur sans mot de passe (il en choisira un plus tard
+// via « mot de passe oublié », ou jamais). La consommation vaut vérification
+// de l'e-mail (le jeton n'a pu être lu que dans la boîte du destinataire).
+
+const MAGIC_TTL_HOURS = 72;
+
+/** Émet un jeton de lien magique pour ce compte (invalide les précédents). */
+export async function magicLinkFor(userId: string): Promise<string> {
+  await invalidateOutstandingCodes(userId, "MAGIC_LINK");
+  const token = newOpaque();
+  await prisma.verificationCode.create({
+    data: { userId, purpose: "MAGIC_LINK", codeHash: sha256(token), expiresAt: new Date(Date.now() + MAGIC_TTL_HOURS * 3_600_000) },
+  });
+  return token;
+}
+
+/** Consomme un lien magique → session complète (mêmes jetons que le login). */
+export async function consumeMagicLink(token: string, ip?: string) {
+  const rec = await prisma.verificationCode.findFirst({
+    where: { purpose: "MAGIC_LINK", consumedAt: null, expiresAt: { gt: new Date() }, codeHash: sha256(token) },
+    include: { user: true },
+  });
+  if (!rec || rec.user.disabledAt || rec.user.anonymizedAt) throw new AuthError("invalid_code", "Lien invalide ou expiré");
+  await prisma.$transaction([
+    prisma.verificationCode.update({ where: { id: rec.id }, data: { consumedAt: new Date() } }),
+    // La consommation vaut vérification de l'e-mail (indispensable pour un futur login par mot de passe).
+    ...(rec.user.emailVerifiedAt ? [] : [prisma.user.update({ where: { id: rec.userId }, data: { emailVerifiedAt: new Date() } })]),
+  ]);
+  await audit({ actorId: rec.userId, action: "auth.magic.success", ip });
+  const u = rec.user;
+  return { ...(await tokensFor(u)), user: { id: u.id, name: u.name, email: u.email, role: u.role } };
+}
+
 /** Resend an OTP to an unverified account. Always returns ok (no enumeration). */
 export async function resendVerification(email: string) {
   const user = await prisma.user.findUnique({ where: { email } });

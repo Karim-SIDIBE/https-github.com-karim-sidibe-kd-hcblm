@@ -19,6 +19,10 @@ export type CatalogItem = { courseId: string; slug: string; title: string; level
 export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
 export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
 export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
+export type GuestCourseInfo = { courseId: string; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+export type GuestCheckout =
+  | { alreadyEntitled: true }
+  | ({ alreadyEntitled: false; orderId: string; orderToken: string; display: string } & CheckoutInfo);
 
 export type ConsentState = { type: string; label: string; required: boolean; currentVersion: string; granted: boolean; acceptedVersion: string | null; grantedAt: string | null };
 
@@ -189,6 +193,45 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       const res = await raw("GET", `/payments/orders/${encodeURIComponent(orderId)}/receipt.pdf`);
       if (!res.ok) throw new Error("Reçu indisponible");
       return res.blob();
+    },
+    // --- tunnel d'achat invité (PAY-2bis) : e-mail seul champ, aucune session.
+    // Le suivi/reçu passent par le jeton de commande scellé renvoyé au checkout.
+    async guestCourse(courseId: string): Promise<GuestCourseInfo> {
+      const res = await raw("GET", `/payments/guest/course/${encodeURIComponent(courseId)}`, { auth: false });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Parcours introuvable"), { code: j.error as string | undefined });
+      return j.data as GuestCourseInfo;
+    },
+    async guestCheckout(body: { courseId: string; currency: string; email: string }): Promise<GuestCheckout> {
+      const res = await raw("POST", "/payments/guest/checkout", { auth: false, body });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Achat impossible"), { code: j.error as string | undefined });
+      return j.data as GuestCheckout;
+    },
+    async guestOrder(orderId: string, t: string): Promise<PayOrder> {
+      const res = await raw("GET", `/payments/guest/orders/${encodeURIComponent(orderId)}?t=${encodeURIComponent(t)}`, { auth: false });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Commande introuvable"), { code: j.error as string | undefined });
+      return j.data as PayOrder;
+    },
+    async guestOrderCheckout(orderId: string, t: string): Promise<CheckoutInfo> {
+      const res = await raw("POST", `/payments/guest/orders/${encodeURIComponent(orderId)}/checkout`, { auth: false, body: { t } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Paiement impossible"), { code: j.error as string | undefined });
+      return j.data as CheckoutInfo;
+    },
+    async guestReceipt(orderId: string, t: string): Promise<Blob> {
+      const res = await raw("GET", `/payments/guest/orders/${encodeURIComponent(orderId)}/receipt.pdf?t=${encodeURIComponent(t)}`, { auth: false });
+      if (!res.ok) throw new Error("Reçu indisponible");
+      return res.blob();
+    },
+    /** Consomme un lien magique (e-mail post-paiement) → session complète. */
+    async magic(token: string) {
+      const res = await fetch(`${baseUrl}/auth/magic`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ token }) });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) throw Object.assign(new Error(j.message || "Lien invalide"), { code: j.error as string | undefined });
+      tokens.set({ access: j.accessToken, refresh: j.refreshToken });
+      return j.user as { id: string; name: string; email: string; role: string };
     },
     /** Register/unregister this device's push token (native app). Best-effort. */
     async registerDevice(token: string, platform: string): Promise<void> {

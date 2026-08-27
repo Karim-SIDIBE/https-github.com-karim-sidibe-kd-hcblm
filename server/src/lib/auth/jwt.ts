@@ -98,3 +98,36 @@ export async function verifyMediaToken(token: string): Promise<string> {
   if (payload.media !== true || !payload.sub) throw new Error("invalid media token");
   return payload.sub;
 }
+
+// --- guest order token ---------------------------------------------------------
+// Tunnel d'achat invité (spec paiement, PAY-2bis) : l'acheteur sans compte suit
+// sa commande (statut, reprise du checkout, reçu) via ce jeton scellé sur UNE
+// commande. Audience dédiée → inutilisable comme jeton d'accès. TTL généreux :
+// un virement B2C peut prendre plusieurs jours.
+const ORDER_AUDIENCE = `${env.AUTH_AUDIENCE}:order`;
+const ORDER_TTL = "14d";
+
+export async function signOrderToken(orderId: string): Promise<string> {
+  const { privateKey, kid } = await getKeys();
+  return new SignJWT({ order: true })
+    .setProtectedHeader({ alg: JWT_ALG, kid, typ: "JWT" })
+    .setSubject(orderId)
+    .setIssuer(env.AUTH_ISSUER)
+    .setAudience(ORDER_AUDIENCE)
+    .setIssuedAt()
+    .setExpirationTime(ORDER_TTL)
+    .sign(privateKey);
+}
+
+/** Verify an order token → the order id it grants. Throws if invalid/expired. */
+export async function verifyOrderToken(token: string): Promise<string> {
+  const { verifyKey } = await getKeys();
+  const { payload } = await jwtVerify(token, verifyKey, {
+    issuer: env.AUTH_ISSUER,
+    audience: ORDER_AUDIENCE,
+    algorithms: [JWT_ALG],
+    clockTolerance: 5,
+  });
+  if (payload.order !== true || !payload.sub) throw new Error("invalid order token");
+  return payload.sub;
+}

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
-import { AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin, twoFactorStatus, listSessions, revokeSession, revokeAllSessions } from "./auth.service.js";
+import { consumeMagicLink, AuthError, login, logout, refresh, registerLearner, verifyEmail, resendVerification, forgotPassword, resetPassword, setupTotp, enableTotp, disableTotp, verifyTwoFactorLogin, twoFactorStatus, listSessions, revokeSession, revokeAllSessions } from "./auth.service.js";
 import { publicJwks } from "../../lib/auth/keys.js";
 import { authenticate } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
@@ -27,6 +27,13 @@ export async function authRoutes(app: FastifyInstance) {
 
   // B2C self-registration → creates an unverified LEARNER + sends an OTP.
   // `website` is a honeypot field: real users leave it empty; bots fill it.
+  // Lien magique (tunnel d'achat invité) : consomme le jeton reçu par e-mail
+  // après paiement → session complète, e-mail marqué vérifié.
+  app.post("/auth/magic", authLimit, async (req, reply) => {
+    const { token } = z.object({ token: z.string().min(20).max(200) }).parse(req.body);
+    try { return await consumeMagicLink(token, req.ip); } catch (err) { return mapErr(reply, err); }
+  });
+
   app.post("/auth/register", authLimit, async (req, reply) => {
     const body = z.object({
       name: z.string().trim().min(1),

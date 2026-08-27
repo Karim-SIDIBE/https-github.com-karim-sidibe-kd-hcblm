@@ -20,6 +20,9 @@ import { formatAmount, isCurrency, toAmountMinor, type Currency } from "../../do
 import { ProviderError, type ProviderKey } from "../../lib/payments/provider.js";
 import { PROVIDERS, PROVIDER_ENUM, getActiveProvider } from "../../lib/payments/registry.js";
 import { receiptPdf } from "../../lib/payments/receipt.js";
+import { signOrderToken, verifyOrderToken } from "../../lib/auth/jwt.js";
+import { sendEmail } from "../../lib/notify/send.js";
+import { magicLinkFor } from "../auth/auth.service.js";
 
 export class PaymentError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -176,7 +179,7 @@ export async function startCheckout(principal: Principal, orderId: string) {
 /** Transition PENDING → PAID + émission du droit d'accès, atomique et
  *  idempotente (la garde updateMany ne laisse passer qu'un seul règlement). */
 async function settleOrder(orderId: string, paymentId: string): Promise<boolean> {
-  return prisma.$transaction(async (tx) => {
+  const settled = await prisma.$transaction(async (tx) => {
     const guarded = await tx.order.updateMany({ where: { id: orderId, status: "PENDING" }, data: { status: "PAID" } });
     if (guarded.count === 0) return false; // déjà réglée (rejeu) — rien à refaire
     const order = await tx.order.findUniqueOrThrow({ where: { id: orderId }, include: { product: true } });
@@ -199,6 +202,38 @@ async function settleOrder(orderId: string, paymentId: string): Promise<boolean>
     await tx.payment.update({ where: { id: paymentId }, data: { status: "SUCCEEDED" } });
     return true;
   });
+  // « E-mail de reçu et de connexion, envoyé dans la minute » (tunnel invité) —
+  // hors transaction, sans jamais bloquer le règlement.
+  if (settled) void notifyOrderPaid(orderId);
+  return settled;
+}
+
+/** E-mail post-paiement : confirmation + lien magique de connexion pour les
+ *  comptes créés au checkout invité (sans mot de passe). Meilleur-effort. */
+async function notifyOrderPaid(orderId: string) {
+  try {
+    const order = await prisma.order.findUnique({ where: { id: orderId }, include: { product: true, buyerUser: true } });
+    const user = order?.buyerUser;
+    if (!order || !user?.email) return;
+    const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
+    const connect = user.passwordHash
+      ? `Retrouvez votre parcours : ${appUrl}`
+      : `Connectez-vous en un clic (lien valable 72 h) : ${appUrl}/#/magic/${await magicLinkFor(user.id)}\n(Vous pourrez définir un mot de passe plus tard via « Mot de passe oublié » — ou continuer par lien.)`;
+    const body = [
+      `Bonjour ${user.name},`, "",
+      "Votre paiement est confirmé — merci !",
+      `• ${order.product.title}${order.quantity > 1 ? ` × ${order.quantity}` : ""}`,
+      `• Montant réglé : ${formatAmount(order.amountMinor, order.currency as Currency)}`,
+      `• Référence de commande : ${order.id}`, "",
+      connect, "",
+      "Votre reçu PDF est disponible depuis la page de suivi de votre commande.",
+      `— ${env.BRAND_NAME}`,
+    ].join("\n");
+    await sendEmail(user.email, `Votre accès — ${order.product.title}`, body);
+    await audit({ action: "payment.email.sent", targetType: "Order", targetId: order.id, meta: { to: user.email, magicLink: !user.passwordHash } });
+  } catch (e) {
+    console.warn(`[payments] e-mail post-paiement ${orderId} — échec : ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 /** Constat staff d'un règlement `manual` (virement reçu, vente hors-ligne) —
@@ -421,6 +456,80 @@ export async function listGifts() {
     orderBy: { grantedAt: "desc" }, take: 100,
   });
   return rows;
+}
+
+// --- tunnel d'achat invité (PAY-2bis) : e-mail seul champ ----------------------
+
+/** Fiche publique d'un cours payant (page d'achat sans compte). */
+export async function guestCourseInfo(courseId: string) {
+  const paywall = await coursePaywall(courseId);
+  const version = await prisma.courseVersion.findFirst({
+    where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { title: true, level: true },
+  });
+  if (!version) throw new PaymentError(404, "course_not_found", "Parcours introuvable");
+  return { courseId, title: version.title, level: version.level, ...paywall };
+}
+
+const nameFromEmail = (email: string) => {
+  const local = email.split("@")[0]!.replace(/[._-]+/g, " ").trim();
+  return local.replace(/\b\p{L}/gu, (c) => c.toUpperCase()) || email;
+};
+
+/** Checkout invité : e-mail SEUL champ. Le compte est trouvé ou créé (sans mot
+ *  de passe — il sera connecté par lien magique après paiement), la commande
+ *  suit le circuit normal, et un jeton scellé permet le suivi sans session.
+ *  Le numéro mobile n'est jamais demandé ici : il est saisi sur la page de
+ *  paiement de l'agrégateur (Mobile Money), par l'agrégateur. */
+export async function guestCheckout(input: { courseId: string; currency: string; email: string }, ip?: string) {
+  const paywall = await coursePaywall(input.courseId);
+  if (!paywall.paid || !paywall.product) {
+    throw new PaymentError(409, "course_free", "Ce parcours est en accès libre — créez simplement un compte pour vous y inscrire");
+  }
+  const email = input.email.trim().toLowerCase();
+  const user = await prisma.user.findUnique({ where: { email } })
+    ?? await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
+
+  if (await hasCourseEntitlement(user.id, input.courseId)) {
+    // Déjà titulaire : pas de double vente — on (re)envoie un lien de connexion.
+    if (!user.passwordHash) {
+      const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
+      await sendEmail(user.email, "Votre accès à votre parcours",
+        `Bonjour ${user.name},\n\nVous avez déjà accès à ce parcours. Connectez-vous en un clic (lien valable 72 h) : ${appUrl}/#/magic/${await magicLinkFor(user.id)}\n— ${env.BRAND_NAME}`);
+    }
+    await audit({ actorId: user.id, action: "payment.guest.already_entitled", targetType: "Course", targetId: input.courseId, ip });
+    return { alreadyEntitled: true as const };
+  }
+
+  const principal: Principal = { id: user.id, role: user.role };
+  const { order } = await createOrder(principal, { productId: paywall.product.id, currency: input.currency });
+  const checkout = await startCheckout(principal, order.id);
+  await audit({ actorId: user.id, action: "payment.guest.checkout", targetType: "Order", targetId: order.id, ip, meta: { email, currency: input.currency } });
+  return {
+    alreadyEntitled: false as const,
+    orderId: order.id,
+    orderToken: await signOrderToken(order.id),
+    display: formatAmount(order.amountMinor, order.currency as Currency),
+    ...checkout,
+  };
+}
+
+/** Vérifie le jeton de commande invité → l'acheteur (Principal) et la commande. */
+async function guestPrincipal(orderId: string, token: string): Promise<Principal> {
+  const granted = await verifyOrderToken(token).catch(() => null);
+  if (!granted || granted !== orderId) throw new PaymentError(401, "invalid_order_token", "Jeton de commande invalide ou expiré");
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { buyerUser: true } });
+  if (!order?.buyerUser) throw new PaymentError(404, "order_not_found", "Commande introuvable");
+  return { id: order.buyerUser.id, role: order.buyerUser.role };
+}
+
+export async function guestGetOrder(orderId: string, token: string) {
+  return getOrder(await guestPrincipal(orderId, token), orderId);
+}
+export async function guestResumeCheckout(orderId: string, token: string) {
+  return startCheckout(await guestPrincipal(orderId, token), orderId);
+}
+export async function guestReceipt(orderId: string, token: string): Promise<Buffer> {
+  return orderReceipt(await guestPrincipal(orderId, token), orderId);
 }
 
 // --- vue d'ensemble fournisseurs -----------------------------------------------

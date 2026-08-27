@@ -1,4 +1,4 @@
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { api, engine, isLoggedIn, logout } from "./lib/app";
 import { onBadges, startAutoSync, type SyncState } from "./lib/autosync";
 import { markBadgesSeen, unseenBadges, type BadgeSnapshot } from "./lib/cache";
@@ -27,6 +27,7 @@ const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Acco
 const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Revision })));
 const Purchase = lazy(() => import("./ui/Purchase").then((m) => ({ default: m.Purchase })));
 const OrderStatus = lazy(() => import("./ui/OrderStatus").then((m) => ({ default: m.OrderStatus })));
+const Magic = lazy(() => import("./ui/Magic").then((m) => ({ default: m.Magic })));
 
 /** The eid of a course-scoped route (null on the enrolments list). */
 function eidOf(route: Route): string | null {
@@ -151,6 +152,22 @@ export function App() {
       try { const d = await api.progress(eid); return d?.progress ?? null; } catch { return null; }
     });
   }, [authed]);
+
+  // Écrans publics (PAY-2bis) : le tunnel d'achat invité, le suivi de commande
+  // et le lien magique fonctionnent SANS session — gabarit minimal (marque +
+  // langue), pas de navigation de cours.
+  const publicShell = (content: ReactNode) => (
+    <div className="shell">
+      <div className="main">
+        <div className="appbar appbar--standalone"><Brand /><div className="tools"><LanguageSwitcher /></div></div>
+        <main className="screen"><Suspense fallback={<div className="skeleton card" />}>{content}</Suspense></main>
+      </div>
+    </div>
+  );
+  // Le lien magique se consomme même si une session existe déjà : c'est un
+  // lien de CONNEXION (il installe la session du destinataire de l'e-mail).
+  if (route.name === "magic") return publicShell(<Magic token={route.token} onLogin={() => setAuthed(true)} />);
+  if (!authed && (route.name === "purchase" || route.name === "order")) return publicShell(<Screen route={route} />);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 
