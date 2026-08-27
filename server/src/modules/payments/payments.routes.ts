@@ -7,8 +7,9 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
+import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -109,6 +110,43 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   // --- fournisseurs ----------------------------------------------------------------
   app.get("/payments/providers", { preHandler: guard("order:read") }, async () => ({ data: await providersOverview() }));
+
+  // --- tunnel d'achat invité (PAY-2bis) : routes PUBLIQUES — e-mail seul champ.
+  // Rate-limit strict (même cap que l'auth) : anti-spam d'e-mails et
+  // anti-énumération ; le suivi/reçu exige le jeton de commande scellé.
+  const guestLimit = { config: { rateLimit: { max: env.AUTH_RATE_LIMIT_MAX, timeWindow: "1 minute" } } };
+
+  app.get("/payments/guest/course/:courseId", async (req, reply) => {
+    const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
+    try { return { data: await guestCourseInfo(courseId) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.post("/payments/guest/checkout", guestLimit, async (req, reply) => {
+    const body = z.object({ courseId: z.string(), currency: z.string(), email: z.string().email().max(254) }).parse(req.body);
+    try { return reply.status(201).send({ data: await guestCheckout(body, req.ip) }); } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/payments/guest/orders/:id", async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { t } = z.object({ t: z.string() }).parse(req.query ?? {});
+    try { return { data: await guestGetOrder(id, t) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.post("/payments/guest/orders/:id/checkout", guestLimit, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { t } = z.object({ t: z.string() }).parse(req.body ?? {});
+    try { return { data: await guestResumeCheckout(id, t) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/payments/guest/orders/:id/receipt.pdf", async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { t } = z.object({ t: z.string() }).parse(req.query ?? {});
+    try {
+      const pdf = await guestReceipt(id, t);
+      return reply.header("content-type", "application/pdf")
+        .header("content-disposition", `inline; filename="recu-${id}.pdf"`).send(pdf);
+    } catch (err) { return handle(reply, err); }
+  });
 
   // --- webhooks publics (pas d'auth : la sécurité EST la signature + le check) ----
   for (const key of ["cinetpay", "flutterwave"] as const) {
