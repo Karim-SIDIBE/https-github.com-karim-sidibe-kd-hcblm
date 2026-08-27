@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   api, auth, login as apiLogin, verify2fa, genPassword, publishedCourse, ApiError,
   type Org, type Seats, type Member, type CourseSummary, type Principal, type ProgressRow, type OrgImportReport, type OrgKpis,
+  type PayProduct, type OrgOrder, type CheckoutInfo,
 } from "./api";
 
 /** `Nom, Email` per line; separators , ; tab; a header row is skipped. */
@@ -93,6 +94,148 @@ function SeatsCard({ seats }: { seats: Seats }) {
         <div className="bar"><i style={{ width: `${pct}%`, background: full ? "var(--danger)" : "var(--accent)" }} /></div>
         {seats.seats === 0 && <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Aucun siège configuré. Contactez DECLICK pour activer vos licences.</p>}
         {full && seats.seats > 0 && <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Toutes les licences sont utilisées. Désactivez un compte pour libérer un siège, ou contactez DECLICK.</p>}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------- Buy seats (PAY-3) -- */
+/** Achat de licences en libre-service : lot de sièges × quantité, montant fixé
+ *  par le serveur. Règlement via le fournisseur actif — page de paiement
+ *  hébergée, ou références de virement (`manual`) affichées ici ; les sièges
+ *  sont crédités automatiquement quand DECLICK constate le règlement. */
+function BuySeatsCard({ orgId, onOrdered }: { orgId: string; onOrdered: () => void }) {
+  const [products, setProducts] = useState<PayProduct[] | null>(null);
+  const [productId, setProductId] = useState("");
+  const [currency, setCurrency] = useState("XOF");
+  const [qty, setQty] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [placed, setPlaced] = useState<{ order: OrgOrder; checkout: CheckoutInfo | null } | null>(null);
+
+  useEffect(() => {
+    api.payProducts()
+      .then((all) => {
+        const seats = all.filter((p) => p.type === "SEATS" && p.prices.length > 0);
+        setProducts(seats);
+        if (seats.length > 0) setProductId(seats[0]!.id);
+      })
+      .catch(() => setProducts([]));
+  }, []);
+
+  const product = products?.find((p) => p.id === productId) ?? null;
+  const offered = product?.prices.map((p) => p.currency) ?? [];
+  const active = offered.includes(currency) ? currency : offered[0] ?? "";
+  const unit = product?.prices.find((p) => p.currency === active) ?? null;
+
+  async function order() {
+    if (!product || !unit) return;
+    setBusy(true); setError(null);
+    try {
+      const o = await api.createSeatOrder(orgId, product.id, active, qty);
+      const ck = await api.orderCheckout(o.id).catch(() => null);
+      if (ck?.paymentUrl) { window.open(ck.paymentUrl, "_blank", "noopener"); }
+      setPlaced({ order: o, checkout: ck });
+      onOrdered();
+    } catch (e) { setError(e instanceof Error ? e.message : "Commande impossible"); }
+    finally { setBusy(false); }
+  }
+
+  if (products === null || products.length === 0) return null; // pas d'offre de sièges publiée
+
+  return (
+    <div className="card">
+      <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="eyebrow">Acheter des licences</div>
+        {placed ? (
+          <>
+            <p style={{ margin: 0 }}>Commande enregistrée — <b>{placed.order.display}</b>{placed.order.quantity > 1 ? <> ({placed.order.quantity} lots)</> : null}.</p>
+            {placed.checkout?.instructions && (
+              <p className="muted" style={{ whiteSpace: "pre-wrap", fontSize: 12.5, margin: 0, background: "var(--bg-soft)", padding: 10, borderRadius: 8 }}>🏦 {placed.checkout.instructions}</p>
+            )}
+            {placed.checkout?.paymentUrl && (
+              <button className="btn btn--primary" style={{ justifyContent: "center" }} onClick={() => window.open(placed.checkout!.paymentUrl!, "_blank", "noopener")}>Ouvrir la page de paiement</button>
+            )}
+            <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>Vos licences seront créditées automatiquement dès la confirmation du règlement. Suivi ci-dessous, dans « Commandes ».</p>
+            <button className="btn btn--sm" onClick={() => setPlaced(null)}>Nouvelle commande</button>
+          </>
+        ) : (
+          <>
+            {products.length > 1 && (
+              <label className="lbl">Offre
+                <select className="select" value={productId} onChange={(e) => setProductId(e.target.value)}>
+                  {products.map((p) => <option key={p.id} value={p.id}>{p.title}{p.seatCount ? ` — ${p.seatCount} sièges` : ""}</option>)}
+                </select>
+              </label>
+            )}
+            {products.length === 1 && <div style={{ fontWeight: 700 }}>{product?.title}{product?.seatCount ? ` — ${product.seatCount} sièges / lot` : ""}</div>}
+            <div className="row" style={{ gap: 10 }}>
+              <label className="lbl" style={{ flex: 1 }}>Quantité (lots)
+                <input className="field" type="number" min={1} max={100} value={qty}
+                  onChange={(e) => setQty(Math.max(1, Math.min(100, Number(e.target.value) || 1)))} />
+              </label>
+              {offered.length > 1 && (
+                <label className="lbl" style={{ flex: 1 }}>Devise
+                  <select className="select" value={active} onChange={(e) => setCurrency(e.target.value)}>
+                    {offered.map((c) => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </label>
+              )}
+            </div>
+            {unit && (
+              <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+                {unit.display} / lot{product?.seatCount ? ` de ${product.seatCount} sièges` : ""} — le montant total est confirmé par le serveur à la commande.
+              </p>
+            )}
+            {error && <p className="ko" style={{ margin: 0 }}>{error}</p>}
+            <button className="btn btn--primary" disabled={busy || !unit} style={{ justifyContent: "center" }} onClick={() => void order()}>
+              {busy ? "…" : "Commander"}
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------ Org orders (PAY-3) - */
+function OrgOrdersCard({ orders, onRefresh }: { orders: OrgOrder[]; onRefresh: () => void }) {
+  const [error, setError] = useState<string | null>(null);
+  if (orders.length === 0) return null;
+
+  const PILL: Record<string, string> = { PAID: "pill--green", PENDING: "pill--warn", FAILED: "pill--red", CANCELLED: "pill--red", REFUNDED: "pill--soft" };
+  const LABEL: Record<string, string> = { PAID: "Payée", PENDING: "En attente", FAILED: "Échouée", CANCELLED: "Annulée", REFUNDED: "Remboursée" };
+
+  async function receipt(id: string) {
+    try {
+      const blob = await api.orderReceipt(id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch { setError("Reçu indisponible pour le moment"); }
+  }
+
+  return (
+    <div className="card">
+      <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+        <div className="row between">
+          <div className="eyebrow">Commandes</div>
+          <button className="btn btn--sm" onClick={onRefresh}>Actualiser</button>
+        </div>
+        {error && <p className="ko" style={{ margin: 0 }}>{error}</p>}
+        {orders.map((o) => (
+          <div key={o.id} className="row between" style={{ gap: 8, borderTop: "1px solid var(--line)", paddingTop: 8 }}>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{o.product.title}{o.quantity > 1 ? ` × ${o.quantity}` : ""}</div>
+              <div className="muted" style={{ fontSize: 12 }}>{o.display} · {new Date(o.createdAt).toLocaleDateString("fr-FR")}</div>
+            </div>
+            <div className="row" style={{ gap: 6, flexShrink: 0 }}>
+              <span className={`pill ${PILL[o.status] ?? "pill--soft"}`}>{LABEL[o.status] ?? o.status}</span>
+              {o.status === "PAID" && <button className="btn btn--sm" onClick={() => void receipt(o.id)}>Reçu</button>}
+            </div>
+          </div>
+        ))}
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>Une commande en attente est réglée par virement (références fournies à la commande) ou via la page de paiement ; les licences sont créditées à la confirmation.</p>
       </div>
     </div>
   );
@@ -446,6 +589,7 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
   const [members, setMembers] = useState<Member[]>([]);
   const [progress, setProgress] = useState<Map<string, ProgressRow>>(new Map());
   const [kpis, setKpis] = useState<OrgKpis | null>(null);
+  const [orders, setOrders] = useState<OrgOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>("");
@@ -469,11 +613,11 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
     if (!id) return;
     setForbidden(false); setError(null); setLoading(true);
     try {
-      const [s, m, p, k] = await Promise.all([
+      const [s, m, p, k, o] = await Promise.all([
         api.seats(id), api.members(id), api.progress(id).catch(() => [] as ProgressRow[]),
-        api.kpis(id).catch(() => null),
+        api.kpis(id).catch(() => null), api.orgOrders(id).catch(() => [] as OrgOrder[]),
       ]);
-      setSeats(s); setMembers(m); setProgress(new Map(p.map((r) => [r.userId, r]))); setKpis(k);
+      setSeats(s); setMembers(m); setProgress(new Map(p.map((r) => [r.userId, r]))); setKpis(k); setOrders(o);
     } catch (e) {
       if (e instanceof ApiError && e.status === 403) { setForbidden(true); setSeats(null); setMembers([]); }
       else setError(e instanceof Error ? e.message : "Erreur");
@@ -533,6 +677,8 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
           <div className="grid grid-console" style={{ alignItems: "start", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
               <SeatsCard seats={seats} />
+              <BuySeatsCard orgId={orgId} onOrdered={() => loadOrg(orgId)} />
+              <OrgOrdersCard orders={orders} onRefresh={() => loadOrg(orgId)} />
               <AddLearner orgId={orgId} selectedCourse={selectedCourse} full={seats.available <= 0} onDone={() => loadOrg(orgId)} />
               <ImportCard orgId={orgId} selectedCourse={selectedCourse} available={seats.available} onDone={() => loadOrg(orgId)} />
               <TeamCard orgId={orgId} members={members} me={user} onChange={() => loadOrg(orgId)} />

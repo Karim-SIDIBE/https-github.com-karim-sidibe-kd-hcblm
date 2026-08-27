@@ -81,8 +81,30 @@ export type OrgKpis = {
   inactive14d: { name: string; email: string; inactiveDays: number }[];
 };
 
+// --- achat de sièges (spec paiement, lot PAY-3) ---
+export type PayPrice = { currency: string; amountMinor: number; display: string };
+export type PayProduct = { id: string; type: "COURSE" | "SEATS"; title: string; seatCount: number | null; prices: PayPrice[] };
+export type OrgOrder = {
+  id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED";
+  quantity: number; amountMinor: number; currency: string; display: string; createdAt: string;
+  product: { title: string; type: string; seatCount: number | null };
+};
+export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
+
 export const api = {
   myOrgs: () => req<Org[]>("GET", "/organizations"),
+  // Produits SEATS actifs (avec leurs prix) — pour le formulaire d'achat.
+  payProducts: () => req<PayProduct[]>("GET", "/payments/products"),
+  orgOrders: (orgId: string) => req<OrgOrder[]>("GET", `/payments/organizations/${orgId}/orders`),
+  createSeatOrder: (orgId: string, productId: string, currency: string, quantity: number) =>
+    req<OrgOrder>("POST", "/payments/orders", { productId, currency, buyerOrgId: orgId, quantity }),
+  orderCheckout: (orderId: string) => req<CheckoutInfo>("POST", `/payments/orders/${orderId}/checkout`),
+  async orderReceipt(orderId: string): Promise<Blob> {
+    const t = auth.token();
+    const res = await fetch(`${BASE}/payments/orders/${orderId}/receipt.pdf`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    if (!res.ok) throw new ApiError(res.status, "error", "Reçu indisponible");
+    return res.blob();
+  },
   seats: (orgId: string) => req<Seats>("GET", `/organizations/${orgId}/seats`),
   members: (orgId: string) => req<Member[]>("GET", `/organizations/${orgId}/members`),
   createLearner: (orgId: string, b: { name: string; email: string; password?: string; invite?: boolean }) =>

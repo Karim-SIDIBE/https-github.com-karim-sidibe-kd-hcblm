@@ -76,10 +76,21 @@ export async function listProducts() {
 
 // --- commandes -----------------------------------------------------------------
 
-function assertOrderAccess(principal: Principal, order: { buyerUserId: string | null }) {
-  if (order.buyerUserId !== principal.id && !isStaff(principal.role)) {
-    throw new PaymentError(403, "forbidden", "Cette commande ne vous appartient pas");
-  }
+/** Le principal est-il staff, ou administrateur (OWNER/ADMIN) de l'organisation ? */
+async function orgAdminOf(principal: Principal, orgId: string): Promise<boolean> {
+  if (isStaff(principal.role)) return true;
+  const m = await prisma.organizationMembership.findUnique({
+    where: { organizationId_userId: { organizationId: orgId, userId: principal.id } },
+  });
+  return m?.orgRole === "OWNER" || m?.orgRole === "ADMIN";
+}
+
+/** Accès à une commande : son acheteur, le staff, ou — commande d'organisation
+ *  (PAY-3) — un administrateur de l'organisation acheteuse. */
+async function assertOrderAccess(principal: Principal, order: { buyerUserId: string | null; buyerOrgId: string | null }) {
+  if (order.buyerUserId === principal.id || isStaff(principal.role)) return;
+  if (order.buyerOrgId && (await orgAdminOf(principal, order.buyerOrgId))) return;
+  throw new PaymentError(403, "forbidden", "Cette commande ne vous appartient pas");
 }
 
 /** Crée (ou réutilise) l'intention d'achat — montant/devise RELUS en base et figés. */
@@ -95,9 +106,11 @@ export async function createOrder(principal: Principal, input: { productId: stri
 
   let buyerOrgId: string | null = null;
   if (input.buyerOrgId) {
-    // Le parcours d'achat entreprise en libre-service arrive en PAY-3 ; au
-    // socle, une commande pour une organisation est un acte staff.
-    if (!isStaff(principal.role)) throw new PaymentError(403, "forbidden", "Commande pour une organisation : réservée au staff (portail entreprise : lot PAY-3)");
+    // Libre-service entreprise (PAY-3) : un administrateur de l'organisation
+    // (OWNER/ADMIN) — ou le staff — peut commander pour elle.
+    if (!(await orgAdminOf(principal, input.buyerOrgId))) {
+      throw new PaymentError(403, "forbidden", "Commande pour une organisation : réservée à ses administrateurs");
+    }
     const org = await prisma.organization.findUnique({ where: { id: input.buyerOrgId } });
     if (!org) throw new PaymentError(404, "org_not_found", "Organisation introuvable");
     buyerOrgId = org.id;
@@ -134,13 +147,28 @@ export async function listOrders(status?: "PENDING" | "PAID" | "FAILED") {
   return rows.map((o) => ({ ...o, display: formatAmount(o.amountMinor, o.currency as Currency) }));
 }
 
+/** Commandes d'UNE organisation — pour ses administrateurs (portail entreprise,
+ *  PAY-3) ou le staff. Même forme que listOrders (titre produit, dernier
+ *  paiement) pour un affichage direct. */
+export async function listOrgOrders(principal: Principal, orgId: string) {
+  if (!(await orgAdminOf(principal, orgId))) {
+    throw new PaymentError(403, "forbidden", "Réservé aux administrateurs de l'organisation");
+  }
+  const rows = await prisma.order.findMany({
+    where: { buyerOrgId: orgId },
+    include: { product: { select: { title: true, type: true, seatCount: true } }, payments: { orderBy: { createdAt: "desc" }, take: 1 } },
+    orderBy: { createdAt: "desc" }, take: 100,
+  });
+  return rows.map((o) => ({ ...o, display: formatAmount(o.amountMinor, o.currency as Currency) }));
+}
+
 export async function getOrder(principal: Principal, orderId: string) {
   const order = await prisma.order.findUnique({
     where: { id: orderId },
     include: { product: true, payments: { orderBy: { createdAt: "desc" } }, entitlements: true },
   });
   if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
-  assertOrderAccess(principal, order);
+  await assertOrderAccess(principal, order);
   return { ...order, display: formatAmount(order.amountMinor, order.currency as Currency) };
 }
 
@@ -150,7 +178,7 @@ export async function getOrder(principal: Principal, orderId: string) {
 export async function startCheckout(principal: Principal, orderId: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { product: true } });
   if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
-  assertOrderAccess(principal, order);
+  await assertOrderAccess(principal, order);
   if (order.status !== "PENDING") throw new PaymentError(409, "order_not_pending", `Commande déjà ${order.status}`);
 
   const provider = await getActiveProvider();
@@ -373,7 +401,7 @@ export async function orderReceipt(principal: Principal, orderId: string): Promi
     include: { product: true, payments: { orderBy: { createdAt: "desc" } }, buyerUser: true, buyerOrg: true },
   });
   if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
-  assertOrderAccess(principal, order);
+  await assertOrderAccess(principal, order);
   if (order.status !== "PAID") throw new PaymentError(409, "not_paid", "Le reçu n'est disponible que pour une commande réglée");
   const pay = order.payments.find((p) => p.status === "SUCCEEDED") ?? order.payments[0];
   return receiptPdf({
