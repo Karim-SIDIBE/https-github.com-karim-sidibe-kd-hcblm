@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, providersOverview, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -60,6 +60,12 @@ export async function paymentRoutes(app: FastifyInstance) {
   app.get("/payments/orders", { preHandler: guard("order:read") }, async (req) => {
     const { status } = z.object({ status: z.enum(["PENDING", "PAID", "FAILED"]).optional() }).parse(req.query ?? {});
     return { data: await listOrders(status) };
+  });
+
+  // Commandes d'une organisation (portail entreprise, PAY-3) — admins de l'org.
+  app.get("/payments/organizations/:orgId/orders", { preHandler: authenticate }, async (req, reply) => {
+    const { orgId } = z.object({ orgId: z.string() }).parse(req.params);
+    try { return { data: await listOrgOrders(req.principal!, orgId) }; } catch (err) { return handle(reply, err); }
   });
 
   app.get("/payments/orders/:id", { preHandler: authenticate }, async (req, reply) => {
