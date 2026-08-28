@@ -434,6 +434,9 @@ export const api = {
     const data = await req<any>("GET", `/media/${id}/playback`);
     // Absolutise the API-relative + signed URLs so a native <video> can stream them.
     if (Array.isArray(data?.renditions)) data.renditions = data.renditions.map((r: any) => ({ ...r, url: r.url ? new URL(r.url, BASE).href : r.url }));
+    // Pistes de sous-titres : même absolutisation (l'admin vit sur un autre
+    // sous-domaine que l'API — une URL relative pointerait au mauvais endroit).
+    if (Array.isArray(data?.captions)) data.captions = data.captions.map((c: any) => ({ ...c, url: c.url ? new URL(c.url, BASE).href : c.url }));
     return data as MediaPlayback;
   },
   async uploadMedia(file: File): Promise<MediaAsset> {
