@@ -7,7 +7,7 @@ import { prisma } from "../../db/prisma.js";
 import * as storage from "../../lib/storage/storage.js";
 import { env } from "../../config/env.js";
 import { processVideo, ffmpegAvailable } from "../../lib/media/transcode.js";
-import { srtToVtt, transcribeToVtt, transcriptionAvailable, transcriptionIsLocal, translateVttFrToEn } from "../../lib/ai/subtitles.js";
+import { SubtitleError, srtToVtt, transcribeToVtt, transcriptionAvailable, transcriptionIsLocal, translateVttFrToEn } from "../../lib/ai/subtitles.js";
 import { signMediaToken } from "../../lib/auth/jwt.js";
 import { CourseContent, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { computeProgress } from "../../domain/engine/progress.js";
@@ -336,12 +336,56 @@ export function captionsStatus(assetId: string): CaptionJob | { state: "idle" } 
 }
 
 /** Cœur de la génération : lit l'audio, transcrit (FR), traduit (EN). */
-async function runCaptionsGeneration(assetId: string, audio: { label: string; storageKey: string }, originalFilename: string | null): Promise<CaptionsResult> {
-  const chunks: Buffer[] = [];
-  for await (const c of storage.read(audio.storageKey)) chunks.push(c as Buffer);
-  const media = Buffer.concat(chunks);
+/** Sources candidates pour la transcription, par ordre de préférence : la
+ *  rendition « audio » (64 kbps, légère), le fichier source, puis la rendition
+ *  VIDÉO la plus légère — ffmpeg comme Whisper savent extraire l'audio d'un
+ *  MP4, ce qui sauve les médias dont l'audio/la source a été perdu ou corrompu
+ *  (ex. après une restauration de médiathèque). Pur, testé unitairement. */
+export function transcriptionCandidates(
+  renditions: { label: string; kind: string; available: boolean; storageKey: string | null; bitrateKbps: number | null }[],
+  originalFilename: string | null,
+): { label: string; storageKey: string; filename: string }[] {
+  const out: { label: string; storageKey: string; filename: string }[] = [];
+  const push = (label: string, storageKey: string, filename: string) => {
+    if (!out.some((c) => c.storageKey === storageKey)) out.push({ label, storageKey, filename });
+  };
+  const audio = renditions.find((r) => r.label === "audio" && r.available && r.storageKey);
+  if (audio) push("audio", audio.storageKey!, "audio.m4a");
+  const source = renditions.find((r) => r.label === "source" && r.storageKey);
+  if (source) push("source", source.storageKey!, originalFilename ?? "source.mp4");
+  const video = renditions
+    .filter((r) => r.kind === "VIDEO" && r.available && r.storageKey && r.label !== "source")
+    .sort((a, b) => (a.bitrateKbps ?? 1e9) - (b.bitrateKbps ?? 1e9))[0];
+  if (video) push(video.label, video.storageKey!, `${video.label}.mp4`);
+  return out;
+}
 
-  const vttFr = await transcribeToVtt(media, audio.label === "audio" ? "audio.m4a" : (originalFilename ?? "source.mp4"), "fr");
+async function runCaptionsGeneration(assetId: string, candidates: { label: string; storageKey: string; filename: string }[]): Promise<CaptionsResult> {
+  // Essaie chaque candidat : un fichier vide/corrompu (conversion ffmpeg ou
+  // transcription échouée) fait passer au suivant ; une erreur de fournisseur
+  // (clé refusée, service injoignable) est définitive — inutile de réessayer.
+  let vttFr: string | null = null;
+  const attempts: string[] = [];
+  for (const cand of candidates) {
+    const chunks: Buffer[] = [];
+    for await (const c of storage.read(cand.storageKey)) chunks.push(c as Buffer);
+    const media = Buffer.concat(chunks);
+    if (media.length === 0) { attempts.push(`« ${cand.label} » : fichier vide`); continue; }
+    try {
+      vttFr = await transcribeToVtt(media, cand.filename, "fr");
+      break;
+    } catch (e) {
+      if (e instanceof SubtitleError && (e.code === "transcription_failed" || e.code === "transcription_empty")) {
+        attempts.push(`« ${cand.label} » : ${e.message}`);
+        continue;
+      }
+      throw e; // clé refusée / service injoignable / non configuré : définitif
+    }
+  }
+  if (vttFr === null) {
+    throw new SubtitleError(422, "transcription_failed",
+      `Aucune source exploitable pour la transcription — ${attempts.join(" ; ") || "aucun fichier local"}. Re-téléversez la vidéo, ou importez un .vtt/.srt manuellement.`);
+  }
   const fr = await attachCaptions(assetId, { language: "fr", content: vttFr });
 
   let en: Awaited<ReturnType<typeof attachCaptions>> | null = null;
@@ -372,22 +416,27 @@ export async function generateCaptions(assetId: string): Promise<CaptionsResult 
   if (captionJobs.get(assetId)?.state === "running") {
     throw new MediaError(409, "generation_in_progress", "Une génération est déjà en cours pour cette vidéo — laissez-la se terminer");
   }
-  // Entrée audio : la rendition « audio » (64 kbps, légère) si le transcodage
-  // l'a produite, sinon le fichier source.
-  const audio = asset.renditions.find((r) => r.label === "audio" && r.available && r.storageKey)
-    ?? asset.renditions.find((r) => r.label === "source" && r.storageKey);
-  if (!audio?.storageKey) throw new MediaError(422, "no_local_media", "Aucun fichier local à transcrire (média externe ?) — importez un .vtt/.srt manuellement");
+  // Entrées candidates : audio léger → source → rendition vidéo la plus légère,
+  // en ignorant d'emblée les fichiers absents ou vides (une ligne en base ne
+  // garantit pas un fichier sain — ex. médiathèque restaurée).
   const local = transcriptionIsLocal();
   const MAX = 24 * 1024 * 1024; // limite de l'API Whisper d'OpenAI (~25 Mo) — le local n'est pas concerné
-  if (!local && (await storage.sizeOf(audio.storageKey)) > MAX) {
-    throw new MediaError(422, "media_too_large", "Fichier trop volumineux pour la transcription (25 Mo max) — attendez la rendition audio du transcodage ou importez un .vtt");
+  const input: { label: string; storageKey: string; filename: string }[] = [];
+  for (const cand of transcriptionCandidates(asset.renditions, asset.originalFilename)) {
+    const size = await storage.sizeOf(cand.storageKey).catch(() => 0);
+    if (size <= 0) continue;           // fichier absent ou vide
+    if (!local && size > MAX) continue; // trop volumineux pour l'API OpenAI
+    input.push(cand);
   }
-  const input = { label: audio.label, storageKey: audio.storageKey };
+  if (input.length === 0) {
+    throw new MediaError(422, "no_local_media",
+      "Aucun fichier local exploitable pour la transcription (source absente, vide ou trop volumineuse) — re-téléversez la vidéo ou importez un .vtt/.srt manuellement");
+  }
 
   if (!local) {
     captionJobs.set(assetId, { state: "running", startedAt: Date.now() });
     try {
-      const result = await runCaptionsGeneration(assetId, input, asset.originalFilename);
+      const result = await runCaptionsGeneration(assetId, input);
       captionJobs.set(assetId, { state: "done", startedAt: Date.now(), result });
       return result;
     } catch (e) {
@@ -399,7 +448,7 @@ export async function generateCaptions(assetId: string): Promise<CaptionsResult 
   // Whisper local : plusieurs minutes par vidéo → arrière-plan, réponse immédiate.
   const startedAt = Date.now();
   captionJobs.set(assetId, { state: "running", startedAt });
-  void runCaptionsGeneration(assetId, input, asset.originalFilename)
+  void runCaptionsGeneration(assetId, input)
     .then((result) => captionJobs.set(assetId, { state: "done", startedAt, result }))
     .catch((e) => {
       console.warn(`[captions] ${assetId} — génération locale échouée : ${e instanceof Error ? e.message : e}`);

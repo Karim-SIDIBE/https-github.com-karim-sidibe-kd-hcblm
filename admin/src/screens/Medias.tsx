@@ -286,7 +286,7 @@ export function Medias() {
                   )}
                   {active.kind === "AUDIO"
                     ? <audio key={active.url} controls src={active.url} style={{ width: "100%" }} />
-                    : <video key={active.url} controls src={active.url} style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }}>
+                    : <video key={active.url} controls src={active.url} crossOrigin="anonymous" style={{ width: "100%", maxHeight: "60vh", borderRadius: 8, background: "#000" }}>
                         {preview.captions.map((c) => <track key={c.url} kind="subtitles" srcLang={c.language ?? "fr"} label={c.label} src={c.url} />)}
                       </video>}
                 </>

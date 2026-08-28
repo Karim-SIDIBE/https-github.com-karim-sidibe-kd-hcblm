@@ -166,7 +166,11 @@ export function VideoPlayer({
     <div>
       <div className="hf-media" style={{ position: "relative" }}>
         <video
-          ref={ref} src={activeSrc ?? undefined} controls playsInline preload="metadata"
+          // La PWA (app.…) charge vidéos ET pistes depuis l'API (api.…) : sans
+          // crossOrigin, le navigateur charge la vidéo mais BLOQUE en silence
+          // les <track> cross-origin — aucun sous-titre ne s'affiche. Les URLs
+          // portent déjà le jeton signé ?t=, et le CORS de l'API est ouvert.
+          ref={ref} src={activeSrc ?? undefined} controls playsInline preload="metadata" crossOrigin="anonymous"
           controlsList="nodownload noplaybackrate" disablePictureInPicture onContextMenu={(e) => e.preventDefault()}
           onLoadedMetadata={onLoaded} onTimeUpdate={onTime}
           onPause={() => { const v = ref.current!; onHeartbeat(v.currentTime, Number.isFinite(v.duration) ? v.duration : null); }}
