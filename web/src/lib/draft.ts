@@ -3,28 +3,86 @@
  *
  * Ce que l'apprenant tape n'est envoyé au serveur qu'à la validation ; avant
  * cela, quitter l'écran (retour, coupure, onglet fermé) perdait tout. Chaque
- * saisie est donc mise en brouillon dans localStorage, par inscription + item :
- * restaurée au retour sur l'écran tant qu'aucune soumission n'existe, purgée à
- * la soumission réussie. Best-effort : localStorage peut être indisponible
- * (navigation privée) — tout est enveloppé de try/catch, jamais bloquant.
+ * saisie est donc mise en brouillon, par inscription + item : restaurée au
+ * retour sur l'écran tant qu'aucune soumission n'existe, purgée à la
+ * soumission réussie.
+ *
+ * Persistance : IndexedDB (base dédiée « klms-drafts »), comme le reste du
+ * stockage hors-ligne de la PWA — PAS localStorage, qui est réservé aux
+ * données de session et que l'analyse de sécurité traite comme un espace
+ * unique (une clé dynamique y serait considérée comme pouvant relire
+ * n'importe quelle entrée, y compris l'identité). Les brouillons sont
+ * préchargés en mémoire au démarrage (`preloadDrafts`, avant le rendu React)
+ * pour garder une lecture synchrone dans les composants ; les écritures vont
+ * en mémoire puis en base, en best-effort — IndexedDB indisponible
+ * (navigation privée stricte, tests node) dégrade en brouillon mémoire,
+ * jamais bloquant.
  */
 import { useEffect } from "react";
 
-const PREFIX = "kd:draft:";
+const DB_NAME = "klms-drafts";
+const STORE = "drafts";
+
+const mem = new Map<string, unknown>();
+let db: IDBDatabase | null = null;
+
+function openDb(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    try {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { if (!req.result.objectStoreNames.contains(STORE)) req.result.createObjectStore(STORE); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch { resolve(null); }
+  });
+}
+
+/** À appeler UNE FOIS avant le rendu (main.tsx) : charge tous les brouillons
+ *  en mémoire pour que `loadDraft` reste synchrone dans les composants. */
+export async function preloadDrafts(): Promise<void> {
+  db = await openDb();
+  if (!db) return;
+  await new Promise<void>((resolve) => {
+    try {
+      const store = db!.transaction(STORE, "readonly").objectStore(STORE);
+      const keys = store.getAllKeys();
+      const vals = store.getAll();
+      vals.onsuccess = () => {
+        const ks = keys.result ?? [];
+        (vals.result ?? []).forEach((v: unknown, i: number) => { if (typeof ks[i] === "string") mem.set(ks[i] as string, v); });
+        resolve();
+      };
+      vals.onerror = () => resolve();
+    } catch { resolve(); }
+  });
+}
+
+function persist(key: string, value: unknown | undefined): void {
+  if (!db) return;
+  try {
+    const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+    if (value === undefined) store.delete(key); else store.put(value, key);
+  } catch { /* best-effort */ }
+}
 
 export function loadDraft<T>(key: string | null | undefined): T | null {
   if (!key) return null;
-  try {
-    const raw = localStorage.getItem(PREFIX + key);
-    return raw ? ((JSON.parse(raw) as { v: T }).v ?? null) : null;
-  } catch {
-    return null;
-  }
+  return (mem.get(key) as T | undefined) ?? null;
+}
+
+/** Écrit un brouillon immédiatement (mémoire + base). Exposé pour les tests ;
+ *  les composants passent par `useDraft`. */
+export function saveDraft(key: string, value: unknown): void {
+  mem.set(key, value);
+  persist(key, value);
 }
 
 export function clearDraft(key: string | null | undefined): void {
   if (!key) return;
-  try { localStorage.removeItem(PREFIX + key); } catch { /* best-effort */ }
+  mem.delete(key);
+  persist(key, undefined);
 }
 
 function isEmpty(v: unknown): boolean {
@@ -45,10 +103,7 @@ export function useDraft(key: string | null | undefined, value: unknown, active 
   useEffect(() => {
     if (!key || !active) return;
     const id = setTimeout(() => {
-      try {
-        if (isEmpty(value)) localStorage.removeItem(PREFIX + key);
-        else localStorage.setItem(PREFIX + key, JSON.stringify({ v: value, at: Date.now() }));
-      } catch { /* best-effort */ }
+      if (isEmpty(value)) clearDraft(key); else saveDraft(key, value);
     }, 300);
     return () => clearTimeout(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
