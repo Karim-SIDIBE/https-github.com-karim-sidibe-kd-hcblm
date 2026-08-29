@@ -13,7 +13,7 @@ type Onboarding = {
   profileChoices: { key: string; name: string; description: string }[];
   triggerQuiz: { questions: { id: string; text: string; options: { key: string; label: string }[] }[] };
 };
-type Step = "pam" | "profile" | "peer" | "done";
+type Step = "how" | "pam" | "profile" | "peer" | "done";
 
 /**
  * Onboarding (Block 0). Enforces the non-negotiable entry gates in order:
@@ -54,7 +54,8 @@ export function Onboarding({ eid }: { eid: string }) {
         profileDone = keys.includes("profile"); triggerDone = keys.includes("trigger"); peerDone = keys.includes("peer");
       } catch { /* offline */ }
       if (!alive) return;
-      setStep(!pamDone ? "pam" : !profileDone ? "profile" : !peerDone ? "peer" : "done");
+      // A5 : la méthode est présentée AVANT le Moment d'Ancrage (première venue).
+      setStep(!pamDone ? "how" : !profileDone ? "profile" : !peerDone ? "peer" : "done");
     })();
     return () => { alive = false; };
   }, [eid]);
@@ -90,9 +91,24 @@ export function Onboarding({ eid }: { eid: string }) {
       {blockTitle && <div className="meta" style={{ fontWeight: 600 }}>{t("home.block", { n: 0 })} · {blockTitle}{blockDur > 0 ? ` — ${formatDuration(blockDur)}` : ""}</div>}
       <div className="row between" style={{ gap: 8 }}>
         <div className="meta">{t("ci.ms01")} — 10 min</div>
-        {step !== "done" && <div className="eyebrow" style={{ whiteSpace: "nowrap", textTransform: "uppercase" }}>{t("ob.step", { n: stepNo })}</div>}
+        {step !== "done" && step !== "how" && <div className="eyebrow" style={{ whiteSpace: "nowrap", textTransform: "uppercase" }}>{t("ob.step", { n: stepNo })}</div>}
       </div>
-      {step !== "done" && <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>}
+      {step !== "done" && step !== "how" && <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>}
+
+      {/* Écran méthode (A5) : l'apprenant découvre tout pour la première fois —
+          la mécanique du parcours est énoncée avant la première saisie. */}
+      {step === "how" && (
+        <div className="hf-card stack">
+          <h1>{t("ob.howTitle")}</h1>
+          <p className="body" style={{ margin: 0 }}>{t("ob.howIntro")}</p>
+          {(["ob.how1", "ob.how2", "ob.how3", "ob.how4", "ob.how5"] as const).map((k) => (
+            <div key={k} className="hf-card hf-card--icy" style={{ padding: "10px 14px" }}>
+              <p className="body" style={{ margin: 0 }}>{t(k)}</p>
+            </div>
+          ))}
+          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => setStep("pam")}>{t("ob.howCta")}</button>
+        </div>
+      )}
 
       {step === "pam" && (
         <div className="hf-card stack">

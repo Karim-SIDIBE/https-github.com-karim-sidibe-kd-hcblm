@@ -29,3 +29,19 @@ test("minWords and number expectations", () => {
   assert.equal(fieldExpectsNumber("Ma formulation pour ma hiérarchie"), false);
   assert.equal(hasNumber("17h30"), true);
 });
+
+test("A4 : le lorem ipsum est refusé comme texte de remplissage", () => {
+  const full = assessText("Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.");
+  assert.equal(full.ok, false);
+  assert.equal((full as { code: string }).code, "filler");
+  // Même noyé dans une vraie phrase : deux mots signature suffisent.
+  const mixed = assessText("Voici ma réponse sérieuse : lorem ipsum et ensuite je continue normalement mon paragraphe sur la gestion du temps au bureau.");
+  assert.equal((mixed as { code?: string }).code, "filler");
+});
+
+test("A4 : un seul mot signature ne bloque pas (jamais de faux positif sur une citation)", () => {
+  const one = assessText("Le modèle « lorem » est un exemple classique de faux texte utilisé par les imprimeurs depuis le XVIe siècle pour caler leurs maquettes.");
+  assert.equal(one.ok, true);
+  // « sed », « sit », « in »… absents de la liste : le français/anglais réel passe.
+  assert.equal(assessText("Je m'assois (sit) et je prépare mon planning du jour avec sérieux.").ok, true);
+});

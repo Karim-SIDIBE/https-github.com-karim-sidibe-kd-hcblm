@@ -15,8 +15,21 @@
 export type TextAssessment =
   | { ok: true }
   | { ok: false; code: "gibberish"; words: string[] }
+  | { ok: false; code: "filler"; words: string[] }
   | { ok: false; code: "too_short"; minWords: number }
   | { ok: false; code: "need_number" };
+
+// Texte de remplissage (arbitrage A4 — retours de test : un lorem ipsum
+// passait la garde, ses mots étant du latin plausible). Signature : mots du
+// lorem ipsum qui n'existent NI en français NI en anglais — deux mots
+// distincts suffisent à qualifier le remplissage, sans jamais piéger une
+// vraie phrase (« sed », « sit », « in »… sont exclus car ambigus).
+const FILLER_WORDS = new Set([
+  "lorem", "ipsum", "dolor", "amet", "consectetur", "adipiscing", "adipisicing", "elit",
+  "eiusmod", "incididunt", "aliqua", "ullamco", "laboris", "aliquip", "commodo", "consequat",
+  "duis", "aute", "irure", "voluptate", "cillum", "fugiat", "pariatur", "excepteur",
+  "occaecat", "cupidatat", "proident", "deserunt", "mollit", "laborum", "veniam", "nostrud",
+]);
 
 const VOWELS = "aeiouyàâäéèêëîïôöùûüœ";
 // Letter pairs that occur in no French/English word (kept SHORT on purpose —
@@ -80,6 +93,10 @@ export function assessText(text: string, opts: { minWords?: number; requireNumbe
   const tokens = t.split(/\s+/).filter(Boolean);
   if (opts.minWords && tokens.length < opts.minWords) return { ok: false, code: "too_short", minWords: opts.minWords };
 
+  // Garde anti-remplissage (A4) : deux mots signature du lorem ipsum → refus.
+  const fillers = [...new Set(tokens.map((w) => norm(w).replace(/[^a-z]/g, "")).filter((w) => FILLER_WORDS.has(w)))];
+  if (fillers.length >= 2) return { ok: false, code: "filler", words: fillers.slice(0, 4) };
+
   const judged = tokens.map((w) => w.replace(/^[«"'(]+|[»"',.;:!?)]+$/g, "")).filter((w) => norm(w).replace(/[^a-z]/g, "").length >= 4);
   const bad = judged.filter(isImplausibleWord);
   // Block only when the nonsense DOMINATES: 2+ implausible words and ≥ 40 % of
@@ -95,6 +112,7 @@ export function assessText(text: string, opts: { minWords?: number; requireNumbe
 export function assessmentReason(a: TextAssessment, t: (key: string, vars?: Record<string, string | number>) => string): string | null {
   if (a.ok) return null;
   if (a.code === "gibberish") return t("tc.gibberish", { words: a.words.join(", ") });
+  if (a.code === "filler") return t("tc.filler", { words: a.words.join(", ") });
   if (a.code === "too_short") return t("tc.tooShort", { n: a.minWords });
   return t("tc.needNumber");
 }
