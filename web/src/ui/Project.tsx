@@ -7,6 +7,9 @@ import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { useT, useI18n } from "../lib/i18n";
 
 type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: number };
+// Affichage apprenant (P7) : les codes du référentiel (S1, S2…) en tête des
+// libellés de critères sont retirés — la compétence elle-même suffit.
+const critLabel = (l: string) => l.replace(/^S\d+\s*[—-]\s*/, "");
 type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
 type ProjectState = { sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[]; journalStartedAt: string | null; finalSectionKey: string };
 
@@ -104,7 +107,7 @@ export function Project({ eid }: { eid: string }) {
           {status.evaluator && <p className="meta" style={{ margin: 0 }}>{t("pj.evaluator", { name: status.evaluator.name })}</p>}
           {status.scoreTotal != null && <p className="h4" style={{ margin: 0 }}>{t("pj.scoreLine", { score: status.scoreTotal })} <span className="meta">{t("pj.scoreThreshold", { threshold: spec.rubric.threshold })}</span></p>}
           {Array.isArray(status.criteria) && (
-            <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => <li key={c.label}>{c.label} : {c.points}/{c.weightPoints}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => <li key={c.label}>{critLabel(c.label)} : {c.points}/{c.weightPoints}</li>)}</ul>
           )}
           {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">{t("pj.evalFeedback")}</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
         </div>
@@ -131,7 +134,7 @@ export function Project({ eid }: { eid: string }) {
                   <label key={c.label} className="row" style={{ gap: 8, cursor: "pointer" }}>
                     <input type="checkbox" checked={appealForm.contested.includes(c.label)}
                       onChange={(e) => setAppealForm((f) => f && ({ ...f, contested: e.target.checked ? [...f.contested, c.label] : f.contested.filter((x) => x !== c.label) }))} />
-                    <span className="body">{c.label}</span>
+                    <span className="body">{critLabel(c.label)}</span>
                   </label>
                 ))}
                 <textarea className="hf-field" value={appealForm.statement} placeholder={t("pj.appeal.statementPh")}
@@ -164,7 +167,7 @@ export function Project({ eid }: { eid: string }) {
         <strong className="h4">{t("pj.rubricTitle")} <span className="meta" style={{ fontWeight: 400 }}>{t("pj.rubricNote")}</span></strong>
         <div className="stack" style={{ gap: 8 }}>
           {spec.rubric.criteria.map((c) => (
-            <div key={c.label} className="row between"><span className="body">{c.label}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span></div>
+            <div key={c.label} className="row between"><span className="body">{critLabel(c.label)}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span></div>
           ))}
         </div>
         <p className="meta" style={{ margin: 0 }}>{t("pj.passThreshold", { threshold: spec.rubric.threshold })}</p>

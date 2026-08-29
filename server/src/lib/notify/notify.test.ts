@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { invitationMessage, otpMessage, reengagementMessage } from "./templates.js";
+import { invitationMessage, journalMessage, otpMessage, reengagementMessage } from "./templates.js";
 import { sendEmail, sendMultichannel } from "./send.js";
 
 test("invitationMessage includes identity, org and access info", () => {
@@ -47,6 +47,23 @@ test("reengagementMessage : sans APP_BASE_URL, pas de ligne de lien vide", () =>
   const m = reengagementMessage({ stage: "J7", learnerName: "Awa", nudge: "Reprenez.", link: "" });
   assert.doesNotMatch(m.body, /Reprendre ma formation/);
   assert.match(m.body, /^Bonjour Awa,/);
+});
+
+test("journalMessage : invitation formatée (salutation, consigne, lien, signature)", () => {
+  const m = journalMessage({ learnerName: "Awa", day: 2, prompt: "Décrivez la première réaction concrète.", link: "https://app.declick.digital" });
+  assert.match(m.subject, /J\+2/);
+  assert.doesNotMatch(m.subject, /rappel/i);
+  assert.match(m.body, /^Bonjour Awa,/);
+  assert.match(m.body, /Décrivez la première réaction concrète\./);
+  assert.match(m.body, /Remplir mon journal : https:\/\/app\.declick\.digital/);
+});
+
+test("journalMessage : variante rappel bienveillant à 24 h (P11)", () => {
+  const m = journalMessage({ learnerName: "Awa", day: 4, prompt: "Quel obstacle réel ?", reminder: true, link: "https://app.declick.digital" });
+  assert.match(m.subject, /rappel/i);
+  assert.match(m.subject, /J\+4/);
+  assert.match(m.body, /vous attend depuis hier/);
+  assert.doesNotMatch(m.body, /vient de s'ouvrir/);
 });
 
 test("send falls back to console when nothing is configured (ok)", async () => {

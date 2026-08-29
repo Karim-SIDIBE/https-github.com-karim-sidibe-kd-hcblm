@@ -116,7 +116,10 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen, dra
         <div className="stack">
           {exercise.type === "multi" && (exercise.options ?? []).map((o) => (
             <div key={o.key} className={`pt-opt ${choice === o.key ? "sel" : ""}`} onClick={() => setChoice(o.key)} role="button">
-              <strong className="h4"><span className="hf-pill hf-pill--soft hf-pill--sm" style={{ marginRight: 8 }}>{o.key}</span>{o.label}</strong>
+              <span className="row" style={{ gap: 8, alignItems: "flex-start" }}>
+                <span className="hf-pill hf-pill--soft hf-pill--sm">{o.key}</span>
+                <strong className="h4" style={{ minWidth: 0 }}>{o.label}</strong>
+              </span>
             </div>
           ))}
 
@@ -124,7 +127,7 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen, dra
             <div className="hf-textwrap">
               <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={exercise.placeholder || t("answerPlaceholder")} style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-              <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars} {t("dl.unitChars")}</span>
+              <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length >= minChars ? t("count.ok", { n: text.trim().length, unit: t("dl.unitChars") }) : t("count.min", { n: text.trim().length, min: minChars, unit: t("dl.unitChars") })}</span>
             </div>
           )}
           {/* Retours de test (P1) : « 90 mots sur 200 » — le seuil est en

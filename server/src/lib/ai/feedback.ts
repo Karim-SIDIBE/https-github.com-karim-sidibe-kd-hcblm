@@ -38,13 +38,15 @@ const FORMATIVE_SYSTEM =
   "temps). Tu donnes un retour FORMATIF sur une production écrite : exactement 2 points forts concrets, puis " +
   "2 pistes d'amélioration actionnables, en français, à la 2e personne du pluriel, jamais culpabilisant. Tu " +
   "rattaches tes remarques aux compétences visées et au contexte africain réel de l'apprenant. Tu ne donnes " +
-  "PAS de note chiffrée. LONGUEUR : 250 mots maximum au total — sois sélectif, chaque point en 2 à 3 phrases, " +
+  "PAS de note chiffrée. Tu désignes les compétences par leur INTITULÉ (« Gestion des priorités »), jamais par " +
+  "un code de référentiel (D4.C2, S1…) — l'apprenant ne connaît pas ces codes. LONGUEUR : 250 mots maximum au total — sois sélectif, chaque point en 2 à 3 phrases, " +
   "et termine toujours ta dernière phrase (jamais de plan interrompu). FORMAT : texte brut uniquement, " +
   "l'interface n'affiche PAS le Markdown — aucun #, ##, **, *, ---, ni titre : des paragraphes courts, " +
   "éventuellement des puces « • ».";
 
 export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
-  const comps = input.competencies.map((c) => `${c.code} — ${c.label}`).join(" ; ");
+  // Intitulés seuls (P7) : donner les codes au modèle l'incitait à les citer.
+  const comps = input.competencies.map((c) => c.label).join(" ; ");
   const user = [
     input.courseTitle ? `Parcours : « ${input.courseTitle} ».` : "",
     input.blockLabel ? `Bloc en cours : ${input.blockLabel}.` : "",

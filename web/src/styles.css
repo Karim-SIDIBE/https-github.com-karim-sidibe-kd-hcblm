@@ -162,6 +162,13 @@ a { color:var(--orange-600); }
 .pt-opt:hover { border-color:var(--navy-200); background:var(--bg-soft); }
 .pt-opt.sel { border-color:var(--brand-declick); background:var(--brand-declick-tint); }
 .pt-opt.ko { border-color:var(--danger); background:#fdecea; }
+/* Retours de test (P6) : dans une carte-réponse, la pastille A/B/C/D garde une
+   largeur FIXE (les glyphes n'ont pas la même chasse) et la ligne ne replie
+   jamais le texte sous la pastille — une réponse longue s'enroule à droite,
+   alignée sur les autres. */
+.pt-opt .hf-pill { min-width:34px; justify-content:center; flex-shrink:0; }
+.pt-opt .row { flex-wrap:nowrap; align-items:flex-start; }
+.pt-opt .row .body, .pt-opt .row .h4 { min-width:0; }
 
 /* layout helpers */
 .row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }

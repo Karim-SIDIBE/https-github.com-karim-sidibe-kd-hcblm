@@ -101,7 +101,7 @@ export function Onboarding({ eid }: { eid: string }) {
           <div className="hf-textwrap">
             <textarea className="hf-field" spellCheck lang="fr" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} style={{ minHeight: 160 }} />
-            <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars} {t("dl.unitChars")}</span>
+            <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length >= minChars ? t("count.ok", { n: pam.trim().length, unit: t("dl.unitChars") }) : t("count.min", { n: pam.trim().length, min: minChars, unit: t("dl.unitChars") })}</span>
           </div>
           {pam.trim().length > 0 && pam.trim().length < minChars && (
             <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: minChars - pam.trim().length })}</p>

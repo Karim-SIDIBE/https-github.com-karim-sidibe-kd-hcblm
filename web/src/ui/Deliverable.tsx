@@ -206,7 +206,10 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
                 {s.intro && <p className="meta" style={{ margin: 0, whiteSpace: "pre-wrap" }}>{s.intro}</p>}
                 {s.fields.map((f) => (
                   <label key={f.label}>{f.label}
-                    <input className="hf-field" spellCheck lang="fr" value={values[f.label] ?? ""} placeholder={f.placeholder || "…"}
+                    {/* Zone multi-lignes (P10) : les pré-remplissages (PAM,
+                        réponses des micro-exercices) tiennent sur plusieurs
+                        lignes — un champ monoligne les tronquait à l'œil. */}
+                    <textarea className="hf-field" spellCheck lang="fr" style={{ minHeight: 58 }} value={values[f.label] ?? ""} placeholder={f.placeholder || "…"}
                       onChange={(e) => setValues((v) => ({ ...v, [f.label]: e.target.value }))}
                       onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
                   </label>
@@ -218,7 +221,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
           <div className="hf-textwrap">
             <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={("placeholder" in spec && spec.placeholder) || t("answerPlaceholder")} style={{ minHeight: 180 }}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-            <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{count} / {spec.min} {spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars")}</span>
+            <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{count >= spec.min ? t("count.ok", { n: count, unit: spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars") }) : t("count.min", { n: count, min: spec.min, unit: spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars") })}</span>
           </div>
         )}
         {!structured && spec.unit !== "mots" && count > 0 && count < spec.min && (

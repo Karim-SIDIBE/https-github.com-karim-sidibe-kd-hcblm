@@ -11,7 +11,7 @@ import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } fr
 import { generateNudge } from "../../lib/ai/nudge.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
-import { reengagementMessage } from "../../lib/notify/templates.js";
+import { journalMessage, reengagementMessage } from "../../lib/notify/templates.js";
 import { courseInsights } from "../analytics/analytics.service.js";
 import { DEFAULT_ALERT_THRESHOLDS, detectInsightAlerts, type AlertThresholds } from "../../domain/engine/insights.js";
 
@@ -63,6 +63,7 @@ export async function runJournalTriggers(now: Date = new Date()) {
     include: { user: true, courseVersion: true, completions: true, journalTriggers: true },
   });
   const created: { enrollmentId: string; day: number; body: string }[] = [];
+  const reminded: { enrollmentId: string; day: number }[] = [];
 
   for (const e of enrollments) {
     const content = CourseContent.parse(e.courseVersion.content);
@@ -72,18 +73,36 @@ export async function runJournalTriggers(now: Date = new Date()) {
 
     for (const entry of cert.payload.journal.entries) {
       if (days < entry.day) continue;
-      if (e.journalTriggers.some((t) => t.day === entry.day)) continue; // already fired
       if (e.completions.some((c) => c.blockIndex === cert.index && c.itemKey === `J+${entry.day}`)) continue; // already journaled
-      const body = injectMomentAncrage(entry.prompt, e.momentAncrage);
-      await prisma.journalTrigger.create({ data: { enrollmentId: e.id, day: entry.day } });
+      const prompt = injectMomentAncrage(entry.prompt, e.momentAncrage);
+      const fired = e.journalTriggers.find((t) => t.day === entry.day);
+      if (!fired) {
+        // Invitation à l'ouverture — formatée (salutation, lien, signature).
+        const msg = journalMessage({ learnerName: e.user.name, day: entry.day, prompt });
+        await prisma.journalTrigger.create({ data: { enrollmentId: e.id, day: entry.day } });
+        await enqueueNotification({
+          enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "EMAIL",
+          subject: msg.subject, body: msg.body, provider: "journal",
+        });
+        created.push({ enrollmentId: e.id, day: entry.day, body: msg.body });
+        continue;
+      }
+      // Rappel bienveillant à 24 h (retours de test, P11 — promesse du contenu) :
+      // l'entrée est ouverte depuis plus d'un jour et toujours vide. Une seule
+      // fois par entrée (marqueur `provider` de la notification).
+      if (now.getTime() - fired.sentAt.getTime() < MS_PER_DAY) continue;
+      const marker = `journal-reminder-${entry.day}`;
+      const already = await prisma.notification.findFirst({ where: { enrollmentId: e.id, provider: marker } });
+      if (already) continue;
+      const msg = journalMessage({ learnerName: e.user.name, day: entry.day, prompt, reminder: true });
       await enqueueNotification({
         enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "EMAIL",
-        subject: `Votre journal de bord — Jour J+${entry.day}`, body, provider: "journal",
+        subject: msg.subject, body: msg.body, provider: marker,
       });
-      created.push({ enrollmentId: e.id, day: entry.day, body });
+      reminded.push({ enrollmentId: e.id, day: entry.day });
     }
   }
-  return { scanned: enrollments.length, created };
+  return { scanned: enrollments.length, created, reminded };
 }
 
 export type ReEngagementRunResult = {
@@ -265,7 +284,7 @@ export const JOB_CATALOG = [
   { key: "webhooks-flush", label: "Webhooks sortants", description: "Livraison des webhooks en attente vers les intégrations.", cadence: "chaque minute" },
   { key: "lrs-forward", label: "Transfert LRS", description: "Transfert des traces xAPI vers un LRS externe (inactif sans LRS configuré).", cadence: "chaque minute" },
   { key: "re-engagement", label: "Relances J+3/7/14", description: "Détection des apprenants inactifs et envoi des relances personnalisées.", cadence: "toutes les heures" },
-  { key: "journal-triggers", label: "Déclencheurs du journal", description: "Invitations au journal de bord (J+1 à J+14 après le début d'un bloc).", cadence: "toutes les heures" },
+  { key: "journal-triggers", label: "Déclencheurs du journal", description: "Invitations au journal de bord (J+2 à J+15) + rappel bienveillant 24 h après pour les entrées restées vides.", cadence: "toutes les heures" },
   { key: "project-sla", label: "SLA projets Bloc 4", description: "Alerte l'admin quand un projet soumis attend une évaluation depuis 5 jours ouvrés.", cadence: "toutes les heures" },
   { key: "insights-alerts", label: "Alertes pédagogiques", description: "Digest hebdomadaire : questions sous seuil, ruptures d'entonnoir, vidéos désertées.", cadence: "hebdomadaire (lundi)" },
   { key: "scheduled-reports", label: "Rapports programmés", description: "Envoi des rapports de parcours programmés (hebdo/mensuel).", cadence: "toutes les heures" },
