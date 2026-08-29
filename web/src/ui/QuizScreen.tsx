@@ -101,7 +101,9 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
           ) : (
             <p className="body">{t("qz.noPriorities")}</p>
           )}
-          <p className="meta">{t("qz.score", { correct: prof.correct, total: prof.total })}</p>
+          {/* Arbitrage A1 : le diagnostic n'est PAS noté — aucun score affiché,
+              le lien profil ↔ priorités est énoncé à la place. */}
+          <p className="meta">{t("qz.notScored")}</p>
         </div>
       ) });
     } else if (kind === "final") {
@@ -154,7 +156,8 @@ export function QuizScreen({ eid, kind }: { eid: string; kind: QuizKind }) {
               {(d.priorities?.length ?? 0) > 0 && <p className="body" style={{ margin: 0 }}>{t(d.priorities!.length > 1 ? "qz.priorities" : "qz.priority1")} : {d.priorities!.join(" · ")}</p>}
             </>
           )}
-          <p className="meta" style={{ margin: 0 }}>{t("qz.correctCount", { correct: d.correct ?? 0, total: d.total ?? data.questions.length })}</p>
+          {/* A1 : pas de note sur le diagnostic, même dans le récap figé. */}
+          <p className="meta" style={{ margin: 0 }}>{kind === "diagnostic" ? t("qz.notScored") : t("qz.correctCount", { correct: d.correct ?? 0, total: d.total ?? data.questions.length })}</p>
         </div>
         {divergenceNode(frozenDivergence)}
         {data.questions.map((q, i) => {

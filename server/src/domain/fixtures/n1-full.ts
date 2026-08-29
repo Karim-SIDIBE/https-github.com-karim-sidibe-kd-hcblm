@@ -133,13 +133,13 @@ const ms13: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt:
-      "Mes 3 principales sources d'urgence artificielle : identifiez-les et une action concrète pour chacune.",
+      "Mes 3 principales sources d'urgence artificielle : pour chacune, nommez le mécanisme qui la crée dans VOTRE organisation (délégation de dernière minute, « urgent » par défaut, réunion non préparée, messages permanents, valorisation de l'urgence) et UNE action concrète, à votre main, pour la réduire. Posez-vous la question-filtre : qui demande ? quel délai réel ? quelle conséquence si j'attends 24 h ?",
     feedbackText:
       "Vérifiez chacune de vos 3 actions avec cette grille : elle est efficace si (1) elle s'attaque au mécanisme, pas à la personne ; (2) elle est faisable sans autorisation de votre hiérarchie ; (3) son effet est observable sous 2 semaines. « Demander aux collègues d'arrêter » échouera ; « proposer un créneau quotidien de traitement des demandes » réussit. Commencez par la source qui revient le plus souvent dans votre semaine — pas par la plus facile.",
     fields: [
-      { label: "Source 1 + action concrète", placeholder: "…", prefillFromMomentAncrage: false },
-      { label: "Source 2 + action concrète", placeholder: "…", prefillFromMomentAncrage: false },
-      { label: "Source 3 + action concrète", placeholder: "…", prefillFromMomentAncrage: false },
+      { label: "Source 1 + action concrète", placeholder: "ex. les demandes « urgentes » de fin de journée → je confirme réception et propose un créneau le lendemain matin", prefillFromMomentAncrage: false },
+      { label: "Source 2 + action concrète", placeholder: "ex. les réunions convoquées sans ordre du jour → je demande l'ordre du jour avant de confirmer ma présence", prefillFromMomentAncrage: false },
+      { label: "Source 3 + action concrète", placeholder: "ex. le groupe WhatsApp qui sonne toute la journée → 3 plages de consultation communiquées", prefillFromMomentAncrage: false },
     ],
   },
 };
@@ -165,12 +165,12 @@ const ms14: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Mes phrases de signalement et mon rituel de reprise (3 étapes en moins de 2 minutes).",
+    prompt: "Deux réponses attendues : (1) votre phrase de signalement bienveillant, (2) votre rituel de reprise — un enchaînement de 3 gestes qui tient en moins de 2 minutes.",
     feedbackText:
       "Testez vos phrases : une bonne phrase de signalement (1) accuse réception avec respect, (2) nomme votre créneau en cours, (3) propose un moment précis — « je te reviens à 11h », jamais « plus tard ». Si elle peut être perçue comme un rejet dans votre organisation, ajoutez la marque relationnelle d'usage (salutation, ton, canal). Et votre rituel de reprise doit tenir en 2 minutes : noter où vous en étiez, relire la dernière phrase produite, reprendre — au-delà, vous ne l'utiliserez pas.",
     fields: [
       { label: "Ma phrase de signalement bienveillant", placeholder: "« Je suis sur un dossier important, j'ai besoin de [durée]. Je reviens à [heure]. »", prefillFromMomentAncrage: false },
-      { label: "Mon rituel de reprise (3 étapes)", placeholder: "relire · re-focaliser · première micro-action", prefillFromMomentAncrage: false },
+      { label: "Mon rituel de reprise — les 3 gestes, dans l'ordre", placeholder: "ex. relire ma dernière phrase · re-focaliser sur l'objectif · première micro-action", prefillFromMomentAncrage: false },
     ],
   },
 };
@@ -237,7 +237,7 @@ const ms21: MicroSession = {
       "Relisez chaque formulation avec la grille du « oui différent » : elle doit (1) accuser réception positivement (« oui, je m'en occupe »), (2) rendre visible le conflit de priorités (« j'ai X à livrer pour 16h »), (3) proposer une alternative datée (« je te le fais pour demain 10h — ça convient ? »). Si l'une de vos phrases contient un « non » sec ou reste sans date, reformulez-la : c'est la date qui transforme un refus en engagement.",
     fields: [
       { label: "Demande de rapport urgent de dernière minute → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
-      { label: "Réunion non planifiée pendant mon temps de fond → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
+      { label: "Réunion non planifiée pendant mon temps de fond (mon créneau de travail concentré) → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Demande d'aide d'un collègue sur son dossier → mon « oui différent »", placeholder: "…", prefillFromMomentAncrage: false },
     ],
   },
@@ -264,14 +264,14 @@ const ms22: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Ma planification hebdomadaire africaine : 3 résultats attendus, leur créneau, et mon buffer.",
+    prompt: "Ma planification hebdomadaire africaine : mes 3 résultats attendus classés par ordre d'importance (n° 1 = le plus important), le créneau où je les réalise, et mon buffer d'imprévus.",
     feedbackText:
       "Contrôlez vos 3 résultats : chacun doit être un livrable FINI (« rapport envoyé », pas « avancer sur le rapport »). Puis votre buffer : sur une semaine de 40 h, 30 à 35 % représentent 12 à 14 h non planifiées. Si votre planning occupe plus de 65–70 % du temps, il cassera dès lundi — retirez un résultat plutôt que de rogner le buffer. Enfin, placez les créneaux de vos résultats le matin, aux heures de haute énergie.",
     fields: [
       { label: "Résultat 1 (livrable fini) + créneau", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Résultat 2 (livrable fini) + créneau", placeholder: "…", prefillFromMomentAncrage: false },
       { label: "Résultat 3 (livrable fini) + créneau", placeholder: "…", prefillFromMomentAncrage: false },
-      { label: "Mon buffer africain (% du temps réservé)", placeholder: "30–35 %", prefillFromMomentAncrage: false },
+      { label: "Mon buffer africain — % de la semaine laissé LIBRE pour absorber les imprévus (un chiffre)", placeholder: "ex. 30 %", prefillFromMomentAncrage: false },
     ],
   },
 };
@@ -549,13 +549,13 @@ export const n1Full: CourseContent = {
               { key: "C", label: "La tâche la plus importante (pas la plus urgente), avant les messages." },
               { key: "D", label: "Répartir les 12 tâches en blocs d'une heure." },
             ], correctKey: "C", feedbackText: "Commencer par le facile crée l'illusion de productivité. La tâche la plus importante mérite les premières heures.", subArea: "priorisation" },
-            { id: "d4", scenarioText: "Organisation gabonaise à réunions fréquentes non planifiées. Convoqué 2 h alors que vous deviez finaliser un dossier.", options: [
+            { id: "d4", scenarioText: "Organisation africaine à réunions fréquentes non planifiées. Convoqué 2 h alors que vous deviez finaliser un dossier.", options: [
               { key: "A", label: "J'assiste entièrement — manquer une réunion est trop risqué." },
               { key: "B", label: "Je demande l'ordre du jour et négocie ma présence partielle." },
               { key: "C", label: "J'y vais mais travaille discrètement sur mon dossier." },
               { key: "D", label: "J'accepte et renégocie en amont mon dossier avec la partie prenante." },
             ], correctKey: "D", feedbackText: "Accepter en renégociant votre dossier en amont permet d'assister (respect de la hiérarchie) tout en gérant activement l'impact — plus professionnel qu'un arbitrage subi.", subArea: "réunions" },
-            { id: "d5", scenarioText: "Vendredi 17h30, tâche importante à 60 % (45 min pour finir), départ prévu à 18h.", options: [
+            { id: "d5", scenarioText: "Vendredi 17h30, une tâche importante est réalisée à 60 % (45 min de travail restant), départ prévu à 18h.", options: [
               { key: "A", label: "Je reste finir — une tâche non terminée est non faite." },
               { key: "B", label: "Je documente précisément l'état (60 %, prochaines étapes) et pars à 18h." },
               { key: "C", label: "Je pars et reviens samedi matin." },
@@ -573,13 +573,13 @@ export const n1Full: CourseContent = {
               { key: "C", label: "Je réponds tout de suite au manager et diffère les autres." },
               { key: "D", label: "3 plages de consultation communiquées + notifications pour un groupe « urgences réelles »." },
             ], correctKey: "D", feedbackText: "Couper toutes les notifications et disparaître totalement est perçu comme de l'arrogance. Les plages de consultation communiquées équilibrent protection du focus et canal d'urgence identifié.", subArea: "WhatsApp" },
-            { id: "d8", scenarioText: "Déléguer une tâche à un junior ghanéen alors que vous avez tendance à tout faire vous-même.", options: [
+            { id: "d8", scenarioText: "Déléguer une tâche à un junior de votre équipe alors que vous avez tendance à tout faire vous-même.", options: [
               { key: "A", label: "Je délègue avec instructions très détaillées et vérifie chaque heure." },
               { key: "B", label: "Je garde la tâche — déléguer prend plus de temps." },
               { key: "C", label: "Je clarifie le résultat, les ressources et les jalons, puis je laisse travailler en restant dispo." },
               { key: "D", label: "Je fais la tâche moi-même et le junior m'observe." },
             ], correctKey: "C", feedbackText: "Déléguer le résultat (pas la méthode), donner les ressources et des jalons sans micro-management libère votre temps et développe le junior.", subArea: "délégation" },
-            { id: "d9", scenarioText: "Projet camerounais en retard de 3 semaines. Le manager demande de travailler les weekends pendant un mois ; vous êtes déjà à charge maximale.", options: [
+            { id: "d9", scenarioText: "Projet de votre organisation en retard de 3 semaines. Le manager demande de travailler les weekends pendant un mois ; vous êtes déjà à charge maximale.", options: [
               { key: "A", label: "J'accepte sans discuter." },
               { key: "B", label: "Je demande un temps de réflexion, analyse la cause du retard et propose un plan avec plusieurs options." },
               { key: "C", label: "Je refuse directement — pas dans mon contrat." },
@@ -609,7 +609,7 @@ export const n1Full: CourseContent = {
           subtitle: "Nadia : compétente, épuisée, et prisonnière de ses propres réponses aux urgences",
           durationEstimate: "30 min",
           context:
-            "Nadia a 27 ans. Assistante de direction dans une agence de conseil à Nairobi. Depuis 18 mois, elle est devenue la personne à qui tout le monde s'adresse pour tout. Son directeur lui envoie des messages à 7h et à 22h. Ses collègues l'interrompent en moyenne toutes les 20 minutes. Sa liste de tâches propres ne diminue jamais. Elle est épuisée et ne sait pas comment changer sans paraître « moins professionnelle » dans sa culture kényane.",
+            "Nadia a 27 ans. Assistante de direction dans une agence de conseil à Nairobi. Depuis 18 mois, elle est devenue la personne à qui tout le monde s'adresse pour tout. Son directeur lui envoie des messages à 7h et à 22h. Ses collègues l'interrompent en moyenne toutes les 20 minutes. Sa liste de tâches propres ne diminue jamais. Elle est épuisée et ne sait pas comment changer sans paraître « moins professionnelle » dans la culture de son organisation.",
           steps: [],
           structuredSteps: [
             {
@@ -628,10 +628,10 @@ export const n1Full: CourseContent = {
                   { key: "A", label: "Son manager la surcharge délibérément — il faudrait lui parler." },
                   { key: "B", label: "Nadia n'a pas de méthode de gestion du temps — elle a besoin d'un outil." },
                   { key: "C", label: "Nadia a confondu « être disponible » et « être productive » — sa réputation de fiabilité est devenue un piège dont elle n'arrive pas à sortir sans paraître moins professionnelle." },
-                  { key: "D", label: "L'organisation kényane valorise trop la disponibilité — c'est une question culturelle qui la dépasse." },
+                  { key: "D", label: "Son organisation valorise trop la disponibilité — c'est une question culturelle qui la dépasse." },
                 ], correctKey: "C", allValid: false, savedForProject: false,
                   feedback: "La cause racine est un piège culturel très fréquent : sa disponibilité totale a été valorisée et récompensée par la réputation d'être « fiable ». Sortir de ce piège demande une stratégie culturellement adaptée — pas simplement « faire moins »." },
-                { id: "n1.3", kind: "open", prompt: "Réflexion ouverte — En une phrase, décrivez ce que Nadia devrait changer EN PREMIER pour reprendre le contrôle de son temps — en restant professionnelle dans son contexte kényan.", allValid: false, feedback: "", minChars: 40, savedForProject: true },
+                { id: "n1.3", kind: "open", prompt: "Réflexion ouverte — En une phrase, décrivez ce que Nadia devrait changer EN PREMIER pour reprendre le contrôle de son temps — en restant professionnelle dans son contexte.", allValid: false, feedback: "", minChars: 40, savedForProject: true },
               ],
             },
             {
@@ -639,7 +639,7 @@ export const n1Full: CourseContent = {
               durationEstimate: "10 min",
               intro: "",
               questions: [
-                { id: "n2.1", kind: "mcq", prompt: "Pour arrêter de recevoir des messages de son directeur à 22h, quelle approche est la plus adaptée au contexte kényan ?", options: [
+                { id: "n2.1", kind: "mcq", prompt: "Pour arrêter de recevoir des messages de son directeur à 22h, quelle approche est la plus adaptée à son contexte ?", options: [
                   { key: "A", label: "Nadia ne répond plus aux messages après 20h — son directeur comprendra progressivement." },
                   { key: "B", label: "Nadia fixe un entretien pour expliquer que ces messages tardifs l'épuisent." },
                   { key: "C", label: "Nadia propose un point de fin de journée de 15 minutes à 17h30 pour anticiper les besoins du lendemain, ce qui réduira les messages tardifs en créant un espace d'anticipation." },
@@ -789,7 +789,7 @@ export const n1Full: CourseContent = {
               { key: "C", label: "La plus urgente selon mon manager." },
               { key: "D", label: "Celle que j'aime le plus faire." },
             ], correctKey: "B", feedbackText: "Les premières heures sont vos heures d'énergie maximale — c'est là que le vrai travail (important, pas urgent) doit être fait.", subArea: "priorisation" },
-            { id: "ib3", scenarioText: "Un collègue senior demande de l'aide pendant votre créneau de concentration communiqué à l'équipe togolaise.", options: [
+            { id: "ib3", scenarioText: "Un collègue senior demande de l'aide pendant votre créneau de concentration communiqué à votre équipe.", options: [
               { key: "A", label: "Je l'aide immédiatement — un senior ne peut pas attendre." },
               { key: "B", label: "Je l'ignore jusqu'à la fin de mon créneau." },
               { key: "C", label: "Je signale mon créneau et propose de l'aider à une heure précise." },
@@ -801,13 +801,13 @@ export const n1Full: CourseContent = {
               { key: "C", label: "Ne planifier que le matin." },
               { key: "D", label: "Ne pas planifier et m'adapter au jour le jour." },
             ], correctKey: "B", feedbackText: "Le buffer africain est non négociable : planifier 100 % de son temps garantit l'échec de la planification.", subArea: "planification" },
-            { id: "ib5", scenarioText: "Vous avez délégué à un junior nigérian ; il ne répond pas à votre email de suivi depuis 2 jours.", options: [
+            { id: "ib5", scenarioText: "Vous avez délégué à un junior ; il ne répond pas à votre email de suivi depuis 2 jours.", options: [
               { key: "A", label: "Je reprends la tâche moi-même." },
               { key: "B", label: "J'escalade à mon propre manager." },
               { key: "C", label: "J'envoie un 2e email plus ferme en copiant son manager." },
               { key: "D", label: "Je le contacte directement (appel/face à face) pour comprendre et lever les blocages." },
             ], correctKey: "D", feedbackText: "Dans les cultures à forte communication orale, un junior qui ne répond pas est souvent bloqué ; un contact direct débloque et préserve la relation.", subArea: "délégation" },
-            { id: "ib6", scenarioText: "Votre semaine tanzanienne a été désorganisée par 4 urgences imprévues. Vendredi soir, que faites-vous ?", options: [
+            { id: "ib6", scenarioText: "Votre semaine a été désorganisée par 4 urgences imprévues. Vendredi soir, que faites-vous ?", options: [
               { key: "A", label: "Je reste au bureau pour rattraper le retard." },
               { key: "B", label: "Je récupère physiquement, je rattraperai la semaine prochaine." },
               { key: "C", label: "J'envoie un email à mon manager pour signaler la perturbation." },
@@ -838,8 +838,8 @@ export const n1Full: CourseContent = {
                 { label: "Mon système de temps protégé — adaptation culturelle réalisée", placeholder: "…" },
                 { label: "Ma phrase de signalement bienveillant — mise en œuvre concrète", placeholder: "…" },
                 { label: "Ma phrase de signalement bienveillant — adaptation culturelle réalisée", placeholder: "…" },
-                { label: "Mon « oui différent » avec ma hiérarchie — mise en œuvre concrète", placeholder: "…" },
-                { label: "Mon « oui différent » avec ma hiérarchie — adaptation culturelle réalisée", placeholder: "…" },
+                { label: "Mon « oui différent » (hiérarchie et collègues) — mise en œuvre concrète", placeholder: "…" },
+                { label: "Mon « oui différent » (hiérarchie et collègues) — adaptation culturelle réalisée", placeholder: "…" },
               ],
             },
             {
@@ -900,7 +900,7 @@ export const n1Full: CourseContent = {
           subtitle: "Sylvie à Abidjan",
           durationEstimate: "20 min",
           context:
-            "Sylvie a 30 ans. Responsable administrative dans une agence de communication à Abidjan. Elle manage 4 personnes, dont 2 à distance. Ses journées sont envahies par les sollicitations internes et externes, elle n'arrive pas à finir ses propres dossiers, et son équipe manque de visibilité sur ses priorités. Elle a lu des livres sur la productivité mais aucune méthode n'a tenu plus de 3 semaines dans son environnement ivoirien.",
+            "Sylvie a 30 ans. Responsable administrative dans une agence de communication à Abidjan. Elle manage 4 personnes, dont 2 à distance. Ses journées sont envahies par les sollicitations internes et externes, elle n'arrive pas à finir ses propres dossiers, et son équipe manque de visibilité sur ses priorités. Elle a lu des livres sur la productivité mais aucune méthode n'a tenu plus de 3 semaines dans son environnement professionnel.",
           steps: [],
           structuredSteps: [
             {
@@ -914,10 +914,10 @@ export const n1Full: CourseContent = {
                   { key: "C", label: "Avant tout outil, il faut identifier si son problème est d'ordre personnel (méthode), organisationnel (culture de son agence) ou systémique (charge réellement excessive). L'outil vient après le diagnostic." },
                   { key: "D", label: "Elle doit apprendre à déléguer davantage à son équipe." },
                 ], correctKey: "C", allValid: false, savedForProject: false,
-                  feedback: "Recommander un outil sans diagnostic traite le symptôme. Dans le contexte ivoirien de Sylvie, son problème semble mixte : personnel (méthode), organisationnel (culture de disponibilité) et peut-être systémique (charge réelle). Comprendre lequel est dominant conditionne l'efficacité de toute solution." },
+                  feedback: "Recommander un outil sans diagnostic traite le symptôme. Dans le contexte de Sylvie, son problème semble mixte : personnel (méthode), organisationnel (culture de disponibilité) et peut-être systémique (charge réelle). Comprendre lequel est dominant conditionne l'efficacité de toute solution." },
                 { id: "s2", kind: "mcq", prompt: "Sylvie a essayé 4 fois un rituel de planification et a toujours abandonné au bout de 2 semaines. Quelle est la cause la plus probable dans son contexte africain ?", options: [
                   { key: "A", label: "Elle manque de discipline personnelle." },
-                  { key: "B", label: "La méthode qu'elle utilisait était trop complexe et rigide pour l'imprévision de son organisation ivoirienne." },
+                  { key: "B", label: "La méthode qu'elle utilisait était trop complexe et rigide pour l'imprévision de son organisation." },
                   { key: "C", label: "La planification hebdomadaire ne fonctionne pas dans les organisations africaines." },
                   { key: "D", label: "Elle n'avait pas le soutien de son manager." },
                 ], correctKey: "B", allValid: false, savedForProject: false,
@@ -946,7 +946,7 @@ export const n1Full: CourseContent = {
             "Je délègue efficacement en adaptant ma méthode aux codes culturels africains",
             "Je termine mes semaines avec le sentiment d'avoir accompli ce qui comptait vraiment",
           ],
-          scale: ["1 — Pas encore", "2 — En cours d'installation", "3 — Souvent présent", "4 — Naturel et constant"],
+          scale: ["1 — Pas encore vrai pour moi", "2 — En cours d'installation", "3 — Souvent vrai", "4 — Naturel et constant"],
         },
         // MICRO-SESSION 3.3 — Plan d'action 30 jours (~20 min · soumission LMS),
         // restructuré selon l'énoncé : 3 habitudes séquencées + signal de
@@ -978,7 +978,7 @@ export const n1Full: CourseContent = {
               { label: "D'ici 30 jours, le signe concret et observable qui me dira que ma gestion du temps s'est vraiment améliorée", placeholder: "ex. je pars du bureau avant 18 h 3 jours sur 5, priorité du jour terminée" },
             ] },
             { title: "Mon pair de progression", fields: [
-              { label: "Ce que je vais partager avec lui cette semaine", placeholder: "ex. mon rituel du matin et mon premier obstacle rencontré" },
+              { label: "Ce que je vais partager cette semaine avec mon pair de progression (la personne de confiance désignée au Bloc 0)", placeholder: "ex. mon rituel du matin et mon premier obstacle rencontré" },
             ] },
           ],
         },
@@ -986,37 +986,37 @@ export const n1Full: CourseContent = {
           title: "Micro-session 3.3 — Quiz final",
           durationEstimate: "15 min",
           questions: [
-            { id: "f1", scenarioText: "Lundi 8h, organisation sénégalaise, 8 tâches dont 3 « urgentes » (collègues) et 2 importantes (mission). Par laquelle commencez-vous ?", options: [
+            { id: "f1", scenarioText: "Lundi 8h, organisation africaine, 8 tâches dont 3 « urgentes » (collègues) et 2 importantes (mission). Par laquelle commencez-vous ?", options: [
               { key: "A", label: "La plus facile pour démarrer." },
               { key: "B", label: "La plus importante pour ma mission, même difficile et non urgente." },
               { key: "C", label: "Une des 3 « urgentes »." },
               { key: "D", label: "Je consulte d'abord emails et WhatsApp." },
             ], correctKey: "B", feedbackText: "La priorité la plus importante mérite les premières heures de la semaine ; les urgences des collègues attendent généralement 2 h sans conséquence." },
-            { id: "f2", scenarioText: "Directrice ghanéenne à 21h30 : rapport mensuel pour demain 8h au lieu de vendredi ; il est à 60 %.", options: [
+            { id: "f2", scenarioText: "Votre directrice à 21h30 : rapport mensuel pour demain 8h au lieu de vendredi ; il est à 60 %.", options: [
               { key: "A", label: "Je travaille toute la nuit pour finir à 100 %." },
               { key: "B", label: "Je finis en 2 h et envoie à 23h30." },
               { key: "C", label: "Je propose une version préliminaire à 8h et la finale vendredi comme prévu." },
               { key: "D", label: "J'ignore jusqu'au matin." },
             ], correctKey: "C", feedbackText: "Le « oui différent » appliqué aux urgences nocturnes : répond au besoin immédiat tout en protégeant la qualité de la livraison finale." },
-            { id: "f3", scenarioText: "Un collègue entre pendant votre créneau de focus communiqué à l'équipe togolaise.", options: [
+            { id: "f3", scenarioText: "Un collègue entre pendant votre créneau de focus communiqué à votre équipe.", options: [
               { key: "A", label: "J'interromps et traite sa demande." },
               { key: "B", label: "Je lui dis de revenir vendredi." },
               { key: "C", label: "Je continue sans le regarder." },
               { key: "D", label: "Je signale mon créneau et propose un moment précis dans l'heure." },
             ], correctKey: "D", feedbackText: "Signaler le créneau + proposer une alternative concrète : maintenir le focus et préserver la relation." },
-            { id: "f4", scenarioText: "Semaine de 45 h, organisation nigériane. Combien d'heures max en tâches concrètes ?", options: [
+            { id: "f4", scenarioText: "Semaine de 45 h, organisation africaine. Combien d'heures max en tâches concrètes ?", options: [
               { key: "A", label: "45 h — tout le temps disponible." },
               { key: "B", label: "40 h — 5 h pour les urgences mineures." },
               { key: "C", label: "≈ 31 h — réserver 30 % de buffer africain." },
               { key: "D", label: "20 h — 3 grandes priorités uniquement." },
             ], correctKey: "C", feedbackText: "Le buffer africain de 30 % (≈ 13,5 h) absorbe les urgences sans détruire les priorités ; 40 h est insuffisant en haute imprévision." },
-            { id: "f5", scenarioText: "Junior camerounais : premier draft insuffisant sur une tâche déléguée.", options: [
+            { id: "f5", scenarioText: "Un junior de votre équipe : premier draft insuffisant sur une tâche déléguée.", options: [
               { key: "A", label: "Je planifie 30 min pour revoir, identifier les lacunes et convenir d'une v2 sous 48h." },
               { key: "B", label: "Je reprends le travail moi-même." },
               { key: "C", label: "Je renvoie le draft avec des commentaires écrits et j'attends." },
               { key: "D", label: "J'escalade au manager pour me couvrir." },
             ], correctKey: "A", feedbackText: "Un draft insuffisant n'est pas un échec de la délégation : 30 min de coaching forment le junior et maintiennent la qualité." },
-            { id: "f6", scenarioText: "Vous abandonnez votre rituel de planification chaque vendredi « parce que trop à faire » (organisation kényane).", options: [
+            { id: "f6", scenarioText: "Vous abandonnez votre rituel de planification chaque vendredi « parce que trop à faire » (organisation africaine).", options: [
               { key: "A", label: "Je manque de discipline." },
               { key: "B", label: "Le créneau est mauvais — le vendredi épuisé ne marche pas ; essayer jeudi 16h ou vendredi 14h." },
               { key: "C", label: "La planification ne marche pas en contexte africain." },
@@ -1085,7 +1085,7 @@ export const n1Full: CourseContent = {
           // Cadence J+2 → J+15 avec la question spécifique de chaque micro-entrée
           // (énoncé « Journal des 2 semaines », réponses 50 à 100 mots).
           entries: [
-            { day: 2, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé à mettre en œuvre votre solution : décrivez en 2-3 lignes la première réaction concrète de votre environnement — verbale, comportementale ou intérieure.", minWords: 50, placeholder: "ex. Ce matin, quand j'ai annoncé ma plage de travail concentré, mon collègue a d'abord souri, puis…" },
+            { day: 2, prompt: "Vous aviez décrit {{moment_ancrage}}. Vous avez commencé à tester la solution choisie dans la formation (votre rituel, votre temps protégé…) : décrivez en 2-3 lignes la première réaction concrète de votre environnement — verbale, comportementale ou intérieure.", minWords: 50, placeholder: "ex. Ce matin, quand j'ai annoncé ma plage de travail concentré, mon collègue a d'abord souri, puis…" },
             { day: 4, prompt: "Vous aviez décrit {{moment_ancrage}}. Quel obstacle réel avez-vous rencontré ? Comment l'avez-vous géré, ou comment allez-vous le gérer dans les prochains jours ?", minWords: 50, placeholder: "ex. Mardi, une visite surprise de 45 minutes a cassé ma plage protégée. J'ai décidé de…" },
             { day: 6, prompt: "Au regard de {{moment_ancrage}}, avez-vous observé un changement dans votre propre façon de répondre aux sollicitations depuis que vous avez commencé ? Donnez un exemple concret.", minWords: 50, placeholder: "ex. Hier, au lieu de répondre immédiatement au message, j'ai noté la demande et proposé un créneau…" },
             { day: 9, prompt: "Vous aviez commencé ce parcours pour traiter {{moment_ancrage}}. Qu'avez-vous partagé avec votre pair de progression ? Quelle a été sa perspective sur votre démarche dans votre contexte ?", minWords: 50, placeholder: "ex. J'ai montré mon rituel du matin à Aïcha ; elle m'a fait remarquer que…" },

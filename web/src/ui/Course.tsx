@@ -218,6 +218,13 @@ export function Course({ eid }: { eid: string }) {
                 </ol>
               </details>
             ) : null}
+            {/* Jalon « À vous de jouer » (A5) : la pratique se fait EN PARALLÈLE
+                du parcours — énoncé à l'entrée des blocs de pratique/ancrage. */}
+            {((b as any).type === "PRACTICE" || (b as any).type === "ANCHORING") && !locked && (
+              <div className="hf-card hf-card--peach" style={{ marginTop: 10, padding: "10px 14px" }}>
+                <p className="body" style={{ margin: 0 }}><strong>🎯 {t("course.yourTurnTitle")}</strong> — {t((b as any).type === "PRACTICE" ? "course.yourTurnPractice" : "course.yourTurnAnchoring")}</p>
+              </div>
+            )}
             {Array.isArray((b as any).units) && (b as any).units.length > 0 && (() => {
               const c = { ms: 0, la: 0, mt: 0 };
               const add = (t: string) => { if (t === "micro-session") c.ms++; else if (t === "long-activity") c.la++; else if (t === "micro-task") c.mt++; };
