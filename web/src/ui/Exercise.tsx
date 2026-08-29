@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Exercise as ExerciseSpec } from "@kd/shared";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
+import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { useT } from "../lib/i18n";
 
 export type { ExerciseSpec };
@@ -12,7 +13,7 @@ export type ExerciseMeta = { timeMs: number; feedbackViewed: boolean; response?:
  * green feedback). It is the completion gate: the learner cannot advance until
  * they answer and read the feedback. Emits xAPI meta (AC#11).
  */
-export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
+export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen, draftKey }: {
   exercise: ExerciseSpec;
   onComplete: (data: unknown, meta: ExerciseMeta) => void | Promise<void>;
   onNext: () => void;
@@ -22,18 +23,24 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
   /** Recorded answer of an already-completed exercise: render it read-only
    *  (first submission is final — server-enforced). */
   frozen?: unknown;
+  /** Clé de brouillon local (P3) — la saisie survit à un départ de l'écran. */
+  draftKey?: string;
 }) {
   const t = useT();
   const start = useRef(Date.now());
   const fz = frozen as { choice?: string; text?: string; fields?: Record<string, string> } | undefined;
+  type Draft = { choice?: string; text?: string; fields?: Record<string, string> };
+  const draft = fz ? null : loadDraft<Draft>(draftKey);
   const [phase, setPhase] = useState<"answer" | "feedback">(fz ? "feedback" : "answer");
-  const [choice, setChoice] = useState<string>(fz?.choice ?? "");
-  const [text, setText] = useState(fz?.text ?? "");
+  const [choice, setChoice] = useState<string>(fz?.choice ?? draft?.choice ?? "");
+  const [text, setText] = useState(fz?.text ?? draft?.text ?? "");
   // Pré-remplissage serveur (drapeau prefillFromMomentAncrage du contenu) :
-  // valeur initiale éditable, ignorée dès qu'une soumission existe.
+  // valeur initiale éditable, ignorée dès qu'une soumission existe. Le
+  // brouillon local (ce que l'apprenant a déjà tapé) prime sur le prefill.
   const [values, setValues] = useState<Record<string, string>>(() => fz?.fields
-    ?? Object.fromEntries(((exercise.fields ?? []) as { label: string; prefill?: string }[])
-      .filter((f) => f.prefill).map((f) => [f.label, f.prefill!])));
+    ?? { ...Object.fromEntries(((exercise.fields ?? []) as { label: string; prefill?: string }[])
+      .filter((f) => f.prefill).map((f) => [f.label, f.prefill!])), ...(draft?.fields ?? {}) });
+  useDraft(draftKey, { choice, text, fields: values }, phase === "answer" && !fz);
   const [busy, setBusy] = useState(false);
   const [ai, setAi] = useState<{ loading: boolean; text: string | null }>({ loading: false, text: null });
 
@@ -86,8 +93,11 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
     setBusy(true);
     const correct = exercise.type === "multi" ? choice === exercise.correctKey : undefined;
     const meta: ExerciseMeta = { timeMs: Date.now() - start.current, feedbackViewed: true, response: response(), correct };
-    const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() } : { fields: values };
-    try { await onComplete(data, meta); setPhase("feedback"); } finally { setBusy(false); }
+    // guidedForm : les champs sont enregistrés dans l'ORDRE DU CONTENU, pas
+    // dans l'ordre de frappe — le feedback IA les commente par numéro (P4).
+    const data = exercise.type === "multi" ? { choice } : exercise.type === "written" ? { text: text.trim() }
+      : { fields: Object.fromEntries((exercise.fields ?? []).map((f) => [f.label, (values[f.label] ?? "").trim()])) };
+    try { await onComplete(data, meta); clearDraft(draftKey); setPhase("feedback"); } finally { setBusy(false); }
     // The personalised feedback now loads via the phase effect above (shared
     // with frozen revisits). Best-effort: offline keeps static feedback only.
   }
@@ -114,8 +124,14 @@ export function Exercise({ exercise, onComplete, onNext, aiFeedback, frozen }: {
             <div className="hf-textwrap">
               <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={exercise.placeholder || t("answerPlaceholder")} style={{ minHeight: 150 }}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-              <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars}</span>
+              <span className="hf-count" style={{ color: text.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {minChars} {t("dl.unitChars")}</span>
             </div>
+          )}
+          {/* Retours de test (P1) : « 90 mots sur 200 » — le seuil est en
+              CARACTÈRES, pas en mots. On l'écrit noir sur blanc tant que le
+              minimum n'est pas atteint, au lieu d'un bouton gris muet. */}
+          {exercise.type === "written" && text.trim().length > 0 && text.trim().length < minChars && (
+            <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: minChars - text.trim().length })}</p>
           )}
 
           {exercise.type === "guidedForm" && (exercise.fields ?? []).map((f) => (

@@ -11,6 +11,7 @@ import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } fr
 import { generateNudge } from "../../lib/ai/nudge.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
+import { reengagementMessage } from "../../lib/notify/templates.js";
 import { courseInsights } from "../analytics/analytics.service.js";
 import { DEFAULT_ALERT_THRESHOLDS, detectInsightAlerts, type AlertThresholds } from "../../domain/engine/insights.js";
 
@@ -129,14 +130,18 @@ export async function runReEngagement(now: Date = new Date()): Promise<ReEngagem
 
     await prisma.reEngagementMessage.create({ data: { enrollmentId: e.id, stage, channel, body } });
 
+    // Mise en forme e-mail (P2 — retours de test) : salutation, lien direct de
+    // reprise, signature — le nudge brut n'est plus envoyé tel quel.
+    const msg = reengagementMessage({ stage, learnerName: e.user.name, nudge: body, admin: channel === "ADMIN" });
+
     // Enqueue for delivery: learner channel → learner e-mail; admin → admin inbox.
     await enqueueNotification({
       enrollmentId: e.id,
       recipientKind: channel === "ADMIN" ? "ADMIN" : "LEARNER",
       recipient: channel === "ADMIN" ? "admin@kompetences.net" : e.user.email,
       channel: "EMAIL",
-      subject: `Reprenez votre parcours (${stage})`,
-      body, aiGenerated, provider,
+      subject: msg.subject,
+      body: msg.body, aiGenerated, provider,
     });
 
     // Secondary mobile channel per the re-engagement matrix (§7.2): J3 → push,
@@ -145,12 +150,12 @@ export async function runReEngagement(now: Date = new Date()): Promise<ReEngagem
       if (stage === "J3") {
         await enqueueNotification({
           enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "PUSH",
-          subject: `Reprenez votre parcours`, body, aiGenerated, provider,
+          subject: msg.subject, body: msg.mobileBody, aiGenerated, provider,
         });
       } else if (stage === "J7" && e.user.phone) {
         await enqueueNotification({
           enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.phone, channel: "WHATSAPP",
-          body, aiGenerated, provider,
+          body: msg.mobileBody, aiGenerated, provider,
         });
       }
     }
@@ -194,9 +199,10 @@ export async function nudgeOne(enrollmentId: string) {
     learnerName: e.user.name, momentAncrage: e.momentAncrage, isEnterprise: e.isEnterprise, resume, blockDurationEstimate,
   });
   await prisma.reEngagementMessage.create({ data: { enrollmentId: e.id, stage, channel, body } });
+  const msg = reengagementMessage({ stage, learnerName: e.user.name, nudge: body });
   await enqueueNotification({
     enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "EMAIL",
-    subject: "Reprenez votre parcours", body, aiGenerated, provider,
+    subject: msg.subject, body: msg.body, aiGenerated, provider,
   });
   return { sent: true as const, stage, channel, email: e.user.email };
 }

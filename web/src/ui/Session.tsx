@@ -151,7 +151,7 @@ export function SessionScreen({ eid, block, item }: { eid: string; block: number
       )}
 
       {phase === "exercise" && session.exercise && (
-        <Exercise exercise={session.exercise} frozen={doneItem?.data} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
+        <Exercise exercise={session.exercise} frozen={doneItem?.data} draftKey={`ex:${eid}:${block}:${item}`} onComplete={(data, meta) => completeSession(data, meta, false)} onNext={() => goToNext()}
           aiFeedback={session.exercise.type === "multi" ? undefined : async () => {
             // Personalised formative feedback on the saved answer. The server
             // keeps the FIRST generated feedback (idempotent) — revisits of a

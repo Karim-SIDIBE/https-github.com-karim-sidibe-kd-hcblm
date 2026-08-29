@@ -4,6 +4,7 @@ import { getCachedProgress, setCachedProgress } from "../lib/cache";
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
+import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { answerOf, useAnswers } from "../lib/answers";
 import { Breadcrumb } from "./Breadcrumb";
 import { useT, useI18n } from "../lib/i18n";
@@ -24,8 +25,11 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
   const t = useT();
   const { lang } = useI18n();
   const [bundle, setBundle] = useState<any>(null);
-  const [text, setText] = useState("");
-  const [values, setValues] = useState<Record<string, string>>({});
+  // Brouillon local (P3) : la saisie survit à un départ de l'écran avant
+  // soumission ; purgé à la soumission réussie.
+  const draftKey = `dl:${eid}:${block}:${itemKey}`;
+  const [text, setText] = useState(() => loadDraft<{ text?: string }>(draftKey)?.text ?? "");
+  const [values, setValues] = useState<Record<string, string>>(() => loadDraft<{ fields?: Record<string, string> }>(draftKey)?.fields ?? {});
   const [busy, setBusy] = useState(false);
   const [journal, setJournal] = useState<JournalState[] | null>(null);
   const [after, setAfter] = useState<null | { progress: any; ai: string | null; aiLoading: boolean }>(null);
@@ -63,6 +67,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
   // Frozen results: a submitted deliverable is consultable, not re-editable.
   const answersMap = useAnswers(eid);
   const doneRow = answerOf(answersMap, block, itemKey);
+  useDraft(draftKey, { text, fields: values }, !doneRow && !after);
 
   // Pré-remplissage (promesse du parcours) : les champs annoncés « pré-remplis »
   // arrivent du serveur avec les données réelles de l'apprenant (PAM, réponses
@@ -111,6 +116,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
         ? { fields: Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()])), text: Object.entries(values).map(([k, v]) => `${k} : ${v.trim()}`).join("\n") }
         : { text: text.trim() };
       const r = await engine.commit(eid, "complete_item", { blockIndex: block, itemType: spec.itemType, itemKey, data });
+      clearDraft(draftKey);
       if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
       // Personalised feedback on the saved submission (AI when configured,
       // context-aware heuristic otherwise). Offline → chain straight on.
@@ -214,6 +220,9 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{count} / {spec.min} {spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars")}</span>
           </div>
+        )}
+        {!structured && spec.unit !== "mots" && count > 0 && count < spec.min && (
+          <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: spec.min - count })}</p>
         )}
         {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
         <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || !ok} onClick={submit}>{busy ? "…" : t("dl.submit")}</button>
