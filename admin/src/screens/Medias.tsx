@@ -170,16 +170,24 @@ export function Medias() {
   }
   // --- éditeur de piste (lot STED) : corriger les textes, décaler la synchro ---
   const [capEdit, setCapEdit] = useState<{ language: string; label: string; cues: VttCue[]; offset: string } | null>(null);
+  // L'éditeur s'ouvre SOUS le lecteur (souvent hors écran avec une vidéo 720p) :
+  // on l'amène en vue, sinon le clic sur ✏️ semble ne rien faire.
+  const capEditRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (capEdit) capEditRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }, [capEdit !== null]);
   async function editCaps(c: CaptionTrack) {
     if (!c.language) return;
     setCapBusy(true); setNote(null); setCapEdit(null);
     try {
       const res = await fetch(c.url); // URL absolue et tokenisée (?t=) — pas d'en-tête requis
-      if (!res.ok) throw new Error("Piste illisible");
+      if (!res.ok) throw new Error(`Piste illisible (HTTP ${res.status})`);
       const cues = parseVtt(await res.text());
       if (cues.length === 0) throw new Error("Aucune cue lisible dans cette piste");
       setCapEdit({ language: c.language, label: c.label, cues, offset: "0" });
-    } catch (e) { setNote(`✗ ${e instanceof Error ? e.message : "Chargement de la piste impossible"}`); }
+    } catch (e) {
+      // Le bandeau de note est masqué derrière le panneau d'aperçu — une
+      // erreur de chargement doit être VISIBLE, donc modale.
+      await modal.alert({ title: "Édition impossible", body: e instanceof Error ? e.message : "Chargement de la piste impossible" });
+    }
     finally { setCapBusy(false); }
   }
   function setCueText(i: number, text: string) {
@@ -350,7 +358,7 @@ export function Medias() {
                 </p>
 
                 {capEdit && (
-                  <div style={{ marginTop: 12, border: "1px solid var(--border, #e3e6ec)", borderRadius: 10, padding: 12 }}>
+                  <div ref={capEditRef} style={{ marginTop: 12, border: "1px solid var(--border, #e3e6ec)", borderRadius: 10, padding: 12 }}>
                     <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
                       <b style={{ fontSize: 13 }}>✏️ Édition — {capEdit.label} ({capEdit.cues.length} cues)</b>
                       <label className="row" style={{ gap: 6, alignItems: "center", fontSize: 12.5 }} title="Sous-titres « trop tôt » → décalage positif (ils s'afficheront plus tard)">
