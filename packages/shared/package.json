@@ -28,6 +28,10 @@
     "./block-items": {
       "types": "./src/block-items.ts",
       "import": "./src/block-items.ts"
+    },
+    "./vtt": {
+      "types": "./src/vtt.ts",
+      "import": "./src/vtt.ts"
     }
   },
   "scripts": {

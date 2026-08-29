@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { formatTimestamp, parseVtt, serializeVtt, shiftCues, type VttCue } from "@kd/shared/vtt";
 import { api, type CaptionTrack, type MediaAsset, type MediaFolder, ApiError } from "../lib/api";
 import { ago } from "../lib/ui";
 import { Pager } from "../lib/widgets";
@@ -110,7 +111,7 @@ export function Medias() {
   const capFileRef = useRef<HTMLInputElement>(null);
   const capLangRef = useRef<"fr" | "en">("fr");
   async function openPreview(m: MediaAsset) {
-    setNote(null); setPreview({ asset: m, renditions: [], sel: "", captions: [] });
+    setNote(null); setCapEdit(null); setPreview({ asset: m, renditions: [], sel: "", captions: [] });
     try {
       const pb = await api.mediaPlayback(m.id);
       const rends = (pb.renditions ?? []) as Rend[];
@@ -167,6 +168,38 @@ export function Medias() {
     } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Import impossible"}`); }
     finally { setCapBusy(false); if (capFileRef.current) capFileRef.current.value = ""; }
   }
+  // --- éditeur de piste (lot STED) : corriger les textes, décaler la synchro ---
+  const [capEdit, setCapEdit] = useState<{ language: string; label: string; cues: VttCue[]; offset: string } | null>(null);
+  async function editCaps(c: CaptionTrack) {
+    if (!c.language) return;
+    setCapBusy(true); setNote(null); setCapEdit(null);
+    try {
+      const res = await fetch(c.url); // URL absolue et tokenisée (?t=) — pas d'en-tête requis
+      if (!res.ok) throw new Error("Piste illisible");
+      const cues = parseVtt(await res.text());
+      if (cues.length === 0) throw new Error("Aucune cue lisible dans cette piste");
+      setCapEdit({ language: c.language, label: c.label, cues, offset: "0" });
+    } catch (e) { setNote(`✗ ${e instanceof Error ? e.message : "Chargement de la piste impossible"}`); }
+    finally { setCapBusy(false); }
+  }
+  function setCueText(i: number, text: string) {
+    setCapEdit((p) => p && ({ ...p, cues: p.cues.map((c, j) => (j === i ? { ...c, text } : c)) }));
+  }
+  const capOffset = () => { const n = Number((capEdit?.offset ?? "0").replace(",", ".")); return Number.isFinite(n) ? n : 0; };
+  async function saveCapEdit(m: MediaAsset) {
+    if (!capEdit) return;
+    setCapBusy(true); setNote(null);
+    try {
+      const off = capOffset();
+      const cues = off !== 0 ? shiftCues(capEdit.cues, off) : capEdit.cues;
+      await api.attachCaptions(m.id, { language: capEdit.language, content: serializeVtt(cues), format: "vtt", label: capEdit.label });
+      setNote(`💬 Piste « ${capEdit.label} » enregistrée${off !== 0 ? ` — décalée de ${off > 0 ? "+" : ""}${off} s` : ""}. Répercutée chez tous les apprenants.`);
+      setCapEdit(null);
+      openPreview(m);
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Enregistrement impossible"}`); }
+    finally { setCapBusy(false); }
+  }
+
   async function removeCaps(m: MediaAsset, c: CaptionTrack) {
     if (!c.language || !(await modal.confirm({ title: `Supprimer la piste « ${c.label} » ?`, danger: true, okLabel: "Supprimer" }))) return;
     try { await api.deleteCaptions(m.id, c.language); setNote(`🗑️ Piste « ${c.label} » supprimée.`); openPreview(m); }
@@ -300,6 +333,7 @@ export function Medias() {
                   {preview.captions.map((c) => (
                     <span key={c.url} className="pill pill--info" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
                       {c.label}
+                      <button className="btn btn--sm" style={{ padding: "0 4px", border: "none" }} title={`Éditer la piste ${c.label} (textes + synchronisation)`} disabled={capBusy} onClick={() => editCaps(c)}>✏️</button>
                       <button className="btn btn--sm" style={{ padding: "0 4px", border: "none" }} title={`Supprimer la piste ${c.label}`} onClick={() => removeCaps(preview.asset, c)}>✕</button>
                     </span>
                   ))}
@@ -312,8 +346,39 @@ export function Medias() {
                   <input ref={capFileRef} type="file" accept=".vtt,.srt,text/vtt" hidden onChange={(e) => importCaps(preview.asset, e.target.files?.[0] ?? null)} />
                 </div>
                 <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0" }}>
-                  Générés une fois pour toutes, réutilisés par tous les apprenants (et hors ligne). Un fichier importé remplace la piste de la même langue.
+                  Générés une fois pour toutes, réutilisés par tous les apprenants (et hors ligne). Un fichier importé remplace la piste de la même langue. ✏️ pour corriger les textes ou recaler la synchronisation.
                 </p>
+
+                {capEdit && (
+                  <div style={{ marginTop: 12, border: "1px solid var(--border, #e3e6ec)", borderRadius: 10, padding: 12 }}>
+                    <div className="row between" style={{ flexWrap: "wrap", gap: 8 }}>
+                      <b style={{ fontSize: 13 }}>✏️ Édition — {capEdit.label} ({capEdit.cues.length} cues)</b>
+                      <label className="row" style={{ gap: 6, alignItems: "center", fontSize: 12.5 }} title="Sous-titres « trop tôt » → décalage positif (ils s'afficheront plus tard)">
+                        <span className="muted">Décaler toute la piste de</span>
+                        <input type="number" step="0.5" value={capEdit.offset} style={{ width: 70, padding: "4px 6px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 6 }}
+                          onChange={(e) => setCapEdit((p) => p && ({ ...p, offset: e.target.value }))} />
+                        <span className="muted">s{capOffset() !== 0 && capEdit.cues[0] ? ` — 1re cue à ${formatTimestamp(Math.max(0, capEdit.cues[0].start + capOffset()))}` : ""}</span>
+                      </label>
+                    </div>
+                    <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                      {capEdit.cues.map((cue, i) => (
+                        <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+                          <span className="muted" style={{ fontSize: 11, fontFamily: "monospace", whiteSpace: "nowrap", paddingTop: 6 }}>
+                            {formatTimestamp(cue.start).slice(3)} → {formatTimestamp(cue.end).slice(3)}
+                          </span>
+                          <textarea value={cue.text} rows={Math.max(1, cue.text.split("\n").length)}
+                            style={{ flex: 1, padding: "5px 8px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 6, fontSize: 13, fontFamily: "inherit", resize: "vertical" }}
+                            onChange={(e) => setCueText(i, e.target.value)} />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="row" style={{ gap: 8, marginTop: 10 }}>
+                      <button className="btn btn--sm btn--primary" disabled={capBusy} onClick={() => saveCapEdit(preview.asset)}>💾 Enregistrer la piste</button>
+                      <button className="btn btn--sm" disabled={capBusy} onClick={() => setCapEdit(null)}>Annuler</button>
+                      <span className="muted" style={{ fontSize: 11.5 }}>Une cue vidée de son texte est retirée. L'enregistrement remplace la piste pour tous les apprenants.</span>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>
