@@ -301,7 +301,10 @@ export function Medias() {
 
       {preview && (
         <div onClick={() => setPreview(null)} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.6)", display: "grid", placeItems: "center", zIndex: 50, padding: 20 }}>
-          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 18, maxWidth: 760, width: "100%", boxShadow: "var(--shadow-lg)" }}>
+          {/* Hauteur bornée + défilement : avec l'éditeur de sous-titres ouvert
+              (80+ cues), le contenu dépasse l'écran — sans ceci, le bas de la
+              fenêtre serait simplement coupé et inatteignable. */}
+          <div onClick={(e) => e.stopPropagation()} style={{ background: "#fff", borderRadius: 14, padding: 18, maxWidth: 760, width: "100%", boxShadow: "var(--shadow-lg)", maxHeight: "calc(100vh - 40px)", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
               <b>{preview.asset.filename ?? "Aperçu"}</b>
               <button className="btn btn--sm" onClick={() => setPreview(null)}>✕ Fermer</button>
@@ -368,7 +371,9 @@ export function Medias() {
                         <span className="muted">s{capOffset() !== 0 && capEdit.cues[0] ? ` — 1re cue à ${formatTimestamp(Math.max(0, capEdit.cues[0].start + capOffset()))}` : ""}</span>
                       </label>
                     </div>
-                    <div style={{ maxHeight: 320, overflowY: "auto", marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
+                    {/* Pas de mini-défilement interne : toutes les cues coulent
+                        dans le défilement naturel de la fenêtre d'aperçu. */}
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6 }}>
                       {capEdit.cues.map((cue, i) => (
                         <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                           <span className="muted" style={{ fontSize: 11, fontFamily: "monospace", whiteSpace: "nowrap", paddingTop: 6 }}>
