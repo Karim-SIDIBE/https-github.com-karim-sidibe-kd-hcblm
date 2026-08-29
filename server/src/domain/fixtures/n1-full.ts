@@ -197,7 +197,7 @@ const ms15: MicroSession = {
   exercise: {
     type: "guidedForm",
     prompt:
-      "Mon système de temps protégé adapté aux codes de mon organisation (réutilisé dans l'Application terrain du Bloc 2).",
+      "Mon système de temps protégé adapté aux codes de mon organisation. Important : ce que vous notez ici (créneau, chiffres, formulations) est à METTRE EN PRATIQUE dès maintenant dans votre travail — vous retrouverez ces réponses pré-remplies dans l'Application terrain du Bloc 2, où vous les mettrez à jour avec les réalités du terrain.",
     feedbackText:
       "Votre système tient si les 3 conditions y sont : un créneau réaliste (60 à 90 min, pas 3 h), négocié AVANT d'être appliqué (votre hiérarchie sait et accepte), et visible (l'équipe sait comment vous joindre en urgence réelle). S'il repose sur la discrétion ou l'isolement, il cassera à la première urgence. Vos éléments sont sauvegardés et pré-remplis dans l'Application terrain du Bloc 2 — vous les testerez en conditions réelles.",
     fields: [
