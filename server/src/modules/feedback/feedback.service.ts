@@ -30,18 +30,23 @@ async function load(enrollmentId: string) {
   return { enrollment, content };
 }
 
-function submissionText(data: unknown): string {
+function submissionText(data: unknown, orderedLabels?: string[]): string {
   if (data && typeof data === "object") {
     const d = data as Record<string, unknown>;
     for (const k of ["text", "brief", "answer", "content", "response"]) {
       if (typeof d[k] === "string" && (d[k] as string).trim()) return (d[k] as string).trim();
     }
-    // Guided-form exercises store { fields: { label → value } } — serialise as
-    // "label : value" lines so the formative feedback can read the answer.
+    // Guided-form exercises store { fields: { label → value } }. Serialised as
+    // NUMBERED "Réponse n — label : value" lines in the CONTENT's field order
+    // (never the typing order) so the formative feedback attributes each remark
+    // to the right answer (retours de test, P4 — feedback décalé en 2.1).
     if (d.fields && typeof d.fields === "object") {
-      const lines = Object.entries(d.fields as Record<string, unknown>)
-        .filter(([, v]) => typeof v === "string" && (v as string).trim())
-        .map(([k, v]) => `${k} : ${(v as string).trim()}`);
+      const fields = d.fields as Record<string, unknown>;
+      const known = (orderedLabels ?? []).filter((l) => l in fields);
+      const rest = Object.keys(fields).filter((k) => !known.includes(k));
+      const lines = [...known, ...rest]
+        .filter((k) => typeof fields[k] === "string" && (fields[k] as string).trim())
+        .map((k, i) => `Réponse ${i + 1} — ${k} : ${(fields[k] as string).trim()}`);
       if (lines.length) return lines.join("\n");
     }
     // Structured case studies store their reflections under { open: { id → text } }.
@@ -70,11 +75,10 @@ export async function requestFormativeFeedback(enrollmentId: string, blockIndex:
     orderBy: { createdAt: "asc" },
   });
   if (existing) return existing;
-  const text = submissionText(completion.data);
-  if (!text) throw new FeedbackError(422, "empty_submission", "La soumission ne contient pas de texte à évaluer");
-
   const block = content.blocks[blockIndex];
-  const { itemLabel, promptContext } = resolveItemContext(block, itemKey);
+  const { itemLabel, promptContext, fieldLabels } = resolveItemContext(block, itemKey);
+  const text = submissionText(completion.data, fieldLabels);
+  if (!text) throw new FeedbackError(422, "empty_submission", "La soumission ne contient pas de texte à évaluer");
   const result = await generateFormativeFeedback({
     submissionText: text,
     itemLabel: itemLabel || (block?.title ? `${block.title} — ${itemKey}` : itemKey),
@@ -96,11 +100,11 @@ export async function requestFormativeFeedback(enrollmentId: string, blockIndex:
 /** Evaluator-facing rubric score suggestion for the Bloc 4 project (advisory). */
 /** The item's learner-facing label and the exact consigne it answers — so the
  *  feedback speaks about THIS question, not about the platform in general. */
-function resolveItemContext(block: Block | undefined, itemKey: string): { itemLabel: string; promptContext: string } {
+function resolveItemContext(block: Block | undefined, itemKey: string): { itemLabel: string; promptContext: string; fieldLabels?: string[] } {
   if (!block) return { itemLabel: itemKey, promptContext: "" };
   const p = block.payload as Record<string, any>;
-  const ms = (p.microSessions as { id: string; title: string; exercise?: { prompt?: string } }[] | undefined)?.find((m) => m.id === itemKey);
-  if (ms) return { itemLabel: ms.title, promptContext: ms.exercise?.prompt ?? "" };
+  const ms = (p.microSessions as { id: string; title: string; exercise?: { prompt?: string; fields?: { label: string }[] } }[] | undefined)?.find((m) => m.id === itemKey);
+  if (ms) return { itemLabel: ms.title, promptContext: ms.exercise?.prompt ?? "", fieldLabels: ms.exercise?.fields?.map((f) => f.label) };
   if (itemKey === "field" && p.fieldApplication) {
     const fa = p.fieldApplication as { title?: string; brief: string; steps?: { title: string; fields: { label: string }[] }[] };
     const steps = (fa.steps ?? []).map((st) => `${st.title} : ${st.fields.map((f) => f.label).join(" · ")}`).join("\n");

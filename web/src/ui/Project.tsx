@@ -3,6 +3,7 @@ import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason } from "../lib/textcheck";
+import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { useT, useI18n } from "../lib/i18n";
 
 type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: number };
@@ -22,14 +23,18 @@ export function Project({ eid }: { eid: string }) {
   const [bundle, setBundle] = useState<any>(null);
   const [status, setStatus] = useState<any | undefined>(undefined); // undefined=loading, null=not submitted
   const [state, setState] = useState<ProjectState | null>(null);
-  const [values, setValues] = useState<Record<string, string>>({});
+  // Brouillon local des sections (P3) : la saisie survit à un départ de
+  // l'écran ; le serveur (texte soumis, prefill) reste subordonné à la frappe.
+  const draftKey = `pj:${eid}`;
+  const [values, setValues] = useState<Record<string, string>>(() => loadDraft<Record<string, string>>(draftKey) ?? {});
   const [busy, setBusy] = useState<string | null>(null);
   const [appeal, setAppeal] = useState<any | null>(null);
   const [appealForm, setAppealForm] = useState<{ contested: string[]; statement: string } | null>(null);
   const [appealMsg, setAppealMsg] = useState<string | null>(null);
 
+  useDraft(draftKey, values, !status);
   async function refresh() {
-    try { const p = await api.project(eid); setStatus(p ?? null); } catch { setStatus(null); }
+    try { const p = await api.project(eid); setStatus(p ?? null); if (p) clearDraft(draftKey); } catch { setStatus(null); }
     try { setAppeal(await api.get<any>(`/enrollments/${eid}/appeal`)); } catch { /* offline */ }
     try {
       const st = await api.get<ProjectState>(`/enrollments/${eid}/project/state`);

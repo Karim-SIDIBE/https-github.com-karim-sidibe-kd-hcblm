@@ -53,7 +53,8 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     `"""${input.submissionText}"""`,
     `Compétences visées : ${comps}.`,
     input.momentAncrage ? `Moment d'Ancrage de l'apprenant : « ${input.momentAncrage} ».` : "",
-    "Rédige un retour formatif court (250 mots max, texte brut sans Markdown), SPÉCIFIQUE à cette réponse et à cette consigne : cite des éléments précis de la réponse (reformule-les), évalue leur adéquation à la consigne, puis donne des pistes concrètes ancrées dans le contexte du bloc. Jamais de retour générique.",
+    "Rédige un retour formatif court (250 mots max, texte brut sans Markdown), SPÉCIFIQUE à cette réponse et à cette consigne : cite des éléments précis de la réponse (reformule-les), évalue leur adéquation à la consigne, puis donne des pistes concrètes ancrées dans le contexte du bloc. Jamais de retour générique. " +
+    "Si la production contient plusieurs réponses numérotées (« Réponse 1 », « Réponse 2 »…), désigne chaque remarque par le numéro exact de la réponse concernée et vérifie que ton commentaire correspond bien au contenu de CETTE réponse — jamais de décalage.",
   ].filter(Boolean).join("\n");
 
   return {

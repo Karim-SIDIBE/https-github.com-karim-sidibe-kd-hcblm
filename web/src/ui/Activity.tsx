@@ -4,6 +4,9 @@ import { clearDraft, getCachedAiFeedback, getCachedProgress, loadDraft, saveDraf
 import { goNext, nextTarget } from "../lib/nav";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason, fieldExpectsNumber } from "../lib/textcheck";
+// Brouillon local générique (P3) — distinct du draft « activité à étapes »
+// (sig/idx) de lib/cache utilisé par Scenarios et StructuredCase.
+import { clearDraft as clearFieldDraft, loadDraft as loadFieldDraft, useDraft } from "../lib/draft";
 import { api } from "../lib/app";
 import { answerOf, useAnswers } from "../lib/answers";
 import { Breadcrumb } from "./Breadcrumb";
@@ -88,14 +91,14 @@ export function Activity({ eid, block, itemKey }: { eid: string; block: number; 
   if (itemKey === "scenarios" && p.guidedScenarios?.length) {
     body = <Scenarios t={t} title={p.guidedScenariosTitle || t("ci.scenarios")} scenarios={p.guidedScenarios} draft={{ eid, slot: `act_${block}_${itemKey}` }} onFinish={async (d) => { await complete("GUIDED_SCENARIOS", d); }} onClose={() => advance()} />;
   } else if (itemKey === "self" && p.selfAssessment) {
-    body = <SelfAssessment t={t} title={p.selfAssessment.title || t("ci.self")} criteria={p.selfAssessment.criteria} scale={p.selfAssessment.scale} onFinish={async (d) => { advance(await complete("SELF_ASSESSMENT", d)); }} />;
+    body = <SelfAssessment t={t} title={p.selfAssessment.title || t("ci.self")} criteria={p.selfAssessment.criteria} scale={p.selfAssessment.scale} draftKey={`act:${eid}:${block}:${itemKey}`} onFinish={async (d) => { advance(await complete("SELF_ASSESSMENT", d)); }} />;
   } else if (itemKey === "plan" && p.actionPlan30d) {
-    body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} intro={p.actionPlan30d.intro || ""} habits={p.actionPlan30d.habits} onFinish={async (d) => { advance(await complete("ACTION_PLAN", d)); }} />;
+    body = <ActionPlan t={t} title={p.actionPlan30d.title || t("ci.plan")} intro={p.actionPlan30d.intro || ""} habits={p.actionPlan30d.habits} draftKey={`act:${eid}:${block}:${itemKey}`} onFinish={async (d) => { advance(await complete("ACTION_PLAN", d)); }} />;
   } else if (caseSpec && (caseSpec.structuredSteps?.length ?? 0) > 0) {
     body = <StructuredCase t={t} caseStudy={caseSpec} draft={{ eid, slot: `act_${block}_${itemKey}` }}
       aiFeedback={aiFb} onFinish={(d) => complete("CASE_STUDY", d)} onClose={() => advance()} />;
   } else if (caseSpec) {
-    body = <CaseStudy t={t} caseStudy={caseSpec as { title: string; steps: string[] }} onFinish={async (d) => { advance(await complete("CASE_STUDY", d)); }} />;
+    body = <CaseStudy t={t} caseStudy={caseSpec as { title: string; steps: string[] }} draftKey={`act:${eid}:${block}:${itemKey}`} onFinish={async (d) => { advance(await complete("CASE_STUDY", d)); }} />;
   }
 
   if (!body) return <div className="stack"><Back /><p className="banner offline">{t("dl.notFound")}</p></div>;
@@ -263,17 +266,19 @@ function Scenarios({ t, title, scenarios, draft, onFinish, onClose }: {
 }
 
 /** Self-assessment: one honest rating per criterion, no right/wrong. */
-function SelfAssessment({ t, title, criteria, scale, onFinish }: {
+function SelfAssessment({ t, title, criteria, scale, onFinish, draftKey }: {
   t: TFn; title: string; criteria: string[]; scale: string[];
   onFinish: (data: unknown) => Promise<void>;
+  draftKey?: string;
 }) {
-  const [ratings, setRatings] = useState<Record<string, string>>({});
+  const [ratings, setRatings] = useState<Record<string, string>>(() => loadFieldDraft<Record<string, string>>(draftKey) ?? {});
   const [busy, setBusy] = useState(false);
   const allDone = criteria.every((c) => ratings[c]);
+  useDraft(draftKey, ratings, !busy);
 
   async function submit() {
     setBusy(true);
-    try { await onFinish({ ratings: criteria.map((c) => ({ criterion: c, level: ratings[c] })) }); } finally { setBusy(false); }
+    try { await onFinish({ ratings: criteria.map((c) => ({ criterion: c, level: ratings[c] })) }); clearFieldDraft(draftKey); } finally { setBusy(false); }
   }
 
   return (
@@ -303,19 +308,22 @@ function SelfAssessment({ t, title, criteria, scale, onFinish }: {
 type PlanField = string | { label: string; placeholder?: string; prefill?: string };
 const planField = (f: PlanField) => (typeof f === "string" ? { label: f, placeholder: "", prefill: undefined as string | undefined } : { label: f.label, placeholder: f.placeholder ?? "", prefill: f.prefill });
 
-function ActionPlan({ t, title, intro, habits, onFinish }: {
+function ActionPlan({ t, title, intro, habits, onFinish, draftKey }: {
   t: TFn; title: string; intro?: string; habits: { title: string; fields: PlanField[] }[];
   onFinish: (data: unknown) => Promise<void>;
+  draftKey?: string;
 }) {
   const vkey = (hi: number, label: string) => `${hi}:${label}`;
   // Pré-remplissage serveur (réponses réelles des exercices précédents) :
-  // point de départ éditable des champs vides — la saisie prime toujours.
+  // point de départ éditable des champs vides — la saisie prime toujours,
+  // y compris via le brouillon local (P3) restauré par-dessus le prefill.
   const [values, setValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     habits.forEach((h, hi) => h.fields.map(planField).forEach((f) => { if (f.prefill) init[vkey(hi, f.label)] = f.prefill; }));
-    return init;
+    return { ...init, ...(loadFieldDraft<Record<string, string>>(draftKey) ?? {}) };
   });
   const [busy, setBusy] = useState(false);
+  useDraft(draftKey, values, !busy);
   const quality: string | null = (() => {
     for (const [hi, h] of habits.entries()) for (const f of h.fields.map(planField)) {
       const v = (values[vkey(hi, f.label)] ?? "").trim();
@@ -332,6 +340,7 @@ function ActionPlan({ t, title, intro, habits, onFinish }: {
     try {
       const data = { habits: habits.map((h, hi) => ({ title: h.title, values: Object.fromEntries(h.fields.map(planField).map((f) => [f.label, (values[vkey(hi, f.label)] ?? "").trim()])) })) };
       await onFinish(data);
+      clearFieldDraft(draftKey);
     } finally { setBusy(false); }
   }
 
@@ -494,8 +503,11 @@ function StructuredCase({ t, caseStudy, draft, aiFeedback, onFinish, onClose }: 
             <textarea className="hf-field" spellCheck lang="fr" value={chosen} disabled={phase !== "answer"} placeholder={cur!.q.placeholder || t("act.openAnswerPh")} style={{ minHeight: 130 }}
               onChange={(e) => setAnswers((a) => ({ ...a, [cur!.q.id]: e.target.value }))}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-            <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length} / {cur!.q.minChars ?? 20}</span>
+            <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length} / {cur!.q.minChars ?? 20} {t("dl.unitChars")}</span>
           </div>
+        )}
+        {cur!.q.kind === "open" && phase === "answer" && chosen.trim().length > 0 && chosen.trim().length < (cur!.q.minChars ?? 20) && (
+          <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: (cur!.q.minChars ?? 20) - chosen.trim().length })}</p>
         )}
 
         {openQuality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{openQuality}</p>}
@@ -518,19 +530,21 @@ function StructuredCase({ t, caseStudy, draft, aiFeedback, onFinish, onClose }: 
 }
 
 /** Case study: guided steps + a written transfer analysis (min 150 chars). */
-function CaseStudy({ t, caseStudy, onFinish }: {
+function CaseStudy({ t, caseStudy, onFinish, draftKey }: {
   t: TFn; caseStudy: { title: string; steps: string[] };
   onFinish: (data: unknown) => Promise<void>;
+  draftKey?: string;
 }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState(() => loadFieldDraft<string>(draftKey) ?? "");
   const [busy, setBusy] = useState(false);
+  useDraft(draftKey, text, !busy);
   const MIN = 150;
   const quality = text.trim().length >= MIN ? assessmentReason(assessText(text, { minWords: 5 }), t) : null;
   const ok = text.trim().length >= MIN && !quality;
 
   async function submit() {
     setBusy(true);
-    try { await onFinish({ text: text.trim(), steps: caseStudy.steps.length }); } finally { setBusy(false); }
+    try { await onFinish({ text: text.trim(), steps: caseStudy.steps.length }); clearFieldDraft(draftKey); } finally { setBusy(false); }
   }
 
   return (
@@ -548,8 +562,11 @@ function CaseStudy({ t, caseStudy, onFinish }: {
         <div className="hf-textwrap">
           <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 160 }}
             onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-          <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {MIN}</span>
+          <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {MIN} {t("dl.unitChars")}</span>
         </div>
+        {text.trim().length > 0 && text.trim().length < MIN && (
+          <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: MIN - text.trim().length })}</p>
+        )}
         {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
         <button className="hf-btn hf-btn--primary hf-btn--block" disabled={!ok || busy} onClick={() => void submit()}>{busy ? "…" : t("dl.submit")}</button>
       </div>

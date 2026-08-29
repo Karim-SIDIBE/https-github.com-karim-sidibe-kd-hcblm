@@ -3,6 +3,7 @@ import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
 import { blockDurationSec } from "../lib/content";
 import { assessText, assessmentReason } from "../lib/textcheck";
+import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { formatDuration } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
@@ -26,7 +27,10 @@ export function Onboarding({ eid }: { eid: string }) {
   const [blockDur, setBlockDur] = useState(0);
   const [objective, setObjective] = useState("");
   const [step, setStep] = useState<Step | null>(null);
-  const [pam, setPam] = useState("");
+  // Brouillon local du Moment d'Ancrage (P3) — la saisie survit à un départ.
+  const draftKey = `ob:${eid}`;
+  const [pam, setPam] = useState(() => loadDraft<string>(draftKey) ?? "");
+  useDraft(draftKey, pam, step === "pam");
   const [profileKey, setProfileKey] = useState("");
   const [peer, setPeer] = useState({ name: "", email: "", consent: false });
   const [busy, setBusy] = useState(false);
@@ -61,7 +65,7 @@ export function Onboarding({ eid }: { eid: string }) {
   async function submitPam() {
     if (pam.trim().length < minChars || pamQuality) return;
     setBusy(true);
-    try { await engine.commit(eid, "moment_ancrage", { text: pam.trim() }); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
+    try { await engine.commit(eid, "moment_ancrage", { text: pam.trim() }); clearDraft(draftKey); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
   }
   async function submitProfile() {
     if (!profileKey) return;
@@ -97,8 +101,11 @@ export function Onboarding({ eid }: { eid: string }) {
           <div className="hf-textwrap">
             <textarea className="hf-field" spellCheck lang="fr" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} style={{ minHeight: 160 }} />
-            <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars}</span>
+            <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length} / {minChars} {t("dl.unitChars")}</span>
           </div>
+          {pam.trim().length > 0 && pam.trim().length < minChars && (
+            <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: minChars - pam.trim().length })}</p>
+          )}
           {pamQuality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{pamQuality}</p>}
           <button className="hf-btn hf-btn--primary hf-btn--block" disabled={busy || pam.trim().length < minChars || Boolean(pamQuality)} onClick={submitPam}>{busy ? "…" : t("ob.saveContinue")}</button>
         </div>

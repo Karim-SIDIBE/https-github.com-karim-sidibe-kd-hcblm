@@ -193,6 +193,7 @@ const fr: UiDict = {
   "tc.gibberish": "⚠️ Certains mots ne semblent exister ni en français ni en anglais : {words}. Corrigez votre réponse pour continuer — la plateforme attend des phrases qui ont du sens.",
   "tc.tooShort": "⚠️ Formulez une réponse complète (au moins {n} mots).",
   "tc.needNumber": "⚠️ Ce champ attend une valeur chiffrée — écrivez un chiffre (ex. « 25 % », « 90 minutes ») ou son équivalent en lettres (« vingt-cinq pour cent »).",
+  "tc.charsLeft": "✍️ Encore {n} caractères (lettres et espaces, pas des mots) avant de pouvoir valider — développez votre réponse.",
   // quiz
   "qz.diagnostic": "Quiz diagnostique", "qz.interblock": "Quiz interbloc", "qz.final": "Quiz final",
   "qz.unavailable": "Quiz indisponible.", "qz.profileTitle": "Votre profil de compétence",
@@ -460,6 +461,7 @@ const en: UiDict = {
   "tc.gibberish": "⚠️ Some words don't seem to exist in French or English: {words}. Fix your answer to continue — the platform expects meaningful sentences.",
   "tc.tooShort": "⚠️ Write a complete answer (at least {n} words).",
   "tc.needNumber": "⚠️ This field expects a quantity — write a number (e.g. \"25%\", \"90 minutes\") or its spelled-out equivalent.",
+  "tc.charsLeft": "✍️ {n} more characters (letters and spaces, not words) before you can submit — expand your answer.",
   "qz.diagnostic": "Diagnostic quiz", "qz.interblock": "Inter-block quiz", "qz.final": "Final quiz",
   "qz.unavailable": "Quiz unavailable.", "qz.profileTitle": "Your competency profile",
   "qz.priorities": "Your learning priorities", "qz.priority1": "Your learning priority", "qz.score": "Score: {correct}/{total}",
