@@ -1150,14 +1150,22 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
   }
   if (payload.fieldApplication?.steps || payload.actionPlan30d?.habits) {
     const savedForms: SavedForm[] = [];
+    // Réponses des exercices ÉCRITS (ex. le rituel décrit en 3.1) — placées en
+    // tête des réponses candidates du plan d'action (P5).
+    const writtenAnswers: ProjectSavedAnswer[] = [];
     for (const b of content.blocks) {
       const p = b.payload as { microSessions?: { id: string; exercise?: { prompt?: string; fields?: { label?: string }[] } }[] };
       for (const ms of p.microSessions ?? []) {
-        if (!ms.exercise?.fields?.length) continue;
+        if (!ms.exercise) continue;
         const done = enrollment.completions.find((c) => c.blockIndex === b.index && c.itemKey === ms.id);
-        const fields = (done?.data as { fields?: Record<string, string> } | null)?.fields;
-        // jsonb ne préserve pas l'ordre des clés → réordonner selon l'exercice.
-        if (fields && Object.keys(fields).length) savedForms.push({ prompt: ms.exercise.prompt ?? "", fields: orderFields(fields, ms.exercise.fields.map((f) => f.label ?? "")) });
+        if (ms.exercise.fields?.length) {
+          const fields = (done?.data as { fields?: Record<string, string> } | null)?.fields;
+          // jsonb ne préserve pas l'ordre des clés → réordonner selon l'exercice.
+          if (fields && Object.keys(fields).length) savedForms.push({ prompt: ms.exercise.prompt ?? "", fields: orderFields(fields, ms.exercise.fields.map((f) => f.label ?? "")) });
+        } else {
+          const text = (done?.data as { text?: string } | null)?.text?.trim();
+          if (text && ms.exercise.prompt) writtenAnswers.push({ prompt: ms.exercise.prompt, answer: text, blockType: b.type });
+        }
       }
     }
     if (payload.fieldApplication?.steps) decorateFieldApplication(payload.fieldApplication.steps, pam, savedForms);
@@ -1171,7 +1179,7 @@ export async function renderBlock(enrollmentId: string, blockIndex: number) {
         const done = enrollment.completions.find((c) => c.blockIndex === b.index && c.itemKey === "case");
         return savedProjectAnswers(b.type, (bp.caseStudy ?? bp.transversalCase) as Parameters<typeof savedProjectAnswers>[1], (done?.data as { open?: Record<string, string> } | null)?.open);
       });
-      decorateActionPlan(payload.actionPlan30d.habits, savedForms, (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null, savedAnswers);
+      decorateActionPlan(payload.actionPlan30d.habits, savedForms, (fieldDone?.data as { fields?: Record<string, string> } | null)?.fields ?? null, [...writtenAnswers, ...savedAnswers]);
     }
   }
 

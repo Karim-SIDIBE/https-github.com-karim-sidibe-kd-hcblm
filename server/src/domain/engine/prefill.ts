@@ -137,10 +137,14 @@ export type HabitLike = { title: string; fields: (FieldSpecLike | string)[] };
  *     créneau formulé au micro-exercice 1.5 ;
  *   - formulation de communication ← formulations hiérarchie/collègues (1.5) ;
  *   - signal de concentration ← indicateur visuel + réciprocité (1.5).
- * L'intro cite aussi le « rituel du Cas Sylvie » : la réponse savedForProject
- * évoquant un rituel pré-remplit le 1er champ de la PREMIÈRE habitude
- * « rituel » (le rituel de lancement de journée). Les champs de réflexion
- * (obstacles, indicateurs, priorités de la semaine, pair) restent à l'apprenant.
+ * L'intro cite aussi le « rituel du Cas Sylvie » : la PREMIÈRE réponse de
+ * `savedAnswers` évoquant un rituel pré-remplit le 1er champ de la première
+ * habitude « rituel » — l'appelant place le rituel décrit au micro-exercice
+ * 3.1 AVANT celui du cas Sylvie (retours de test, P5 : c'est la réponse la
+ * plus travaillée). Les « résultats prioritaires n° 1/2/3 » de l'habitude
+ * « planification hebdomadaire » repartent des « Résultat n (livrable fini) +
+ * créneau » du micro-exercice 2.2 (P5 : ce fléchage manquait). Les champs de
+ * réflexion (obstacles, indicateurs, pair) restent à l'apprenant.
  */
 export function decorateActionPlan(
   habits: HabitLike[],
@@ -154,6 +158,19 @@ export function decorateActionPlan(
     const first = ritualHabit?.fields[0];
     if (first && typeof first !== "string" && !first.prefill) first.prefill = ritual;
   }
+  // Habitude « planification hebdomadaire » : résultat n ← « Résultat n … » (2.2).
+  const planHabit = habits.find((h) => /planification hebdo/i.test(h.title));
+  const planForm = savedForms.find((f) => /planification hebdo/i.test(f.prompt));
+  if (planHabit && planForm) {
+    for (const f of planHabit.fields) {
+      if (typeof f === "string" || f.prefill) continue;
+      const m = /r[ée]sultat prioritaire n[°o]\s*(\d)/i.exec(f.label);
+      if (!m) continue;
+      const src = Object.entries(planForm.fields).find(([k, v]) => new RegExp(`r[ée]sultat\\s*${m[1]}`, "i").test(k) && v.trim());
+      if (src) f.prefill = src[1]!.trim();
+    }
+  }
+
   const habit = habits.find((h) => /temps prot[ée]g[ée]/i.test(h.title));
   if (!habit) return;
   const form = savedForms.find((f) => /temps prot[ée]g[ée]/i.test(f.prompt));
@@ -170,11 +187,11 @@ export function decorateActionPlan(
       const v = tested ?? fromForm(/créneau/i);
       if (v) f.prefill = v;
     } else if (/formulation/i.test(f.label)) {
-      // Champ de saisie monoligne côté PWA → séparateur « · », pas de \n.
+      // Zones multi-lignes côté PWA (P10) → une formulation par ligne.
       const lines = Object.entries(form?.fields ?? {})
         .filter(([k, v]) => /formulation/i.test(k) && v.trim())
         .map(([k, v]) => `${k} : ${v.trim()}`);
-      if (lines.length) f.prefill = lines.join(" · ");
+      if (lines.length) f.prefill = lines.join("\n");
     } else if (/signal/i.test(f.label)) {
       const v = fromForm(/indicateur visuel|signal/i);
       if (v) f.prefill = v;

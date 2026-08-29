@@ -58,6 +58,34 @@ export function reengagementMessage(p: { stage: "J3" | "J7" | "J14"; learnerName
   return { subject, body, mobileBody };
 }
 
+/**
+ * Journal de bord (P11 — retours de test) : invitation formatée à l'ouverture
+ * d'une micro-entrée, puis rappel bienveillant 24 h plus tard si elle n'est
+ * toujours pas remplie (promesse du contenu : « chaque micro-entrée non
+ * complétée dans les 24 h déclenche un rappel bienveillant »).
+ */
+export function journalMessage(p: { learnerName: string; day: number; prompt: string; reminder?: boolean; link?: string }): Message {
+  const link = p.link ?? appUrl();
+  const subject = p.reminder
+    ? `Petit rappel — votre micro-entrée de journal J+${p.day} (5 minutes)`
+    : `Votre journal de bord — l'entrée J+${p.day} est ouverte (5 minutes)`;
+  const body = [
+    `Bonjour ${p.learnerName},`,
+    ``,
+    p.reminder
+      ? `Votre micro-entrée de journal J+${p.day} vous attend depuis hier. 5 minutes suffisent — et c'est elle qui nourrit votre projet de certification :`
+      : `Votre micro-entrée de journal J+${p.day} vient de s'ouvrir — 5 minutes, à chaud :`,
+    ``,
+    `« ${p.prompt} »`,
+    ``,
+    ...(link ? [`👉 Remplir mon journal : ${link}`, ``] : []),
+    `Bonne pratique !`,
+    `L'équipe ${env.BRAND_NAME}`,
+  ].join("\n");
+  const mobileBody = link ? `Journal J+${p.day} : 5 minutes pour votre micro-entrée 👉 ${link}` : `Journal J+${p.day} : 5 minutes pour votre micro-entrée.`;
+  return { subject, body, mobileBody };
+}
+
 /** One-time verification code (B2C signup / sensitive actions). */
 export function otpMessage(code: string, minutes = 10): Message {
   const body = `Votre code de vérification ${env.BRAND_NAME} est : ${code}\nIl expire dans ${minutes} minutes.\nSi vous n'êtes pas à l'origine de cette demande, ignorez ce message.`;

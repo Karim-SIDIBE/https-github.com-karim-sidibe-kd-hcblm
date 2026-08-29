@@ -149,6 +149,41 @@ test("plan d'action : le rituel du Cas Sylvie pré-remplit la PREMIÈRE habitude
   assert.equal((habits[1]!.fields[0] as { prefill?: string }).prefill, undefined);
 });
 
+test("plan d'action (P5) : les résultats prioritaires 1-3 repartent des « Résultat n » du micro-exercice 2.2", () => {
+  const habits: HabitLike[] = [
+    { title: "Habitude 3 — Semaines 3 et 4 : le rituel de planification hebdomadaire", fields: [
+      { label: "L'habitude concrète : chaque … (jour), à … h" },
+      { label: "Mon résultat prioritaire n° 1 de la semaine prochaine (à faire maintenant)" },
+      { label: "Mon résultat prioritaire n° 2" },
+      { label: "Mon résultat prioritaire n° 3" },
+    ] },
+  ];
+  const planForm: SavedForm = {
+    prompt: "Ma planification hebdomadaire africaine : 3 résultats attendus, leur créneau, et mon buffer.",
+    fields: {
+      "Résultat 1 (livrable fini) + créneau": "Rapport trimestriel envoyé — mardi matin",
+      "Résultat 2 (livrable fini) + créneau": "Réunion budget préparée — mercredi 14 h",
+      "Résultat 3 (livrable fini) + créneau": "",
+      "Mon buffer africain (% du temps réservé)": "30 %",
+    },
+  };
+  decorateActionPlan(habits, [planForm]);
+  const f = habits[0]!.fields as { label: string; prefill?: string }[];
+  assert.equal(f[0]!.prefill, undefined); // le « quand » reste à l'apprenant
+  assert.equal(f[1]!.prefill, "Rapport trimestriel envoyé — mardi matin");
+  assert.equal(f[2]!.prefill, "Réunion budget préparée — mercredi 14 h");
+  assert.equal(f[3]!.prefill, undefined); // réponse vide → pas de préremplissage
+});
+
+test("plan d'action (P5) : le rituel écrit en 3.1 prime sur celui du Cas Sylvie (ordre des réponses candidates)", () => {
+  const habits: HabitLike[] = [{ title: "Habitude 1 — le rituel de lancement de journée", fields: [{ label: "L'habitude concrète : chaque matin…" }] }];
+  decorateActionPlan(habits, [], null, [
+    { prompt: "Quel rituel de productivité allez-vous installer EN PREMIER dans les 7 prochains jours ?", answer: "3.1 : 10 min chaque matin avant WhatsApp.", blockType: "ANCHORING" },
+    { prompt: "Réflexion ouverte — Quel est le rituel de productivité…", answer: "Sylvie : autre rituel.", blockType: "ANCHORING" },
+  ]);
+  assert.equal((habits[0]!.fields[0] as { prefill?: string }).prefill, "3.1 : 10 min chaque matin avant WhatsApp.");
+});
+
 test("plan d'action : sans source, aucun préremplissage ; champs historiques (chaînes) ignorés sans plantage", () => {
   const habits: HabitLike[] = [{ title: "Habitude 2 — le système de temps protégé", fields: ["Mon champ historique", { label: "Ma formulation de communication" }] }];
   decorateActionPlan(habits, []);

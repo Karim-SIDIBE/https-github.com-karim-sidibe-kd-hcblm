@@ -353,7 +353,9 @@ function ActionPlan({ t, title, intro, habits, onFinish, draftKey }: {
           <strong className="h4">{h.title}</strong>
           {h.fields.map(planField).map((f) => (
             <label key={f.label}>{f.label}
-              <input className="hf-field" value={values[vkey(hi, f.label)] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [vkey(hi, f.label)]: e.target.value }))}
+              {/* Zone multi-lignes (P10) : les rituels pré-remplis sont longs —
+                  un champ monoligne les rendait illisibles. */}
+              <textarea className="hf-field" spellCheck lang="fr" style={{ minHeight: 58 }} value={values[vkey(hi, f.label)] ?? ""} placeholder={f.placeholder} onChange={(e) => setValues((v) => ({ ...v, [vkey(hi, f.label)]: e.target.value }))}
                 onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             </label>
           ))}
@@ -503,7 +505,7 @@ function StructuredCase({ t, caseStudy, draft, aiFeedback, onFinish, onClose }: 
             <textarea className="hf-field" spellCheck lang="fr" value={chosen} disabled={phase !== "answer"} placeholder={cur!.q.placeholder || t("act.openAnswerPh")} style={{ minHeight: 130 }}
               onChange={(e) => setAnswers((a) => ({ ...a, [cur!.q.id]: e.target.value }))}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-            <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length} / {cur!.q.minChars ?? 20} {t("dl.unitChars")}</span>
+            <span className="hf-count" style={{ color: canValidate ? "var(--brand-declick)" : undefined }}>{chosen.trim().length >= (cur!.q.minChars ?? 20) ? t("count.ok", { n: chosen.trim().length, unit: t("dl.unitChars") }) : t("count.min", { n: chosen.trim().length, min: cur!.q.minChars ?? 20, unit: t("dl.unitChars") })}</span>
           </div>
         )}
         {cur!.q.kind === "open" && phase === "answer" && chosen.trim().length > 0 && chosen.trim().length < (cur!.q.minChars ?? 20) && (
@@ -562,7 +564,7 @@ function CaseStudy({ t, caseStudy, onFinish, draftKey }: {
         <div className="hf-textwrap">
           <textarea className="hf-field" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("answerPlaceholder")} style={{ minHeight: 160 }}
             onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
-          <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{text.trim().length} / {MIN} {t("dl.unitChars")}</span>
+          <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{text.trim().length >= MIN ? t("count.ok", { n: text.trim().length, unit: t("dl.unitChars") }) : t("count.min", { n: text.trim().length, min: MIN, unit: t("dl.unitChars") })}</span>
         </div>
         {text.trim().length > 0 && text.trim().length < MIN && (
           <p className="meta" style={{ margin: 0 }}>{t("tc.charsLeft", { n: MIN - text.trim().length })}</p>
