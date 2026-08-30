@@ -30,10 +30,21 @@ export async function callClaudeText(request: ClaudeRequest): Promise<string> {
     },
     body: JSON.stringify(request),
   });
-  if (!res.ok) throw new Error(`Anthropic ${res.status}`);
-  const json = (await res.json()) as { content?: { type: string; text?: string }[] };
+  if (!res.ok) {
+    // Le statut seul ne permet aucun diagnostic (clé invalide ? modèle
+    // inconnu ? quota ?) — remonter le message de l'API.
+    let detail = "";
+    try { detail = String(((await res.json()) as { error?: { message?: string } })?.error?.message ?? ""); } catch { /* corps illisible */ }
+    throw new Error(`Anthropic ${res.status}${detail ? ` — ${detail.slice(0, 300)}` : ""}`);
+  }
+  const json = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string };
   const text = json.content?.map((c) => c.text ?? "").join("").trim();
   if (!text) throw new Error("réponse IA vide");
+  // Une réponse coupée en plein vol est inutilisable (JSON tronqué) et
+  // trompeuse (texte amputé) : mieux vaut échouer que dégrader en silence.
+  if (json.stop_reason === "max_tokens") {
+    throw new Error(`réponse tronquée à ${request.max_tokens} tokens (stop_reason=max_tokens)`);
+  }
   return text;
 }
 

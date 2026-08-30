@@ -250,7 +250,17 @@ export async function runAiCalibration(courseId: string, runsInput: CalibrationR
 
   const evaluated: { label: string; reference: number[]; proposed: number[]; evidenceOk: boolean }[] = [];
   for (const run of runsInput) {
-    const suggestion = await suggestRubricScores({ projectText: run.text, criteria: rubric.criteria, threshold: rubric.threshold });
+    // §8.8 en mode STRICT : la calibration mesure le modèle réel, jamais le
+    // repli heuristique. Un appel en échec interrompt tout avec sa cause —
+    // l'incident d'origine avait « refusé » une calibration qui n'avait en
+    // réalité mesuré que le fallback (75/100 uniforme), sans un mot d'erreur.
+    let suggestion;
+    try {
+      suggestion = await suggestRubricScores({ projectText: run.text, criteria: rubric.criteria, threshold: rubric.threshold }, { strict: true });
+    } catch (e) {
+      throw new FeedbackError(502, "ai_calibration_failed",
+        `« ${run.label} » : ${e instanceof Error ? e.message : "erreur inconnue"}. Calibration interrompue — rien n'a été enregistré.`);
+    }
     const evidence = verifyEvidence(rubric.criteria, suggestion.perCriterion, run.text);
     evaluated.push({
       label: run.label, reference: run.reference,

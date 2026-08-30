@@ -195,19 +195,34 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
 
   return {
     model: env.AI_MODEL,
-    max_tokens: 2000,
+    // 6 critères × (commentaire + 1-3 citations exactes ≥ 8 mots) dépassent
+    // facilement 2000 tokens sur un vrai dossier — et un JSON tronqué faisait
+    // basculer toute la notation sur le repli heuristique.
+    max_tokens: 4000,
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
 }
 
-/** Clamp suggested points to [0, weight] and align to the rubric order. */
-function normalize(
+/** Libellé comparable : minuscules, sans numérotation de tête (« 1 · », « 2. »)
+ *  ni parenthèse de code finale (« (D4.C1) ») — le modèle décore volontiers. */
+function comparableLabel(s: string): string {
+  return s.trim().toLowerCase().replace(/^\d+\s*[·.—-]\s*/, "").replace(/\s*\([^)]*\)\s*$/, "").trim();
+}
+
+/** Clamp suggested points to [0, weight] and align to the rubric order.
+ *  Appariement : libellé exact, puis libellé nettoyé, puis POSITION quand le
+ *  modèle a répondu un score par critère — un simple préfixe ajouté par le
+ *  modèle mettait sinon tout le dossier à 0 sans preuve. */
+export function normalize(
   criteria: RubricCriterion[],
   suggested: z.infer<typeof SuggestionSchema>["perCriterion"],
 ): SuggestedCriterionScore[] {
-  return criteria.map((c) => {
-    const match = suggested.find((s) => s.label.trim().toLowerCase() === c.label.trim().toLowerCase());
+  return criteria.map((c, i) => {
+    const match =
+      suggested.find((s) => s.label.trim().toLowerCase() === c.label.trim().toLowerCase())
+      ?? suggested.find((s) => comparableLabel(s.label) === comparableLabel(c.label))
+      ?? (suggested.length === criteria.length ? suggested[i] : undefined);
     const raw = match?.suggested ?? 0;
     const clamped = Math.max(0, Math.min(c.weightPoints, Math.round(raw)));
     return {
@@ -250,15 +265,27 @@ function fallbackRubric(input: RubricInput): RubricSuggestion {
   };
 }
 
-export async function suggestRubricScores(input: RubricInput): Promise<RubricSuggestion> {
-  if (!aiAvailable()) return fallbackRubric(input);
+/** `strict` (calibration §8.8) : mesurer le repli heuristique à la place du
+ *  modèle rendrait le verdict mensonger — toute défaillance du modèle doit
+ *  ÉCHOUER avec sa cause, jamais dégrader en silence. */
+export async function suggestRubricScores(
+  input: RubricInput,
+  opts: { strict?: boolean } = {},
+): Promise<RubricSuggestion> {
+  if (!aiAvailable()) {
+    if (opts.strict) throw new Error("ANTHROPIC_API_KEY non configurée — impossible de mesurer le modèle réel");
+    return fallbackRubric(input);
+  }
   try {
     const text = await callClaudeText(buildRubricRequest(input));
     const parsed = SuggestionSchema.parse(extractJson(text));
     const perCriterion = normalize(input.criteria, parsed.perCriterion);
     const suggestedTotal = perCriterion.reduce((a, x) => a + x.suggested, 0);
     return { perCriterion, suggestedTotal, summary: parsed.summary, aiGenerated: true, provider: env.AI_MODEL };
-  } catch {
+  } catch (e) {
+    if (opts.strict) {
+      throw new Error(`le modèle ${env.AI_MODEL} n'a pas produit de notation exploitable : ${e instanceof Error ? e.message : "erreur inconnue"}`);
+    }
     return fallbackRubric(input);
   }
 }
