@@ -50,11 +50,15 @@ export async function dispatchPending(batchSize = 100): Promise<DispatchResult> 
       id: n.id, recipientKind: n.recipientKind, recipient: n.recipient,
       channel: n.channel, subject: n.subject, body: n.body, pushTokens,
     });
+    // `provider` posé à l'enfilage est un marqueur SÉMANTIQUE (« journal »,
+    // « insights-alert »… — certains jobs déduplident dessus) : ne jamais
+    // l'écraser par le transport, sous peine de ré-émissions en boucle.
+    const provider = n.provider ?? result.provider;
     await prisma.notification.update({
       where: { id: n.id },
       data: result.ok
-        ? { status: "SENT", sentAt: new Date(), attempts: { increment: 1 }, provider: result.provider, error: null }
-        : { status: "FAILED", attempts: { increment: 1 }, provider: result.provider, error: result.error ?? "échec" },
+        ? { status: "SENT", sentAt: new Date(), attempts: { increment: 1 }, provider, error: null }
+        : { status: "FAILED", attempts: { increment: 1 }, provider, error: result.error ?? "échec" },
     });
     result.ok ? sent++ : failed++;
   }

@@ -88,16 +88,18 @@ export async function runJournalTriggers(now: Date = new Date()) {
         continue;
       }
       // Rappel bienveillant à 24 h (retours de test, P11 — promesse du contenu) :
-      // l'entrée est ouverte depuis plus d'un jour et toujours vide. Une seule
-      // fois par entrée (marqueur `provider` de la notification).
+      // l'entrée est ouverte depuis plus d'un jour et toujours vide. UNE SEULE
+      // fois par entrée — la garde vit sur le déclencheur lui-même
+      // (`remindedAt`), posée AVANT l'envoi : un job concurrent ou re-exécuté
+      // ne peut pas ré-émettre (incident « Magali », 7 rappels J+6 : l'ancienne
+      // garde lisait Notification.provider, que le dispatch réécrivait).
+      if (fired.remindedAt) continue;
       if (now.getTime() - fired.sentAt.getTime() < MS_PER_DAY) continue;
-      const marker = `journal-reminder-${entry.day}`;
-      const already = await prisma.notification.findFirst({ where: { enrollmentId: e.id, provider: marker } });
-      if (already) continue;
+      await prisma.journalTrigger.update({ where: { id: fired.id }, data: { remindedAt: now } });
       const msg = journalMessage({ learnerName: e.user.name, day: entry.day, prompt, reminder: true });
       await enqueueNotification({
         enrollmentId: e.id, recipientKind: "LEARNER", recipient: e.user.email, channel: "EMAIL",
-        subject: msg.subject, body: msg.body, provider: marker,
+        subject: msg.subject, body: msg.body, provider: `journal-reminder-${entry.day}`,
       });
       reminded.push({ enrollmentId: e.id, day: entry.day });
     }

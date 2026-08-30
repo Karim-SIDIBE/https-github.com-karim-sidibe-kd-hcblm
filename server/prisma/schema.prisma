@@ -936,6 +936,9 @@ model JournalTrigger {
   enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
   day          Int // J+1, J+3, J+5, J+7, J+10, J+14
   sentAt       DateTime   @default(now())
+  /// Rappel bienveillant à 24 h : posé quand il part — la déduplication vit ICI,
+  /// pas dans la table Notification (dont `provider` change au dispatch).
+  remindedAt   DateTime?
 
   @@unique([enrollmentId, day])
   @@index([enrollmentId])
