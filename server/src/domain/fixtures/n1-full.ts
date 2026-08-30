@@ -165,7 +165,7 @@ const ms14: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Deux réponses attendues : (1) votre phrase de signalement bienveillant, (2) votre rituel de reprise — un enchaînement de 3 gestes qui tient en moins de 2 minutes.",
+    prompt: "Deux réponses attendues : (1) votre phrase de signalement bienveillant, (2) votre rituel de reprise — un enchaînement de 3 gestes qui tient en moins de 2 minutes. Important : utilisez réellement cette phrase et ce rituel dès vos prochaines interruptions — vous les retrouverez pré-remplis dans l'Application terrain du Bloc 2 pour votre retour d'expérience.",
     feedbackText:
       "Testez vos phrases : une bonne phrase de signalement (1) accuse réception avec respect, (2) nomme votre créneau en cours, (3) propose un moment précis — « je te reviens à 11h », jamais « plus tard ». Si elle peut être perçue comme un rejet dans votre organisation, ajoutez la marque relationnelle d'usage (salutation, ton, canal). Et votre rituel de reprise doit tenir en 2 minutes : noter où vous en étiez, relire la dernière phrase produite, reprendre — au-delà, vous ne l'utiliserez pas.",
     fields: [
@@ -232,7 +232,7 @@ const ms21: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Formuler mes « oui différents » pour les 3 situations d'urgence imposée les plus fréquentes.",
+    prompt: "Formuler mes « oui différents » pour les 3 situations d'urgence imposée les plus fréquentes. Important : testez ces formulations en situation réelle dès les prochaines demandes — vous les retrouverez pré-remplies dans l'Application terrain (Étape 2), où vous raconterez comment cela s'est réellement passé.",
     feedbackText:
       "Relisez chaque formulation avec la grille du « oui différent » : elle doit (1) accuser réception positivement (« oui, je m'en occupe »), (2) rendre visible le conflit de priorités (« j'ai X à livrer pour 16h »), (3) proposer une alternative datée (« je te le fais pour demain 10h — ça convient ? »). Si l'une de vos phrases contient un « non » sec ou reste sans date, reformulez-la : c'est la date qui transforme un refus en engagement.",
     fields: [
@@ -264,7 +264,7 @@ const ms22: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Ma planification hebdomadaire africaine : mes 3 résultats attendus classés par ordre d'importance (n° 1 = le plus important), le créneau où je les réalise, et mon buffer d'imprévus.",
+    prompt: "Ma planification hebdomadaire africaine : mes 3 résultats attendus classés par ordre d'importance (n° 1 = le plus important), le créneau où je les réalise, et mon buffer d'imprévus. Important : c'est le planning de votre vraie semaine — appliquez-le ; vos 3 résultats seront pré-remplis dans le Plan d'action 30 jours du Bloc 3 pour une mise à jour.",
     feedbackText:
       "Contrôlez vos 3 résultats : chacun doit être un livrable FINI (« rapport envoyé », pas « avancer sur le rapport »). Puis votre buffer : sur une semaine de 40 h, 30 à 35 % représentent 12 à 14 h non planifiées. Si votre planning occupe plus de 65–70 % du temps, il cassera dès lundi — retirez un résultat plutôt que de rogner le buffer. Enfin, placez les créneaux de vos résultats le matin, aux heures de haute énergie.",
     fields: [
@@ -297,7 +297,7 @@ const ms23: MicroSession = {
   }),
   exercise: {
     type: "guidedForm",
-    prompt: "Ma prochaine délégation : préparez-la avec la méthode de Kwame.",
+    prompt: "Ma prochaine délégation : préparez-la avec la méthode de Kwame, puis réalisez-la réellement cette semaine — vous documenterez la réaction de votre organisation à l'Étape 3 de l'Application terrain.",
     feedbackText:
       "Votre délégation est prête si les 4 éléments y sont : (1) le RÉSULTAT attendu décrit — pas la méthode ; (2) la confiance exprimée explicitement (« je te confie ça parce que… ») ; (3) UN jalon intermédiaire unique — pas un contrôle chaque heure ; (4) la valorisation prévue à la livraison. S'il manque le jalon, vous découvrirez les problèmes trop tard. Et si vous avez décrit la méthode pas à pas, vous n'avez pas délégué — vous avez dicté.",
     fields: [
@@ -333,7 +333,7 @@ const ms31: MicroSession = {
   exercise: {
     type: "written",
     prompt:
-      "Quel rituel de productivité allez-vous installer EN PREMIER dans les 7 prochains jours ? Décrivez le rituel, le moment, la durée et comment vous l'ancrez dans votre réalité africaine. (Ancré dans {{moment_ancrage}}.)",
+      "Quel rituel de productivité allez-vous installer EN PREMIER dans les 7 prochains jours ? Décrivez le rituel, le moment, la durée et comment vous l'ancrez dans votre réalité africaine. Important : démarrez ce rituel réellement dès demain — vous le retrouverez pré-rempli dans votre Plan d'action 30 jours pour l'ajuster d'après vos premiers jours de pratique. (Ancré dans {{moment_ancrage}}.)",
     feedbackText:
       "Évaluez votre rituel avec les 4 critères d'installation durable : (1) UN seul rituel — si vous en avez décrit plusieurs, gardez le premier, les autres viendront aux semaines 3 et 5 ; (2) accroché à un déclencheur existant (« après mon café », « en arrivant au bureau ») ; (3) assez petit pour survivre à une mauvaise semaine (15–20 min maximum) ; (4) protégé des imprévus de votre contexte (coupures, transport, sollicitations). Un rituel raté 3 jours de suite n'est pas un échec de volonté : c'est un rituel trop gros — réduisez-le.",
     minChars: 200,
@@ -416,7 +416,7 @@ export const n1Full: CourseContent = {
       payload: {
         momentAncrage: {
           promptText:
-            "En une phrase, décrivez une journée récente dans votre organisation où vous avez travaillé dur mais avez terminé avec le sentiment de ne pas avoir accompli ce qui comptait vraiment — pour vous ou pour votre équipe.",
+            "En une phrase, décrivez une journée récente dans votre organisation où vous avez travaillé dur mais avez terminé avec le sentiment de ne pas avoir accompli ce qui comptait vraiment — pour vous ou pour votre équipe. Cette phrase devient le fil rouge de votre parcours : vous la retrouverez dans vos exercices, votre journal et votre projet final.",
           minChars: 50,
           placeholderExample:
             "Mardi : 11 h au bureau à répondre au WhatsApp et aux urgences de mon manager — et mon dossier prioritaire n'a pas avancé.",
@@ -929,7 +929,7 @@ export const n1Full: CourseContent = {
                   { key: "D", label: "Demander à son manager de réduire sa charge de travail." },
                 ], correctKey: "B", allValid: false, savedForProject: false,
                   feedback: "Avant tout outil, établir des règles de communication communes crée la structure relationnelle dans laquelle les outils peuvent fonctionner. Dans les équipes africaines, les règles implicites de communication sont la principale source de stress. Les rendre explicites et les négocier collectivement est la première intervention systémique." },
-                { id: "s4", kind: "open", prompt: "Réflexion ouverte — Quel est le rituel de productivité que vous allez installer EN PREMIER dans les 7 prochains jours dans votre organisation africaine ? Décrivez précisément : le rituel, le moment, la durée et comment vous allez l'ancrer dans votre réalité africaine. (Réponse ancrée dans votre Moment d'Ancrage : {{moment_ancrage}}.)", allValid: false, feedback: "", minChars: 100, savedForProject: true },
+                { id: "s4", kind: "open", prompt: "Réflexion ouverte — Quel est le rituel de productivité que vous allez installer EN PREMIER dans les 7 prochains jours dans votre organisation africaine ? Décrivez précisément : le rituel, le moment, la durée et comment vous allez l'ancrer dans votre réalité africaine. Ce rituel sera pré-rempli dans votre Plan d'action 30 jours et dans votre projet de certification — décrivez-le comme un engagement réel, pas comme un exercice. (Réponse ancrée dans votre Moment d'Ancrage : {{moment_ancrage}}.)", allValid: false, feedback: "", minChars: 100, savedForProject: true },
               ],
             },
           ],
