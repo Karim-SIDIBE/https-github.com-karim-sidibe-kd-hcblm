@@ -11,7 +11,7 @@ import { coursePaywall, hasCourseEntitlement } from "../payments/payments.servic
 import { materializeQuiz } from "../bank/bank.service.js";
 import { CourseContent, profileDivergence, type CourseContent as CourseContentT, type ScoredQuestion } from "../../domain/content-model.js";
 import { computeProgress, scoreQuiz, diagnosticProfile, projectSectionKey, PROJECT_FINAL_SECTION_KEY, type CompletionRecord } from "../../domain/engine/progress.js";
-import { composeJournalChapter, journalUnlockAt } from "../../domain/engine/project.js";
+import { composeJournalChapter, journalUnlockAt, PROJECT_SECTION_MIN_WORDS, wordCount } from "../../domain/engine/project.js";
 import { journalRecap } from "../../domain/engine/journal.js";
 import { bandOf, decideCertification } from "../../domain/engine/certification.js";
 import { evidenceCopied, type SuggestedCriterion } from "../../domain/engine/ai-compliance.js";
@@ -390,6 +390,36 @@ function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, b
   }
 }
 
+/** Plancher de rédaction du Bloc 4, opposable côté serveur (la file hors-ligne
+ *  ne peut pas le contourner) : une section de projet exige au moins
+ *  PROJECT_SECTION_MIN_WORDS mots, une micro-entrée de journal son `minWords`
+ *  déclaré (50 par défaut). En dessous, le texte n'offre ni matière aux bandes
+ *  de la grille, ni passage citable comme preuve. */
+function assertBloc4TextFloor(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, itemType: ItemType, itemKey: string, data: unknown) {
+  const cert = ctx.content.blocks.find((b) => b.type === "CERTIFICATION");
+  if (cert?.type !== "CERTIFICATION" || blockIndex !== cert.index) return;
+  const text = textOfData(data);
+
+  if (itemType === "PROJECT") {
+    const words = wordCount(text);
+    if (words < PROJECT_SECTION_MIN_WORDS) {
+      throw new EngineError(422, "too_short",
+        `Cette section demande un texte rédigé d'au moins ${PROJECT_SECTION_MIN_WORDS} mots (${words} actuellement) : phrases complètes, exemples concrets et datés.`);
+    }
+  }
+
+  if (itemType === "JOURNAL_ENTRY") {
+    const day = Number(/^J\+(\d+)$/.exec(itemKey)?.[1] ?? Number.NaN);
+    const entry = cert.payload.journal.entries.find((e) => e.day === day);
+    const min = entry?.minWords ?? 50;
+    const words = wordCount(text);
+    if (words < min) {
+      throw new EngineError(422, "too_short",
+        `Cette micro-entrée demande au moins ${min} mots (${words} actuellement).`);
+    }
+  }
+}
+
 /** Assemble the full certification project from the per-section completions:
  *  sections 1–3 (stored), the auto-composed journal chapter (Section 4,
  *  750–850 caractères) and the just-submitted Section 5. */
@@ -420,6 +450,7 @@ export async function completeItem(
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
   assertBloc4ItemUnlocked(ctx, blockIndex, itemType, itemKey);
+  assertBloc4TextFloor(ctx, blockIndex, itemType, itemKey, data);
   // Frozen: the first submission is final — a revisit is a no-op that leaves
   // the recorded answers untouched (results stay consultable, never rewritten).
   if (FROZEN_ITEM_TYPES.includes(itemType) && completionOf(ctx, blockIndex, itemKey)) {

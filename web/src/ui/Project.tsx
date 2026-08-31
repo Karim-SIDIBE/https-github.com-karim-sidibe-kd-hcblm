@@ -6,7 +6,12 @@ import { assessText, assessmentReason } from "../lib/textcheck";
 import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { useT, useI18n } from "../lib/i18n";
 
-type Rubric = { criteria: { label: string; weightPoints: number }[]; threshold: number };
+type RubricBand = { band: number; scoreRange: [number, number]; descriptor?: string };
+type Rubric = { criteria: { label: string; weightPoints: number; minPoints?: number; whereToLook?: string; bands?: RubricBand[] }[]; threshold: number };
+// Plancher de rédaction d'une section (miroir de PROJECT_SECTION_MIN_WORDS
+// côté serveur) : en dessous, ni preuve citable ni bande haute possibles.
+const SECTION_MIN_WORDS = 30;
+const wordsOf = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 // Affichage apprenant (P7) : les codes du référentiel (S1, S2…) en tête des
 // libellés de critères sont retirés — la compétence elle-même suffit.
 const critLabel = (l: string) => l.replace(/^S\d+\s*[—-]\s*/, "");
@@ -107,7 +112,22 @@ export function Project({ eid }: { eid: string }) {
           {status.evaluator && <p className="meta" style={{ margin: 0 }}>{t("pj.evaluator", { name: status.evaluator.name })}</p>}
           {status.scoreTotal != null && <p className="h4" style={{ margin: 0 }}>{t("pj.scoreLine", { score: status.scoreTotal })} <span className="meta">{t("pj.scoreThreshold", { threshold: spec.rubric.threshold })}</span></p>}
           {Array.isArray(status.criteria) && (
-            <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => <li key={c.label}>{critLabel(c.label)} : {c.points}/{c.weightPoints}</li>)}</ul>
+            <ul style={{ margin: 0, paddingLeft: 18 }} className="body">{status.criteria.map((c: any) => {
+              // Non-compensation (§6) rendue lisible : le minimum du critère
+              // vient de la grille du bundle, le score de la notation.
+              const min = spec.rubric.criteria.find((rc) => rc.label === c.label)?.minPoints;
+              const missed = min != null && c.points < min;
+              return (
+                <li key={c.label}>
+                  {critLabel(c.label)} : {c.points}/{c.weightPoints}{" "}
+                  {min != null && (
+                    <span className={`hf-pill hf-pill--sm ${missed ? "hf-pill--orange" : "hf-pill--mint"}`}>
+                      {missed ? t("pj.minMissed", { min }) : t("pj.minMet", { min })}
+                    </span>
+                  )}
+                </li>
+              );
+            })}</ul>
           )}
           {status.feedback && <div className="hf-card hf-card--mint"><strong className="h4">{t("pj.evalFeedback")}</strong><p className="body" style={{ margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{status.feedback}</p></div>}
         </div>
@@ -167,10 +187,35 @@ export function Project({ eid }: { eid: string }) {
         <strong className="h4">{t("pj.rubricTitle")} <span className="meta" style={{ fontWeight: 400 }}>{t("pj.rubricNote")}</span></strong>
         <div className="stack" style={{ gap: 8 }}>
           {spec.rubric.criteria.map((c) => (
-            <div key={c.label} className="row between"><span className="body">{critLabel(c.label)}</span><span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span></div>
+            <details key={c.label}>
+              <summary className="row between" style={{ cursor: "pointer", listStyle: "none", gap: 8 }}>
+                <span className="body">{critLabel(c.label)}</span>
+                <span className="row" style={{ gap: 6 }}>
+                  {c.minPoints != null && <span className="hf-pill hf-pill--orange hf-pill--sm">{t("pj.rubricMin", { min: c.minPoints })}</span>}
+                  <span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span>
+                </span>
+              </summary>
+              <div className="stack" style={{ gap: 6, margin: "8px 0 4px 10px" }}>
+                {(c.bands ?? []).slice().sort((a, b) => b.band - a.band).map((b) => (
+                  <p key={b.band} className="meta" style={{ margin: 0 }}>
+                    <strong>{t("pj.band", { band: b.band, lo: b.scoreRange[0], hi: b.scoreRange[1] })}</strong>{b.descriptor ? ` — ${b.descriptor}` : ""}
+                  </p>
+                ))}
+                {c.whereToLook && <p className="meta" style={{ margin: 0, fontStyle: "italic" }}>{t("pj.whereToLook", { text: c.whereToLook })}</p>}
+              </div>
+            </details>
           ))}
         </div>
         <p className="meta" style={{ margin: 0 }}>{t("pj.passThreshold", { threshold: spec.rubric.threshold })}</p>
+        {/* Décision ternaire du socle §6, énoncée AVANT de soumettre — la
+            non-compensation (minimum par critère) surprend sinon. */}
+        <div className="stack" style={{ gap: 4 }}>
+          <strong className="h4" style={{ fontSize: 14 }}>{t("pj.decisionTitle")}</strong>
+          <p className="meta" style={{ margin: 0 }}>✅ {t("pj.decisionCertified", { threshold: spec.rubric.threshold })}</p>
+          <p className="meta" style={{ margin: 0 }}>🔁 {t("pj.decisionResubmit")}</p>
+          <p className="meta" style={{ margin: 0 }}>⛔ {t("pj.decisionNotCertified")}</p>
+        </div>
+        <p className="meta" style={{ margin: 0 }}>{t("pj.writeTip")}</p>
       </div>
 
       {(state?.sections ?? []).map((s, i) => {
@@ -199,8 +244,13 @@ export function Project({ eid }: { eid: string }) {
                 <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))} style={{ minHeight: 110 }}
                   onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
                 {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
+                {/* Plancher de rédaction : sous 30 mots, ni bande haute ni
+                    preuve citable — compteur visible, comme pour le journal. */}
+                <p className="meta" style={{ margin: 0, color: wordsOf(text) < SECTION_MIN_WORDS ? "var(--danger, #b45309)" : undefined }}>
+                  {t("pj.words", { count: wordsOf(text), min: SECTION_MIN_WORDS })}
+                </p>
                 {isFinal && <p className="meta" style={{ margin: 0 }}>{t("pj.finalNote")}</p>}
-                <button className={`hf-btn hf-btn--block ${isFinal ? "hf-btn--primary" : "hf-btn--outline"}`} style={{ marginTop: 2 }} disabled={busy === s.key || text.trim().length <= 20 || Boolean(quality)}
+                <button className={`hf-btn hf-btn--block ${isFinal ? "hf-btn--primary" : "hf-btn--outline"}`} style={{ marginTop: 2 }} disabled={busy === s.key || wordsOf(text) < SECTION_MIN_WORDS || Boolean(quality)}
                   onClick={() => void submitSection(s)}>
                   {busy === s.key ? "…" : isFinal ? t("pj.submit") : t("pj.submitSection")}
                 </button>
