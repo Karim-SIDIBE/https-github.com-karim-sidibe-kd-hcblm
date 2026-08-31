@@ -175,7 +175,7 @@ async function providerTranslate(texts: string[]): Promise<string[]> {
   let out: string;
   if (aiAvailable()) {
     out = await callClaudeText({
-      model: env.AI_MODEL, max_tokens: 4000,
+      model: env.AI_MODEL, max_tokens: 16000,
       system: [{ type: "text", text: TRANSLATE_BRIEF }],
       messages: [{ role: "user", content: joined }],
     });

@@ -36,7 +36,7 @@ export function buildAnthropicRequest(stage: Stage, input: MessageInput): Claude
 
   return {
     model: env.AI_MODEL,
-    max_tokens: 200,
+    max_tokens: 2000,
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],
