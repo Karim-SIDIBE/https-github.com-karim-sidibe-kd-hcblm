@@ -159,6 +159,12 @@ const RUBRIC_SYSTEM =
   "INDICATIVE par critère, destinée à un évaluateur humain qui tranchera. ATTRIBUTION PAR BANDE : retiens " +
   "la bande la plus haute dont TOUS les éléments du descripteur sont démontrés par le livrable — un seul " +
   "élément manquant interdit la bande ; en cas de doute entre deux bandes, choisis la plus basse. " +
+  "ANCRAGE DU SCORE DANS LA BANDE — aucune marge d'appréciation libre : le score par défaut est le POINT " +
+  "MILIEU de la bande retenue (arrondi vers le bas) ; monte au MAXIMUM de la bande uniquement si chaque " +
+  "élément du descripteur est démontré par une preuve explicite et développée ; descends au MINIMUM de la " +
+  "bande uniquement si un élément n'est démontré que de justesse ; aucun autre score n'est permis dans la " +
+  "bande. Ce protocole est déterministe : le même livrable réévalué doit recevoir exactement les mêmes " +
+  "scores — toute variation est une erreur de ta part. " +
   "Pour CHAQUE critère tu fournis " +
   "exactement UNE des deux preuves : (a) \"citations\" — 1 à 3 extraits du livrable d'AU MOINS 8 mots " +
   "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) : un " +
