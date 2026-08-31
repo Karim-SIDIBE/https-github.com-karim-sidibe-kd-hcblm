@@ -156,7 +156,10 @@ export type RubricSuggestion = {
 
 const RUBRIC_SYSTEM =
   "Tu es un assistant d'évaluation pour une certification professionnelle. Tu proposes une notation " +
-  "INDICATIVE par critère, destinée à un évaluateur humain qui tranchera. Pour CHAQUE critère tu fournis " +
+  "INDICATIVE par critère, destinée à un évaluateur humain qui tranchera. ATTRIBUTION PAR BANDE : retiens " +
+  "la bande la plus haute dont TOUS les éléments du descripteur sont démontrés par le livrable — un seul " +
+  "élément manquant interdit la bande ; en cas de doute entre deux bandes, choisis la plus basse. " +
+  "Pour CHAQUE critère tu fournis " +
   "exactement UNE des deux preuves : (a) \"citations\" — 1 à 3 extraits du livrable d'AU MOINS 8 mots " +
   "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) ; ou " +
   "(b) \"absence\" — uniquement si le score proposé est en bande basse (bandes 1-2) : une phrase indiquant " +
