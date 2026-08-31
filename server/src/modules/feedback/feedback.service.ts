@@ -248,7 +248,7 @@ export async function runAiCalibration(courseId: string, runsInput: CalibrationR
     });
   }
 
-  const evaluated: { label: string; reference: number[]; proposed: number[]; evidenceOk: boolean }[] = [];
+  const evaluated: { label: string; reference: number[]; proposed: number[]; evidenceOk: boolean; evidenceDetail: string[] }[] = [];
   for (const run of runsInput) {
     // §8.8 en mode STRICT : la calibration mesure le modèle réel, jamais le
     // repli heuristique. Un appel en échec interrompt tout avec sa cause —
@@ -262,15 +262,26 @@ export async function runAiCalibration(courseId: string, runsInput: CalibrationR
         `« ${run.label} » : ${e instanceof Error ? e.message : "erreur inconnue"}. Calibration interrompue — rien n'a été enregistré.`);
     }
     const evidence = verifyEvidence(rubric.criteria, suggestion.perCriterion, run.text);
+    // Traçabilité : QUELLE preuve échoue et POURQUOI — sans cela, l'admin ne
+    // voit qu'une pastille « échec » et corrige à l'aveugle.
+    const clip = (s: string) => `« ${s.length > 90 ? `${s.slice(0, 90)}…` : s} »`;
+    const evidenceDetail = evidence.perCriterion.filter((v) => !v.ok).map((v) => {
+      const sug = suggestion.perCriterion.find((c) => c.label === v.label);
+      const shown = sug?.citations?.length
+        ? ` — citation(s) : ${sug.citations.map(clip).join(" ; ")}`
+        : sug?.absence ? ` — absence : ${clip(sug.absence)}` : "";
+      return `${v.label} : ${v.issues.join(", ")}${shown}`;
+    });
     evaluated.push({
       label: run.label, reference: run.reference,
       proposed: suggestion.perCriterion.map((c) => c.suggested),
-      evidenceOk: evidence.ok,
+      evidenceOk: evidence.ok, evidenceDetail,
     });
   }
   const verdict = checkCalibration(rubric.criteria, evaluated);
   const results = verdict.runs.map((r, i) => ({
-    ...r, evidenceOk: evaluated[i]?.evidenceOk ?? false, ok: r.ok && (evaluated[i]?.evidenceOk ?? false),
+    ...r, evidenceOk: evaluated[i]?.evidenceOk ?? false, evidenceDetail: evaluated[i]?.evidenceDetail ?? [],
+    ok: r.ok && (evaluated[i]?.evidenceOk ?? false),
   }));
   const passed = verdict.issues.length === 0 && results.length > 0 && results.every((r) => r.ok);
 

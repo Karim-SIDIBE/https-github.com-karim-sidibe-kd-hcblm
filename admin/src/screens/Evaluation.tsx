@@ -613,6 +613,19 @@ function AiGovernancePanel() {
             </tbody>
           </table>
         )}
+        {/* Le POURQUOI d'un échec de preuve (§8.4) — citation en cause et raison,
+            pour ne plus diagnostiquer une pastille rouge à l'aveugle. */}
+        {status?.latest?.results.some((r) => r.evidenceDetail?.length) && (
+          <div style={{ marginBottom: 12 }}>
+            <div className="eyebrow" style={{ margin: "0 0 4px" }}>Détail des preuves en échec (§8.4)</div>
+            {status.latest.results.filter((r) => r.evidenceDetail?.length).map((r) => (
+              <div key={r.label} style={{ fontSize: 12, marginBottom: 4 }}>
+                <strong>{r.label}</strong>
+                {r.evidenceDetail!.map((d, i) => <div key={i} className="muted" style={{ marginLeft: 10 }}>{d}</div>)}
+              </div>
+            ))}
+          </div>
+        )}
 
         <details style={{ marginBottom: 12 }}>
           <summary style={{ cursor: "pointer", fontSize: 13, fontWeight: 600 }}>Lancer une calibration (5 dossiers de référence — les scores de référence ne sont jamais transmis au modèle)</summary>

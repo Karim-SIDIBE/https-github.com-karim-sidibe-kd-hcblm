@@ -233,7 +233,7 @@ export type RubricSuggestion = {
 /** Calibration de la suggestion (§8.8) — clé (parcours, modèle, version de grille). */
 export type AiCalibrationStatus = {
   active: boolean; provider: string; gridVersion: string | null;
-  latest: { id: string; passed: boolean; createdAt: string; results: { label: string; referenceTotal: number; proposedTotal: number; totalGap: number; maxBandDeviation: number; evidenceOk: boolean; ok: boolean }[] } | null;
+  latest: { id: string; passed: boolean; createdAt: string; results: { label: string; referenceTotal: number; proposedTotal: number; totalGap: number; maxBandDeviation: number; evidenceOk: boolean; evidenceDetail?: string[]; ok: boolean }[] } | null;
 };
 /** Indicateurs de surveillance §8.10. */
 export type AiComplianceIndicators = {
