@@ -11,12 +11,28 @@ export function aiAvailable(): boolean {
   return Boolean(env.ANTHROPIC_API_KEY);
 }
 
+export type Effort = "low" | "medium" | "high";
+
 export type ClaudeRequest = {
   model: string;
   max_tokens: number;
+  /** Profondeur de réflexion (et donc coût) — voir `effortFor`. */
+  output_config?: { effort: Effort };
   system: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[];
   messages: { role: "user" | "assistant"; content: string }[];
 };
+
+/** Modèles qui acceptent `output_config.effort` — l'envoyer à claude-haiku-4-5
+ *  (ou plus ancien) provoque un 400 et ferait tout basculer sur les replis. */
+const EFFORT_CAPABLE = /^claude-(fable-5|mythos-5|opus-5|opus-4-[5-8]|sonnet-5|sonnet-4-6)/;
+
+/** `output_config` à joindre à la requête : l'effort demandé si le modèle le
+ *  supporte, sinon rien (le défaut du modèle s'applique). Maîtrise des coûts :
+ *  « low » pour les textes courts à fort volume (relances, feedback formatif),
+ *  défaut (high) pour la notation certifiante où la justesse prime. */
+export function effortFor(model: string, effort: Effort): { effort: Effort } | undefined {
+  return EFFORT_CAPABLE.test(model) ? { effort } : undefined;
+}
 
 /** Call Claude and return the concatenated text. Throws on any failure. */
 export async function callClaudeText(request: ClaudeRequest): Promise<string> {

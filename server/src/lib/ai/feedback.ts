@@ -12,7 +12,7 @@
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { normalizeWhitespace } from "../../domain/engine/ai-compliance.js";
-import { aiAvailable, callClaudeText, extractJson, stripMarkdown, type ClaudeRequest } from "./client.js";
+import { aiAvailable, callClaudeText, effortFor, extractJson, stripMarkdown, type ClaudeRequest } from "./client.js";
 
 // ---------------------------------------------------------------------------
 // Formative feedback
@@ -64,6 +64,8 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     // Safety margin, not a shaping constraint: the 250-word target lives in the
     // system prompt; the cap only guarantees the model never stops mid-sentence.
     max_tokens: 8000,
+    // Fort volume (1 appel par exercice écrit) × texte court : effort minimal.
+    output_config: effortFor(env.AI_MODEL, "low"),
     system: [{ type: "text", text: FORMATIVE_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
@@ -200,6 +202,8 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
     // adaptative compte dans max_tokens — un plafond serré tronquait la réponse
     // (stop_reason=max_tokens) et faisait échouer la calibration.
     max_tokens: 16000,
+    // Pas d'output_config ici — VOLONTAIRE : la notation certifiante garde la
+    // profondeur de réflexion par défaut du modèle, la justesse prime le coût.
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
