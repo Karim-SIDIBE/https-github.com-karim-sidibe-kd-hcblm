@@ -39,7 +39,7 @@ export function normalizeWhitespace(s: string): string {
  *  honnête ne doit pas échouer sur un artefact d'encodage — l'exigence
  *  « mêmes mots, même ordre, ≥ 8 mots consécutifs » reste entière. */
 export function normalizeTypography(s: string): string {
-  return s.replace(/[’‘‛ʼ]/g, "'").replace(/[“”„]/g, '"');
+  return s.replace(/[’‘‛ʼ]/g, "'").replace(/[“”„]/g, '"').replace(/[–—―]/g, "-");
 }
 
 const comparable = (s: string) => normalizeWhitespace(normalizeTypography(s));
@@ -54,7 +54,10 @@ export function verifyCitation(extract: string, dossierText: string): CitationIs
   if (!c) return "empty";
   if (ELLIPSIS.test(extract)) return "ellipsis";
   if (c.split(" ").length < MIN_CITATION_WORDS) return "too_short";
-  if (!comparable(dossierText).includes(c)) return "not_found";
+  // Insensible à la casse : « La difficulté » et « la difficulté » sont les
+  // mêmes mots — une citation qui démarre en milieu de phrase change
+  // légitimement de majuscule. « Mêmes mots, même ordre » reste entier.
+  if (!comparable(dossierText).toLowerCase().includes(c.toLowerCase())) return "not_found";
   return null;
 }
 

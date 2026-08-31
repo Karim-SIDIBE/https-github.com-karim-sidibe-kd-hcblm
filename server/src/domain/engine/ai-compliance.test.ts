@@ -40,6 +40,10 @@ test("citation §8.4 : la typographie (apostrophes, guillemets) ne fait pas éch
   assert.equal(verifyCitation("faire accepter l'heure fixe aux anciens chauffeurs, habitués à passer", dossier), null);
   // La réciproque aussi (dossier droit, citation typographique).
   assert.equal(verifyCitation("faire accepter l’heure fixe aux anciens chauffeurs, habitués à passer", dossier.replace(/’/g, "'")), null);
+  // La casse d'un début de citation en milieu de phrase ne compte pas non plus…
+  assert.equal(verifyCitation("la difficulté principale a été de faire accepter l'heure fixe", dossier), null);
+  // …ni les tirets typographiques.
+  assert.equal(verifyCitation("habitués à passer quand ils veulent - le respect du contact", "habitués à passer quand ils veulent — le respect du contact personnel"), null);
   // …mais une citation reformulée reste refusée : l'exigence ne bouge pas.
   assert.equal(verifyCitation("accepter une heure fixe aux nouveaux chauffeurs habitués à passer souvent", dossier), "not_found");
 });
