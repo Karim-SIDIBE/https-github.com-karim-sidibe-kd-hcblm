@@ -48,6 +48,21 @@ test("citation §8.4 : la typographie (apostrophes, guillemets) ne fait pas éch
   assert.equal(verifyCitation("accepter une heure fixe aux nouveaux chauffeurs habitués à passer souvent", dossier), "not_found");
 });
 
+test("preuve §8.4 : un extrait d'appoint trop court n'annule pas une preuve faite — la falsification, si", () => {
+  const crit = [{ label: "C1", weightPoints: 20 }] as ComplianceCriterion[];
+  const long = "J'ai planifié mes trois priorités du jour chaque matin"; // ≥ 8 mots, littéral
+  const short = "avant l'ouverture du marché"; // < 8 mots, littéral
+  // Extrait valide + extrait court → la preuve tient.
+  const okMix = verifyEvidence(crit, [{ label: "C1", suggested: 15, citations: [long, short] }], DOSSIER);
+  assert.equal(okMix.ok, true);
+  // Uniquement des extraits courts → échec (preuve insuffisante).
+  const onlyShort = verifyEvidence(crit, [{ label: "C1", suggested: 15, citations: [short] }], DOSSIER);
+  assert.deepEqual(onlyShort.perCriterion[0]!.issues, ["citation:too_short"]);
+  // Extrait valide + extrait INVENTÉ → échec (l'intégrité prime toujours).
+  const fabricated = verifyEvidence(crit, [{ label: "C1", suggested: 15, citations: [long, "des mots qui ne figurent nulle part dans ce livrable précis"] }], DOSSIER);
+  assert.deepEqual(fabricated.perCriterion[0]!.issues, ["citation:not_found"]);
+});
+
 test("citation valide : ≥ 8 mots consécutifs retrouvés malgré des espaces différents", () => {
   const extract = "J'ai   planifié mes trois priorités du jour\nchaque matin";
   assert.equal(verifyCitation(extract, DOSSIER), null);

@@ -161,7 +161,8 @@ const RUBRIC_SYSTEM =
   "élément manquant interdit la bande ; en cas de doute entre deux bandes, choisis la plus basse. " +
   "Pour CHAQUE critère tu fournis " +
   "exactement UNE des deux preuves : (a) \"citations\" — 1 à 3 extraits du livrable d'AU MOINS 8 mots " +
-  "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) ; ou " +
+  "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) ; un " +
+  "extrait de moins de 8 mots ne compte pas — préfère UN SEUL extrait long à plusieurs courts ; ou " +
   "(b) \"absence\" — uniquement si le score proposé est en bande basse (bandes 1-2) : une phrase indiquant " +
   "les sections parcourues, reprenant les mots de la ligne « Où chercher la preuve » du critère, et ce qui " +
   "n'y figure pas. Tu réponds UNIQUEMENT en JSON.";
