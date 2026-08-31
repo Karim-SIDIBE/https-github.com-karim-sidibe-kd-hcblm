@@ -167,7 +167,7 @@ const ENRICH_SYSTEM =
 function buildEnrichRequest(brief: CourseBrief, scaffold: CourseContentT): ClaudeRequest {
   return {
     model: env.AI_MODEL,
-    max_tokens: 4000,
+    max_tokens: 16000,
     system: [{ type: "text", text: ENRICH_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: `Brief: ${JSON.stringify(brief)}\nSquelette:\n${JSON.stringify(scaffold)}` }],
   };
@@ -199,7 +199,7 @@ const FROM_DOC_SYSTEM =
 function buildFromDocRequest(scaffold: CourseContentT, rawText: string): ClaudeRequest {
   return {
     model: env.AI_MODEL,
-    max_tokens: 8000,
+    max_tokens: 24000,
     system: [{ type: "text", text: FROM_DOC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: `Squelette:\n${JSON.stringify(scaffold)}\n\nTexte du document:\n${rawText.slice(0, 24000)}` }],
   };

@@ -52,7 +52,7 @@ export function buildTutorRequest(question: string, chunks: RetrievedChunk[], hi
 
   return {
     model: env.AI_MODEL,
-    max_tokens: 700,
+    max_tokens: 8000,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };

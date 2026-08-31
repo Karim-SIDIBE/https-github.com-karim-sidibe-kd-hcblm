@@ -63,7 +63,7 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     model: env.AI_MODEL,
     // Safety margin, not a shaping constraint: the 250-word target lives in the
     // system prompt; the cap only guarantees the model never stops mid-sentence.
-    max_tokens: 1024,
+    max_tokens: 8000,
     system: [{ type: "text", text: FORMATIVE_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
@@ -195,10 +195,11 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
 
   return {
     model: env.AI_MODEL,
-    // 6 critères × (commentaire + 1-3 citations exactes ≥ 8 mots) dépassent
-    // facilement 2000 tokens sur un vrai dossier — et un JSON tronqué faisait
-    // basculer toute la notation sur le repli heuristique.
-    max_tokens: 4000,
+    // Marge, pas contrainte de forme : 6 critères × citations exactes font un
+    // long JSON, et sur les modèles récents (claude-sonnet-5…) la RÉFLEXION
+    // adaptative compte dans max_tokens — un plafond serré tronquait la réponse
+    // (stop_reason=max_tokens) et faisait échouer la calibration.
+    max_tokens: 16000,
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
