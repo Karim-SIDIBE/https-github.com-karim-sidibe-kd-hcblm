@@ -161,7 +161,9 @@ const RUBRIC_SYSTEM =
   "élément manquant interdit la bande ; en cas de doute entre deux bandes, choisis la plus basse. " +
   "Pour CHAQUE critère tu fournis " +
   "exactement UNE des deux preuves : (a) \"citations\" — 1 à 3 extraits du livrable d'AU MOINS 8 mots " +
-  "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) ; un " +
+  "consécutifs chacun, copiés EXACTEMENT (mêmes mots, même ordre, sans ellipse ni reformulation) : un " +
+  "copier-coller caractère par caractère — si le candidat a fait une faute d'orthographe, de grammaire " +
+  "ou d'accord, la citation la CONSERVE telle quelle, tu ne corriges JAMAIS son texte ; un " +
   "extrait de moins de 8 mots ne compte pas — préfère UN SEUL extrait long à plusieurs courts ; ou " +
   "(b) \"absence\" — uniquement si le score proposé est en bande basse (bandes 1-2) : une phrase indiquant " +
   "les sections parcourues, reprenant les mots de la ligne « Où chercher la preuve » du critère, et ce qui " +
@@ -240,7 +242,7 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
     `Grille du parcours (somme = 100, seuil de certification = ${input.threshold}/100) :`,
     crit,
     `Réponds en JSON: {"perCriterion":[{"label":"...","suggested":<int ≤ max>,"comment":"...",` +
-    `"citations":["extrait exact ≥ 8 mots", ...] OU "absence":"..."}],"summary":"..."} ` +
+    `"citations":["extrait recopié tel quel ≥ 8 mots, fautes du candidat comprises", ...] OU "absence":"..."}],"summary":"..."} ` +
     `(le champ non utilisé reste vide : "citations":[] ou "absence":"").`,
   ].join("\n");
 
