@@ -143,7 +143,7 @@ function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
     case "ONBOARDING": {
       const items: BlockItem[] = [{
         key: "onboarding", kind: "onboarding",
-        label: tr("ci.ms01", "Micro-session 0.1 — Onboarding"),
+        label: tr("ci.ms01", "Bloc 0 · Étape 1 — Introduction"),
         sublabel: tr("ci.onboarding", "Introduction & point de départ"),
         durationSec: KIND_ESTIMATE.onboarding,
       }];
@@ -152,8 +152,8 @@ function rawBlockItems(block: Block, t?: Translate): BlockItem[] {
       // estimate covers vidéo + quiz ("10 min"), not just the video runtime.
       if (block.payload.triggerVideo) items.push({
         key: "declencheur", kind: "session",
-        label: tr("ci.ms02", "Micro-session 0.2 — Déclencheur"),
-        sublabel: tr("ci.ms02sub", "Vidéo déclencheur + Quiz (non noté)"),
+        label: tr("ci.ms02", "Étape 2 — Vidéo déclencheur + quiz"),
+        sublabel: tr("ci.ms02sub", "Quiz non noté"),
         durationSec: parseEstimate((block.payload as { triggerDuration?: string }).triggerDuration) || block.payload.triggerVideo.durationSec,
       });
       return items;
