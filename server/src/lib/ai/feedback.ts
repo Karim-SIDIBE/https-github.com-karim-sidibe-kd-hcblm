@@ -12,7 +12,7 @@
 import { z } from "zod";
 import { env } from "../../config/env.js";
 import { normalizeWhitespace } from "../../domain/engine/ai-compliance.js";
-import { aiAvailable, callClaudeText, extractJson, stripMarkdown, type ClaudeRequest } from "./client.js";
+import { aiAvailable, callClaudeText, effortFor, extractJson, stripMarkdown, supportsOutputConfig, type ClaudeRequest } from "./client.js";
 
 // ---------------------------------------------------------------------------
 // Formative feedback
@@ -64,6 +64,8 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     // Safety margin, not a shaping constraint: the 250-word target lives in the
     // system prompt; the cap only guarantees the model never stops mid-sentence.
     max_tokens: 8000,
+    // Fort volume (1 appel par exercice écrit) × texte court : effort minimal.
+    output_config: effortFor(env.AI_MODEL, "low"),
     system: [{ type: "text", text: FORMATIVE_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
@@ -161,6 +163,44 @@ const RUBRIC_SYSTEM =
   "les sections parcourues, reprenant les mots de la ligne « Où chercher la preuve » du critère, et ce qui " +
   "n'y figure pas. Tu réponds UNIQUEMENT en JSON.";
 
+/** Schéma JSON de la suggestion (sortie structurée) : mêmes champs que
+ *  SuggestionSchema, tous requis — un « citations » vide ou un « absence »
+ *  vide tiennent lieu d'omission (`normalize` les neutralise). L'API garantit
+ *  alors un JSON valide : un guillemet non échappé du modèle a fait échouer
+ *  une calibration entière (« Expected ',' or ']' … »). */
+const SUGGESTION_JSON_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  required: ["perCriterion", "summary"],
+  properties: {
+    perCriterion: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["label", "suggested", "comment", "citations", "absence"],
+        properties: {
+          label: { type: "string" },
+          suggested: { type: "integer" },
+          comment: { type: "string" },
+          citations: { type: "array", items: { type: "string" } },
+          absence: { type: "string" },
+        },
+      },
+    },
+    summary: { type: "string" },
+  },
+};
+
+/** `output_config` de la notation : PAS d'effort (défaut du modèle — la
+ *  justesse prime le coût, c'est ce que mesure la calibration §8.8), mais la
+ *  sortie structurée quand le modèle la supporte. */
+export function rubricOutputConfig(model: string): ClaudeRequest["output_config"] {
+  return supportsOutputConfig(model)
+    ? { format: { type: "json_schema", schema: SUGGESTION_JSON_SCHEMA } }
+    : undefined;
+}
+
 const SuggestionSchema = z.object({
   perCriterion: z.array(z.object({
     label: z.string(),
@@ -190,7 +230,8 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
     `Grille du parcours (somme = 100, seuil de certification = ${input.threshold}/100) :`,
     crit,
     `Réponds en JSON: {"perCriterion":[{"label":"...","suggested":<int ≤ max>,"comment":"...",` +
-    `"citations":["extrait exact ≥ 8 mots", ...] OU "absence":"..."}],"summary":"..."}.`,
+    `"citations":["extrait exact ≥ 8 mots", ...] OU "absence":"..."}],"summary":"..."} ` +
+    `(le champ non utilisé reste vide : "citations":[] ou "absence":"").`,
   ].join("\n");
 
   return {
@@ -200,6 +241,7 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
     // adaptative compte dans max_tokens — un plafond serré tronquait la réponse
     // (stop_reason=max_tokens) et faisait échouer la calibration.
     max_tokens: 16000,
+    output_config: rubricOutputConfig(env.AI_MODEL),
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };

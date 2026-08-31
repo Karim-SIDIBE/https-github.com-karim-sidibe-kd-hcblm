@@ -11,7 +11,7 @@
  * learners) to cut cost/latency.
  */
 import { env } from "../../config/env.js";
-import { aiAvailable, callClaudeText, type ClaudeRequest } from "./client.js";
+import { aiAvailable, callClaudeText, effortFor, type ClaudeRequest } from "./client.js";
 import { buildMessage, type MessageInput, type Stage, type Channel } from "../../domain/engine/reengagement.js";
 
 export type NudgeResult = { body: string; channel: Channel; aiGenerated: boolean; provider: string };
@@ -37,6 +37,8 @@ export function buildAnthropicRequest(stage: Stage, input: MessageInput): Claude
   return {
     model: env.AI_MODEL,
     max_tokens: 2000,
+    // Deux phrases chaleureuses : la réflexion profonde n'apporte rien ici.
+    output_config: effortFor(env.AI_MODEL, "low"),
     system: [
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],
