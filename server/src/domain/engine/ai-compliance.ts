@@ -33,17 +33,28 @@ export function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
 
+/** Typographie neutralisée (§8.4) : les apostrophes et guillemets
+ *  typographiques (’ “ ” — introduits par les traitements de texte d'où les
+ *  dossiers sont collés) valent leurs équivalents droits. Une citation
+ *  honnête ne doit pas échouer sur un artefact d'encodage — l'exigence
+ *  « mêmes mots, même ordre, ≥ 8 mots consécutifs » reste entière. */
+export function normalizeTypography(s: string): string {
+  return s.replace(/[’‘‛ʼ]/g, "'").replace(/[“”„]/g, '"');
+}
+
+const comparable = (s: string) => normalizeWhitespace(normalizeTypography(s));
+
 const ELLIPSIS = /(\.{3}|…|\[\s*\.{2,}\s*\]|\[\s*…\s*\])/;
 
 export type CitationIssue = "empty" | "ellipsis" | "too_short" | "not_found";
 
 /** Vérifie UNE citation littérale contre le texte du livrable. null = valide. */
 export function verifyCitation(extract: string, dossierText: string): CitationIssue | null {
-  const c = normalizeWhitespace(extract);
+  const c = comparable(extract);
   if (!c) return "empty";
   if (ELLIPSIS.test(extract)) return "ellipsis";
   if (c.split(" ").length < MIN_CITATION_WORDS) return "too_short";
-  if (!normalizeWhitespace(dossierText).includes(c)) return "not_found";
+  if (!comparable(dossierText).includes(c)) return "not_found";
   return null;
 }
 
@@ -61,8 +72,8 @@ export function isLowBand(criterion: ComplianceCriterion, points: number): boole
  *  Sert à vérifier que la déclaration d'absence REPREND la ligne
  *  « Où chercher la preuve » du critère. */
 export function sharesConsecutiveWords(a: string, b: string, n: number): boolean {
-  const wa = normalizeWhitespace(a).toLowerCase().split(" ").filter(Boolean);
-  const wb = normalizeWhitespace(b).toLowerCase().split(" ").filter(Boolean);
+  const wa = comparable(a).toLowerCase().split(" ").filter(Boolean);
+  const wb = comparable(b).toLowerCase().split(" ").filter(Boolean);
   if (wa.length < n || wb.length < n) return false;
   const grams = new Set<string>();
   for (let i = 0; i + n <= wa.length; i++) grams.add(wa.slice(i, i + n).join(" "));

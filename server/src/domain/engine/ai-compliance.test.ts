@@ -34,6 +34,16 @@ test("normalisation des espaces : blancs multiples, tabulations et sauts de lign
   assert.equal(normalizeWhitespace("  a\t b\n\nc  "), "a b c");
 });
 
+test("citation §8.4 : la typographie (apostrophes, guillemets) ne fait pas échouer une citation honnête", () => {
+  // Le dossier vient d'un traitement de texte (’) ; le modèle écrit droit (').
+  const dossier = "La difficulté principale a été de faire accepter l’heure fixe aux anciens chauffeurs, habitués à passer quand ils veulent.";
+  assert.equal(verifyCitation("faire accepter l'heure fixe aux anciens chauffeurs, habitués à passer", dossier), null);
+  // La réciproque aussi (dossier droit, citation typographique).
+  assert.equal(verifyCitation("faire accepter l’heure fixe aux anciens chauffeurs, habitués à passer", dossier.replace(/’/g, "'")), null);
+  // …mais une citation reformulée reste refusée : l'exigence ne bouge pas.
+  assert.equal(verifyCitation("accepter une heure fixe aux nouveaux chauffeurs habitués à passer souvent", dossier), "not_found");
+});
+
 test("citation valide : ≥ 8 mots consécutifs retrouvés malgré des espaces différents", () => {
   const extract = "J'ai   planifié mes trois priorités du jour\nchaque matin";
   assert.equal(verifyCitation(extract, DOSSIER), null);
