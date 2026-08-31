@@ -37,3 +37,13 @@ export function composeJournalChapter(entries: JournalEntryText[], maxChars = SE
 export function journalUnlockAt(startedAt: Date, day: number): Date {
   return new Date(startedAt.getTime() + day * 24 * 60 * 60 * 1000);
 }
+
+/** Plancher de rédaction d'une section de projet (en MOTS) : en dessous, le
+ *  texte n'offre ni matière aux bandes hautes de la grille, ni passage citable
+ *  comme preuve (humaine ou automatisée). Miroir de SECTION_MIN_WORDS côté PWA. */
+export const PROJECT_SECTION_MIN_WORDS = 30;
+
+/** Nombre de mots d'un texte (toute suite de blancs sépare deux mots). */
+export function wordCount(s: string): number {
+  return s.trim().split(/\s+/).filter(Boolean).length;
+}
