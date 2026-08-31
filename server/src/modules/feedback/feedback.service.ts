@@ -13,7 +13,7 @@ import { hasPermission } from "../../domain/auth/permissions.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { env } from "../../config/env.js";
 import { aiAvailable } from "../../lib/ai/client.js";
-import { generateFormativeFeedback, suggestRubricScores } from "../../lib/ai/feedback.js";
+import { generateFormativeFeedback, gradingModel, suggestRubricScores } from "../../lib/ai/feedback.js";
 import type { Principal } from "../../lib/auth.js";
 
 export class FeedbackError extends Error {
@@ -130,7 +130,7 @@ function resolveItemContext(block: Block | undefined, itemKey: string): { itemLa
 
 /** Identifiant du moteur de suggestion courant — clé de calibration §8.8. */
 export function currentAiProvider(): string {
-  return aiAvailable() ? env.AI_MODEL : "heuristic";
+  return aiAvailable() ? gradingModel() : "heuristic";
 }
 
 const gridVersionOf = (v: { version: number; id: string }) => `v${v.version} (${v.id})`;
@@ -264,7 +264,7 @@ export async function runAiCalibration(courseId: string, runsInput: CalibrationR
     const evidence = verifyEvidence(rubric.criteria, suggestion.perCriterion, run.text);
     // Traçabilité : QUELLE preuve échoue et POURQUOI — sans cela, l'admin ne
     // voit qu'une pastille « échec » et corrige à l'aveugle.
-    const clip = (s: string) => `« ${s.length > 90 ? `${s.slice(0, 90)}…` : s} »`;
+    const clip = (s: string) => `« ${s.length > 200 ? `${s.slice(0, 200)}…` : s} »`;
     const evidenceDetail = evidence.perCriterion.filter((v) => !v.ok).map((v) => {
       const sug = suggestion.perCriterion.find((c) => c.label === v.label);
       const shown = sug?.citations?.length

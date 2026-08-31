@@ -199,6 +199,12 @@ const SUGGESTION_JSON_SCHEMA: Record<string, unknown> = {
 /** `output_config` de la notation : PAS d'effort (défaut du modèle — la
  *  justesse prime le coût, c'est ce que mesure la calibration §8.8), mais la
  *  sortie structurée quand le modèle la supporte. */
+/** Modèle de la NOTATION certifiante : AI_GRADING_MODEL s'il est défini,
+ *  sinon AI_MODEL — permet un modèle plus rigoureux pour la seule notation. */
+export function gradingModel(): string {
+  return env.AI_GRADING_MODEL || env.AI_MODEL;
+}
+
 export function rubricOutputConfig(model: string): ClaudeRequest["output_config"] {
   return supportsOutputConfig(model)
     ? { format: { type: "json_schema", schema: SUGGESTION_JSON_SCHEMA } }
@@ -239,13 +245,13 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
   ].join("\n");
 
   return {
-    model: env.AI_MODEL,
+    model: gradingModel(),
     // Marge, pas contrainte de forme : 6 critères × citations exactes font un
     // long JSON, et sur les modèles récents (claude-sonnet-5…) la RÉFLEXION
     // adaptative compte dans max_tokens — un plafond serré tronquait la réponse
     // (stop_reason=max_tokens) et faisait échouer la calibration.
     max_tokens: 16000,
-    output_config: rubricOutputConfig(env.AI_MODEL),
+    output_config: rubricOutputConfig(gradingModel()),
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
   };
@@ -328,10 +334,10 @@ export async function suggestRubricScores(
     const parsed = SuggestionSchema.parse(extractJson(text));
     const perCriterion = normalize(input.criteria, parsed.perCriterion);
     const suggestedTotal = perCriterion.reduce((a, x) => a + x.suggested, 0);
-    return { perCriterion, suggestedTotal, summary: parsed.summary, aiGenerated: true, provider: env.AI_MODEL };
+    return { perCriterion, suggestedTotal, summary: parsed.summary, aiGenerated: true, provider: gradingModel() };
   } catch (e) {
     if (opts.strict) {
-      throw new Error(`le modèle ${env.AI_MODEL} n'a pas produit de notation exploitable : ${e instanceof Error ? e.message : "erreur inconnue"}`);
+      throw new Error(`le modèle ${gradingModel()} n'a pas produit de notation exploitable : ${e instanceof Error ? e.message : "erreur inconnue"}`);
     }
     return fallbackRubric(input);
   }

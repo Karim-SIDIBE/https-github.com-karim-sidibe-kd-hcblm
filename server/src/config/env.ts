@@ -11,6 +11,10 @@ const EnvSchema = z.object({
   // --- AI (adaptive nudges). Optional: falls back to deterministic templates. ---
   ANTHROPIC_API_KEY: z.string().optional(),
   AI_MODEL: z.string().default("claude-haiku-4-5-20251001"),
+  /// Modèle réservé à la NOTATION certifiante (suggestion + calibration §8.8).
+  /// Optionnel : à défaut, AI_MODEL sert partout. Le changer crée une nouvelle
+  /// clé de calibration — recalibration exigée, comme le veut le §8.8.
+  AI_GRADING_MODEL: z.string().optional(),
 
   // --- embeddings for semantic search. Optional: local deterministic fallback. ---
   VOYAGE_API_KEY: z.string().optional(),
