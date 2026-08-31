@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // La clé est neutralisée AVANT l'import du module (config/env est parsé à
 // l'import) : ces tests couvrent le comportement hors-ligne et le mode strict.
 process.env.ANTHROPIC_API_KEY = "";
-const { buildFormativeRequest, buildRubricRequest, normalize, suggestRubricScores } = await import("./feedback.js");
+const { buildFormativeRequest, buildRubricRequest, normalize, rubricOutputConfig, suggestRubricScores } = await import("./feedback.js");
 const { effortFor } = await import("./client.js");
 
 const criteria = [
@@ -69,4 +69,23 @@ test("effort par fonction : minimal pour le feedback formatif, défaut pour la n
   // garde le défaut (justesse d'abord), matérialisé par l'absence du champ.
   const patched = { ...formative, output_config: effortFor("claude-sonnet-5", "low") };
   assert.deepEqual(patched.output_config, { effort: "low" });
+});
+
+test("notation : sortie structurée (JSON garanti) sur modèle capable, sans effort ; rien sur haiku", () => {
+  const cfg = rubricOutputConfig("claude-sonnet-5");
+  assert.equal(cfg?.format?.type, "json_schema");
+  assert.equal(cfg?.effort, undefined); // la justesse garde la réflexion par défaut
+  const schema = cfg?.format?.schema as Record<string, any>;
+  assert.deepEqual(schema.required, ["perCriterion", "summary"]);
+  // citations/absence toujours présents (vides autorisés) — normalize neutralise
+  assert.ok((schema.properties.perCriterion.items.required as string[]).includes("citations"));
+  assert.equal(rubricOutputConfig("claude-haiku-4-5-20251001"), undefined);
+});
+
+test("normalize : citations vide et absence vide (sortie structurée) valent omission", () => {
+  const out = normalize(criteria, [
+    { label: "Organisation personnelle", suggested: 15, comment: "a", citations: [], absence: "" },
+  ]);
+  assert.equal(out[0]!.citations, undefined);
+  assert.equal(out[0]!.absence, undefined);
 });
