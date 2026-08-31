@@ -110,10 +110,15 @@ export function verifyEvidence(
 
     if (citations.length) {
       if (citations.length > MAX_EXTRACTS_PER_CRITERION) issues.push("too_many_extracts");
-      for (const extract of citations.slice(0, MAX_EXTRACTS_PER_CRITERION)) {
-        const bad = verifyCitation(extract, dossierText);
-        if (bad) issues.push(`citation:${bad}`);
-      }
+      const verdicts = citations.slice(0, MAX_EXTRACTS_PER_CRITERION).map((e) => verifyCitation(e, dossierText));
+      // Intégrité d'abord : un extrait introuvable, elliptique ou vide est une
+      // falsification — toujours disqualifiant, même entouré d'extraits valides.
+      for (const bad of verdicts) if (bad && bad !== "too_short") issues.push(`citation:${bad}`);
+      // Suffisance ensuite : la preuve est faite dès qu'UN extrait est
+      // pleinement valide (≥ 8 mots consécutifs, littéral) — un extrait
+      // d'appoint trop court ne l'annule pas. Sans aucun extrait valide,
+      // l'échec demeure.
+      if (!verdicts.includes(null) && verdicts.includes("too_short")) issues.push("citation:too_short");
     } else if (absence) {
       if (!isLowBand(c, s.suggested)) issues.push("absence:not_low_band");
       if (c.whereToLook) {
