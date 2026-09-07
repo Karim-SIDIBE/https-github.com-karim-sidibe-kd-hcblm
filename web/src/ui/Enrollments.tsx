@@ -97,6 +97,29 @@ export function Enrollments() {
                 <button className="block" style={{ marginTop: 10 }} disabled={enrolling === c.courseId} onClick={() => enroll(c)}>
                   {enrolling === c.courseId ? t("enr.enrolling") : c.paid ? t("pay.buy") : t("enr.enroll")}
                 </button>
+                {/* Argumentaire (positionnement pédagogique) : donne à voir la valeur
+                    avant l'achat. Textes surchargables via l'admin (clés pitch.*). */}
+                {c.paid && (
+                  <div className="pitch">
+                    <section>
+                      <h4>{t("pitch.title")}</h4>
+                      <p className="pitch-from"><b>{t("pitch.beforeLabel")}</b>{t("pitch.before")}</p>
+                      <p className="pitch-to"><b>{t("pitch.afterLabel")}</b>{t("pitch.after")}</p>
+                    </section>
+                    <section>
+                      <h4>{t("pitch.forTitle")}</h4>
+                      <ul className="pitch-checks">{[1, 2, 3, 4].map((i) => <li key={i}>{t(`pitch.for${i}`)}</li>)}</ul>
+                    </section>
+                    <section>
+                      <h4>{t("pitch.getTitle")}</h4>
+                      <ul className="pitch-checks">{[1, 2, 3, 4, 5].map((i) => <li key={i}>{t(`pitch.get${i}`)}</li>)}</ul>
+                    </section>
+                    <section>
+                      <h4>{t("pitch.skillsTitle")}</h4>
+                      <div className="pitch-skills">{[1, 2, 3, 4].map((i) => <span key={i} className="pitch-skill">{t(`pitch.skill${i}`)}</span>)}</div>
+                    </section>
+                  </div>
+                )}
               </article>
             ))}
           </div>
