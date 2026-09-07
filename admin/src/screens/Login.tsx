@@ -40,7 +40,7 @@ export function Login({ onDone }: { onDone: () => void }) {
   const lbl: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6, color: "var(--fg-1)" };
   const Logo = (
     <div style={{ marginBottom: 6 }}>
-      <img src="/logo-lockup.png" style={{ height: 40, maxWidth: "100%", objectFit: "contain", display: "block" }} alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
+      <img src="/logo-lockup.svg" style={{ height: 40, maxWidth: "100%", objectFit: "contain", display: "block" }} alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
     </div>
   );
 

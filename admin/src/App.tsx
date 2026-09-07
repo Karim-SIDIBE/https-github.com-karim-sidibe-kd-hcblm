@@ -88,7 +88,7 @@ function useHash() {
 function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   return (
     <div className="brand">
-      <img src="/logo-icon.png" alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
+      <img src="/logo-icon.svg" alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
       <span className="wm">DECLICK <b>DIGITAL</b><span className="sub">ADMINISTRATION</span></span>
       <button className="navtoggle" title={collapsed ? "Déployer le menu" : "Réduire le menu"} onClick={onToggle}>{collapsed ? "»" : "«"}</button>
     </div>

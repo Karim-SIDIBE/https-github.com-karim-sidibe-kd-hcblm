@@ -76,7 +76,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     return (
       <form className="card" onSubmit={submitSignup} style={card}>
         {langRow}
-        <img src="/logo-lockup.png" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
+        <img src="/logo-lockup.svg" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
         <p className="muted" style={{ textAlign: "center" }}>{t("signup.subtitle", { operator: brand.operator })}</p>
         <label>{t("signup.fullName")}<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required /></label>
         <label>{t("login.email")}<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder={t("ph.email")} required /></label>
@@ -149,7 +149,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <form className="card" onSubmit={submitLogin} style={card}>
       {langRow}
-      <img src="/logo-lockup.png" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
+      <img src="/logo-lockup.svg" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
       <p className="muted" style={{ textAlign: "center" }}>{t("login.subtitle", { operator: brand.operator })}</p>
       {info && <p className="muted">{info}</p>}
       <label>{t("login.email")}<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" placeholder={t("ph.email")} required /></label>

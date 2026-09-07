@@ -82,7 +82,7 @@ function Brand() {
   const wm = brandWordmark();
   return (
     <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title={t("brand.myCourses")}>
-      <img className="mark" src="/logo-icon.png" alt={brand.operator} />
+      <img className="mark" src="/logo-icon.svg" alt={brand.operator} />
       <span className="wm">{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}<span className="sub">{t("brand.operatedBy", { operator: brand.operator })}</span></span>
     </div>
   );
