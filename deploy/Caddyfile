@@ -55,10 +55,13 @@ app.declick.digital {
 	try_files {path} /index.html   # SPA fallback (deep links / refresh)
 	file_server
 
-	# The service worker + HTML must not be cached, so updates roll out instantly;
-	# hashed assets are immutable and cached for a year.
-	@noCache path /sw.js /registerSW.js /index.html /manifest.webmanifest
-	header @noCache Cache-Control "no-cache"
+	# Par défaut, TOUT se revalide (no-cache) : index.html — y compris servi via
+	# le fallback SPA (`header` s'évalue avant try_files, donc « / » partait sans
+	# Cache-Control et restait en cache heuristique) —, service worker, manifest,
+	# et les icônes/logos non hachés remplacés à nom constant. Seuls les assets
+	# hachés sont immuables (un an). no-cache = revalidation conditionnelle
+	# (ETag → 304), pas d'interdiction de cache.
+	header Cache-Control "no-cache"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
 
@@ -69,8 +72,8 @@ admin.declick.digital {
 	root * /srv/admin
 	try_files {path} /index.html   # hash-routed SPA fallback
 	file_server
-	@noCache path /index.html
-	header @noCache Cache-Control "no-cache"
+	# Voir le commentaire du bloc PWA : no-cache par défaut, immuable sur /assets/*.
+	header Cache-Control "no-cache"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
 
@@ -81,8 +84,8 @@ entreprise.declick.digital {
 	root * /srv/entreprise
 	try_files {path} /index.html
 	file_server
-	@noCache path /index.html
-	header @noCache Cache-Control "no-cache"
+	# Voir le commentaire du bloc PWA : no-cache par défaut, immuable sur /assets/*.
+	header Cache-Control "no-cache"
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
 
