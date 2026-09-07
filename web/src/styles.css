@@ -202,6 +202,23 @@ a { color:var(--orange-600); }
 .chip { display:inline-flex; align-items:center; gap:6px; background:var(--bg-tint); border-radius:var(--r-pill); padding:5px 12px; font-size:12px; font-weight:700; font-family:var(--font-display); color:var(--navy-600); }
 .chip.ok { background:var(--brand-declick-tint); color:#1c7a39; }
 .chip.ko { background:#fdecea; color:var(--danger); }
+
+/* ---- Argumentaire d'achat (sous « Acheter » sur la carte catalogue) ---- */
+.pitch { margin-top:16px; border-top:1px solid var(--line); padding-top:14px; display:grid; gap:16px; }
+.pitch h4 { margin:0 0 8px; font-family:var(--font-display); font-weight:800; font-size:12px; letter-spacing:var(--tracking-caps); text-transform:uppercase; color:var(--navy-600); }
+.pitch h4::after { content:""; display:block; width:34px; height:3px; margin-top:5px; border-radius:2px; background:var(--brand-grad); }
+.pitch p { margin:0; font-size:14.5px; line-height:1.5; }
+.pitch-from, .pitch-to { padding:8px 0 8px 12px; border-left:3px solid; border-radius:2px; }
+.pitch-from { border-color:var(--orange-500); color:var(--fg-2); }
+.pitch-to { border-color:var(--brand-declick); color:var(--fg-1); margin-top:8px !important; }
+.pitch-from b, .pitch-to b { display:block; font-family:var(--font-display); font-size:11px; letter-spacing:var(--tracking-caps); text-transform:uppercase; margin-bottom:3px; }
+.pitch-from b { color:var(--orange-600); }
+.pitch-to b { color:var(--brand-green-dark); }
+.pitch-checks { list-style:none; margin:0; padding:0; display:grid; gap:7px; }
+.pitch-checks li { position:relative; padding-left:24px; font-size:14.5px; line-height:1.45; }
+.pitch-checks li::before { content:"✓"; position:absolute; left:0; top:0; width:17px; height:17px; border-radius:50%; background:var(--brand-declick-tint); color:var(--brand-green-dark); font-size:11px; font-weight:800; display:grid; place-items:center; }
+.pitch-skills { display:flex; flex-wrap:wrap; gap:7px; }
+.pitch-skill { background:var(--brand-declick-tint); color:var(--brand-green-dark); border-radius:var(--r-pill); padding:6px 12px; font-size:12.5px; font-weight:700; font-family:var(--font-display); }
 .chip.warn { background:var(--orange-50); color:var(--orange-700); }
 .progress { height:10px; background:var(--navy-50); border-radius:var(--r-pill); overflow:hidden; }
 .progress > span { display:block; height:100%; background:var(--orange-500); border-radius:var(--r-pill); transition:width .3s; }
