@@ -10,6 +10,7 @@ export function Enrollments() {
   const levelLabel = (l: string) => { const n = l.replace(/\D/g, ""); return n === "1" || n === "2" || n === "3" ? t(`level.${n}`) : l; };
   const [list, setList] = useState<EnrollmentSummary[] | null>(null);
   const [catalog, setCatalog] = useState<CatalogItem[]>([]);
+  const [catalogFailed, setCatalogFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState<string | null>(null);
 
@@ -18,7 +19,10 @@ export function Enrollments() {
       const rows = await api.listEnrollments();
       setList(rows); rows.forEach((r) => rememberEnrollment(r.id));
     } catch { setError(t("enr.loadError")); }
-    try { setCatalog(await api.catalog()); } catch { /* catalogue needs network */ }
+    // Échec réseau du catalogue : ne pas le masquer — l'écran invite à choisir
+    // un parcours « ci-dessous », il faut donc dire pourquoi il n'y a rien.
+    try { setCatalog(await api.catalog()); setCatalogFailed(false); }
+    catch { setCatalogFailed(true); }
   }
   useEffect(() => { void load(); }, []);
 
@@ -80,6 +84,13 @@ export function Enrollments() {
             </div>
           )}
       </div>
+
+      {catalogFailed && (
+        <div className="card" style={{ textAlign: "center" }}>
+          <p className="muted" style={{ margin: "0 0 10px" }}>⚠️ {t("enr.catalogError")}</p>
+          <button className="block secondary" onClick={() => void load()}>{t("enr.retry")}</button>
+        </div>
+      )}
 
       {available.length > 0 && (
         <div>

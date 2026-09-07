@@ -152,7 +152,10 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     },
     async catalog(): Promise<CatalogItem[]> {
       const res = await raw("GET", "/catalog");
-      if (!res.ok) return [];
+      // Ne pas avaler un échec en « catalogue vide » : l'écran d'accueil doit
+      // pouvoir distinguer « aucun cours » d'« API injoignable » (et proposer
+      // de réessayer) — sinon un réseau dégradé masque silencieusement l'offre.
+      if (!res.ok) throw new Error(`catalog ${res.status}`);
       return ((await res.json()).data ?? []) as CatalogItem[];
     },
     /** Self-enrol the caller into a catalogue course; returns the new enrolment.

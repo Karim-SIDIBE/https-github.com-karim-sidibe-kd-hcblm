@@ -67,6 +67,8 @@ const fr: UiDict = {
   "enr.none": "Vous n'êtes encore inscrit·e à aucun parcours. Choisissez-en un ci-dessous 👇",
   "enr.certified": "Certifié 🎓", "enr.blocks": "{done}/{total} blocs · {pct}%",
   "enr.available": "Parcours disponibles", "enr.enrollOneClick": "Inscrivez-vous en un clic.",
+  "enr.catalogError": "Impossible de charger le catalogue des parcours (connexion instable ?).",
+  "enr.retry": "Réessayer",
 
   // argumentaire d'achat (positionnement pédagogique, affiché sous « Acheter »)
   "pitch.title": "Ce que ce parcours va changer pour vous",
@@ -395,6 +397,8 @@ const en: UiDict = {
   "enr.none": "You're not enrolled in any course yet. Pick one below 👇",
   "enr.certified": "Certified 🎓", "enr.blocks": "{done}/{total} blocks · {pct}%",
   "enr.available": "Available courses", "enr.enrollOneClick": "Enrol in one click.",
+  "enr.catalogError": "Could not load the course catalogue (unstable connection?).",
+  "enr.retry": "Retry",
 
   // purchase pitch (pedagogical positioning, shown under "Buy")
   "pitch.title": "What this course will change for you",
