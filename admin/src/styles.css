@@ -40,7 +40,9 @@ button { font-family:inherit; cursor:pointer; }
 /* Sidebar */
 .sidebar { background:var(--navy-800); color:var(--fg-on-dark); display:flex; flex-direction:column; position:sticky; top:0; height:100vh; }
 .sidebar .brand { display:flex; align-items:center; gap:10px; padding:18px 18px 14px; }
-.sidebar .brand img { width:34px; height:34px; object-fit:contain; }
+/* L'icône SVG officielle est transparente : sur le fond marine, on restitue la
+   tuile blanche de la charte (rayon 22,37 % du côté, §4 de l'annexe). */
+.sidebar .brand img { width:34px; height:34px; object-fit:contain; background:#fff; border-radius:22.37%; padding:2px; box-sizing:border-box; }
 .sidebar .brand .wm { font-family:var(--font-display); font-weight:800; font-size:14px; line-height:1; color:#fff; text-transform:uppercase; letter-spacing:.01em; }
 /* « DIGITAL » en vert dégradé complet de la charte (#57C47B→#228741), comme
    sur le verrouillage officiel et le PWA ; repli : vert clair plein. */
