@@ -19,7 +19,9 @@ export type CatalogItem = { courseId: string; slug: string; title: string; level
 export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
 export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
 export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
-export type GuestCourseInfo = { courseId: string; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+export type GuestCourseInfo = { courseId: string; slug: string | null; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+/** Entrée du catalogue public (PAY-2ter) — consultable sans compte. */
+export type GuestCatalogItem = { courseId: string; slug: string; title: string; level: string; paid: boolean; prices: { currency: string; display: string }[] };
 export type GuestCheckout =
   | { alreadyEntitled: true }
   | ({ alreadyEntitled: false; orderId: string; orderToken: string; display: string } & CheckoutInfo);
@@ -199,6 +201,12 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
     },
     // --- tunnel d'achat invité (PAY-2bis) : e-mail seul champ, aucune session.
     // Le suivi/reçu passent par le jeton de commande scellé renvoyé au checkout.
+    /** Catalogue public (PAY-2ter) — cours publiés + prix, sans session. */
+    async guestCatalog(): Promise<GuestCatalogItem[]> {
+      const res = await raw("GET", "/payments/guest/catalog", { auth: false });
+      if (!res.ok) throw new Error(`guest catalog ${res.status}`);
+      return ((await res.json()).data ?? []) as GuestCatalogItem[];
+    },
     async guestCourse(courseId: string): Promise<GuestCourseInfo> {
       const res = await raw("GET", `/payments/guest/course/${encodeURIComponent(courseId)}`, { auth: false });
       const j = await res.json().catch(() => ({}));

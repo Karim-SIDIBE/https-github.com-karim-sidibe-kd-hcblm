@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, guestCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -137,6 +137,13 @@ export async function paymentRoutes(app: FastifyInstance) {
   // anti-énumération ; le suivi/reçu exige le jeton de commande scellé.
   const guestLimit = { config: { rateLimit: { max: env.AUTH_RATE_LIMIT_MAX, timeWindow: "1 minute" } } };
 
+  // Catalogue public (PAY-2ter) : titres, niveaux et prix des cours publiés —
+  // consommé par la page « catalogue » du PWA et par le site vitrine.
+  app.get("/payments/guest/catalog", async (_req, reply) => {
+    try { return { data: await guestCatalog() }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Fiche d'un cours — :courseId accepte le slug lisible (liens vitrine) ou l'id.
   app.get("/payments/guest/course/:courseId", async (req, reply) => {
     const { courseId } = z.object({ courseId: z.string() }).parse(req.params);
     try { return { data: await guestCourseInfo(courseId) }; } catch (err) { return handle(reply, err); }

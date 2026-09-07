@@ -25,13 +25,15 @@ export type Route =
   | { name: "block"; eid: string; block: number }
   | { name: "purchase"; courseId: string }
   | { name: "order"; orderId: string }
-  | { name: "magic"; token: string };
+  | { name: "magic"; token: string }
+  | { name: "catalogue" };
 
 /** Parse a location hash (e.g. "#/c/abc/session/3/3.1") into a typed route. */
 export function parseRoute(hash: string): Route {
   const path = hash.replace(/^#/, "").replace(/^\/+/, "").replace(/\/+$/, "");
   const seg = path ? path.split("/") : [];
   if (seg[0] === "account") return { name: "account" };
+  if (seg[0] === "catalogue") return { name: "catalogue" };
   if (seg[0] === "buy" && seg[1]) return { name: "purchase", courseId: decodeURIComponent(seg[1]) };
   if (seg[0] === "order" && seg[1]) return { name: "order", orderId: decodeURIComponent(seg[1]) };
   if (seg[0] === "magic" && seg[1]) return { name: "magic", token: decodeURIComponent(seg[1]) };
@@ -77,6 +79,7 @@ export const routes = {
   project: (eid: string) => `#/c/${encodeURIComponent(eid)}/project`,
   badges: (eid: string) => `#/c/${encodeURIComponent(eid)}/badges`,
   revision: (eid: string) => `#/c/${encodeURIComponent(eid)}/revision`,
+  catalogue: () => "#/catalogue",
   purchase: (courseId: string) => `#/buy/${encodeURIComponent(courseId)}`,
   order: (orderId: string) => `#/order/${encodeURIComponent(orderId)}`,
   magic: (token: string) => `#/magic/${encodeURIComponent(token)}`,

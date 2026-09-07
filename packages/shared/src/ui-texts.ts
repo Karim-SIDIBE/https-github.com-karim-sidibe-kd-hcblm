@@ -70,6 +70,14 @@ const fr: UiDict = {
   "enr.catalogError": "Impossible de charger le catalogue des parcours (connexion instable ?).",
   "enr.retry": "Réessayer",
 
+  // catalogue public (achat sans compte, PAY-2ter)
+  "gc.title": "Nos parcours",
+  "gc.intro": "Achetez sans créer de compte : votre e-mail suffit, votre accès arrive dans la minute.",
+  "gc.empty": "Aucun parcours publié pour le moment.",
+  "gc.freeNote": "Accès libre — connectez-vous pour vous inscrire.",
+  "gc.haveAccount": "Déjà un compte ?",
+  "login.browseCatalog": "🛒 Découvrir les parcours et acheter sans compte",
+
   // argumentaire d'achat (positionnement pédagogique, affiché sous « Acheter »)
   "pitch.title": "Ce que ce parcours va changer pour vous",
   "pitch.beforeLabel": "Aujourd'hui",
@@ -399,6 +407,14 @@ const en: UiDict = {
   "enr.available": "Available courses", "enr.enrollOneClick": "Enrol in one click.",
   "enr.catalogError": "Could not load the course catalogue (unstable connection?).",
   "enr.retry": "Retry",
+
+  // public catalogue (no-account purchase, PAY-2ter)
+  "gc.title": "Our courses",
+  "gc.intro": "Buy without creating an account: your e-mail is enough, access arrives within a minute.",
+  "gc.empty": "No published course yet.",
+  "gc.freeNote": "Free access — sign in to enrol.",
+  "gc.haveAccount": "Already have an account?",
+  "login.browseCatalog": "🛒 Browse the courses and buy without an account",
 
   // purchase pitch (pedagogical positioning, shown under "Buy")
   "pitch.title": "What this course will change for you",
