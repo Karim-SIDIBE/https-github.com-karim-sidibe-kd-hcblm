@@ -63,6 +63,10 @@ export async function buildApp(): Promise<FastifyInstance> {
   }
   await app.register(cors, {
     origin: env.CORS_ORIGINS ? env.CORS_ORIGINS.split(",").map((o) => o.trim()) : true,
+    // Sans cette liste, @fastify/cors n'annonce que les méthodes « safelisted »
+    // (GET, HEAD, POST) au préflight — le navigateur bloquait alors tous les
+    // PUT/PATCH/DELETE inter-domaines des consoles (ex. enregistrer un prix).
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   });
 
   // Security headers (defense in depth, in addition to the edge proxy). LMS-aware
