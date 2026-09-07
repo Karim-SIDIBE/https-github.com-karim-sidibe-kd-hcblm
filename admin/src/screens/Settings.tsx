@@ -7,7 +7,7 @@ const BRAND = {
   name: (import.meta.env.VITE_BRAND_NAME as string | undefined)?.trim() || "DECLICK DIGITAL",
   operator: (import.meta.env.VITE_BRAND_OPERATOR as string | undefined)?.trim() || "KOMPETENCES DECLICK",
   issuer: (import.meta.env.VITE_BRAND_ISSUER as string | undefined)?.trim() || "KOMPETENCES AFRICA",
-  theme: (import.meta.env.VITE_BRAND_THEME as string | undefined)?.trim() || "#F36F21",
+  theme: (import.meta.env.VITE_BRAND_THEME as string | undefined)?.trim() || "#E8650A",
 };
 const API = (import.meta.env.VITE_API_URL as string | undefined) || "http://localhost:4000/api/v1";
 const STAFF_ROLES = [

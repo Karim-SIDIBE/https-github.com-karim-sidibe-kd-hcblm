@@ -4,16 +4,20 @@
    seuls composants du portail (login, topbar, cartes, table, formulaires).
    ========================================================================== */
 :root {
-  --orange-50:#FFF3E8; --orange-100:#FFE0C4; --orange-400:#F58432; --orange-500:#F36F21; --orange-600:#DB5E15;
-  --navy-50:#EDF1F8; --navy-100:#D2DCEC; --navy-200:#9BAFD2; --navy-300:#5C77AE; --navy-400:#2E4C8A;
-  --navy-500:#1A3B7A; --navy-600:#112E66; --navy-700:#0B2455; --navy-800:#061A41; --navy-900:#03102B;
-  --green:#2DAA4F; --green-tint:#E6F5EA;
+  /* Charte graphique DECLICK DIGITAL (annexe v4) : orange #E8650A, bleu du nom
+     #182B56 (= navy-600), vert dégradé #57C47B→#228741 (passage #2E9E4F), Poppins. */
+  --orange-50:#FDF1E7; --orange-100:#FADCC3; --orange-400:#EE8130; --orange-500:#E8650A; --orange-600:#CB5607;
+  --navy-50:#EEF1F8; --navy-100:#D5DCEC; --navy-200:#A9B6D5; --navy-300:#7B8FBB; --navy-400:#4C659D;
+  --navy-500:#2B4479; --navy-600:#182B56; --navy-700:#122145; --navy-800:#0C1731; --navy-900:#070E20;
+  --green:#2E9E4F; --green-tint:#E7F6EC;
+  --green-light:#57C47B; --green-dark:#228741;
+  --brand-grad:linear-gradient(115deg,#57C47B 0%,#2E9E4F 55%,#228741 100%);
   --bg:#FFFFFF; --bg-soft:#F4F6FB; --bg-tint:#EAF1F8; --line:#E4E8EF; --line-strong:#C9D1DD;
   --fg:#0E1A2C; --fg-1:#1A2942; --fg-2:#4A5874; --fg-3:#7C8AA3; --fg-mute:#AEB8CA;
-  --success:#2DAA4F; --success-tint:#E6F5EA; --warning:#E8A93B; --warning-tint:#FCF1DC;
+  --success:#2E9E4F; --success-tint:#E7F6EC; --warning:#E8A93B; --warning-tint:#FCF1DC;
   --danger:#D8412F; --danger-tint:#FBE7E4; --info:#2563EB; --info-tint:#E5EDFF;
-  --font-display:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;
-  --font-body:"DM Sans","Plus Jakarta Sans",system-ui,sans-serif;
+  --font-display:"Poppins","Segoe UI",system-ui,sans-serif;
+  --font-body:"Poppins",system-ui,sans-serif;
   --r-sm:7px; --r-md:11px; --r-lg:16px; --r-pill:999px;
   --shadow-xs:0 1px 2px rgba(17,46,102,.06); --shadow-sm:0 2px 8px rgba(17,46,102,.07);
   --shadow-md:0 10px 28px rgba(17,46,102,.12); --shadow-lg:0 24px 56px rgba(17,46,102,.18);
@@ -75,8 +79,9 @@ button { font-family:inherit; cursor:pointer; }
 /* ---- Login --------------------------------------------------------------- */
 .login-wrap { min-height:100vh; display:grid; place-items:center; background:var(--bg-soft); padding:20px; }
 .login-card { width:100%; max-width:360px; padding:22px; }
-.brandline { font-family:var(--font-display); font-weight:800; font-size:20px; color:var(--navy-700); letter-spacing:-.01em; }
-.brandline .accent, .accent { color:var(--green); }
+.brandline { font-family:var(--font-display); font-weight:800; font-size:20px; color:var(--navy-600); letter-spacing:-.01em; }
+/* « DIGITAL » en vert dégradé de la charte ; repli : vert plein. */
+.brandline .accent, .accent { color:var(--green); background:var(--brand-grad); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .topbar-sub { font-weight:600; font-size:12.5px; color:var(--fg-3); margin-left:8px; }
 
 /* ---- Layout -------------------------------------------------------------- */

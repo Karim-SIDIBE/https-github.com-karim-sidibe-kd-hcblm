@@ -6,7 +6,7 @@ import { VitePWA } from "vite-plugin-pwa";
 // deployment; SaaS clients override VITE_BRAND_* at build time. See web/.env.example.
 const BRAND_NAME = process.env.VITE_BRAND_NAME?.trim() || "DECLICK DIGITAL";
 const BRAND_SHORT = process.env.VITE_BRAND_SHORT?.trim() || BRAND_NAME.split(/\s+/)[0] || "DECLICK";
-const BRAND_THEME = process.env.VITE_BRAND_THEME?.trim() || "#F36F21";
+const BRAND_THEME = process.env.VITE_BRAND_THEME?.trim() || "#E8650A";
 const BRAND_DESC = process.env.VITE_BRAND_DESC?.trim()
   || "Apprentissage de compétences professionnelles en environnements africains — disponible hors-ligne.";
 

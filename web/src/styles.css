@@ -3,24 +3,29 @@
    Tokens + the hf-* component kit are the shared visual contract. */
 
 :root {
+  /* ---- Charte graphique DECLICK DIGITAL (annexe v4) ----
+     Orange flèche #E8650A · Bleu du nom #182B56 · Vert dégradé #57C47B→#228741
+     (passage #2E9E4F) · Police de la charte : Poppins. */
   /* ---- orange (brand) ---- */
-  --orange-50:#FFF3E8; --orange-100:#FFE0C4; --orange-200:#FFC288; --orange-300:#FBA055;
-  --orange-400:#F58432; --orange-500:#F36F21; --orange-600:#DB5E15; --orange-700:#B44A0E; --orange-800:#7F340A;
-  /* ---- navy ---- */
-  --navy-50:#EDF1F8; --navy-100:#D2DCEC; --navy-200:#9BAFD2; --navy-300:#5C77AE; --navy-400:#2E4C8A;
-  --navy-500:#1A3B7A; --navy-600:#112E66; --navy-700:#0B2455; --navy-800:#061A41; --navy-900:#03102B;
+  --orange-50:#FDF1E7; --orange-100:#FADCC3; --orange-200:#F7BE8E; --orange-300:#F29D57;
+  --orange-400:#EE8130; --orange-500:#E8650A; --orange-600:#CB5607; --orange-700:#A54505; --orange-800:#733003;
+  /* ---- navy (ancré sur le bleu du nom, #182B56 = navy-600) ---- */
+  --navy-50:#EEF1F8; --navy-100:#D5DCEC; --navy-200:#A9B6D5; --navy-300:#7B8FBB; --navy-400:#4C659D;
+  --navy-500:#2B4479; --navy-600:#182B56; --navy-700:#122145; --navy-800:#0C1731; --navy-900:#070E20;
 
   --brand-ka:var(--orange-500);
-  --brand-declick:#2DAA4F; --brand-declick-tint:#E6F5EA;
-  --brand-blue:#2563EB;   /* « DECLICK » du logo officiel */
+  --brand-declick:#2E9E4F; --brand-declick-tint:#E7F6EC;
+  --brand-green-light:#57C47B; --brand-green-dark:#228741;
+  --brand-grad:linear-gradient(115deg,#57C47B 0%,#2E9E4F 55%,#228741 100%);
+  --brand-blue:#182B56;   /* « DECLICK » du logo officiel (bleu des deux D) */
 
   --bg:#FFFFFF; --bg-soft:#F7F8FB; --bg-tint:#EAF1F8; --line:#E4E8EF; --line-strong:#C9D1DD;
   --fg:#0E1A2C; --fg-1:#1A2942; --fg-2:#4A5874; --fg-3:#7C8AA3; --fg-mute:#B0B9C9;
   --fg-on-dark:#FFFFFF; --fg-on-dark-2:#B7C5DE;
-  --success:#2DAA4F; --warning:#E8A93B; --danger:#D8412F; --info:var(--navy-500);
+  --success:#2E9E4F; --warning:#E8A93B; --danger:#D8412F; --info:var(--navy-500);
 
-  --font-display:"Plus Jakarta Sans","Segoe UI",system-ui,sans-serif;
-  --font-body:"DM Sans","Plus Jakarta Sans",system-ui,sans-serif;
+  --font-display:"Poppins","Segoe UI",system-ui,sans-serif;
+  --font-body:"Poppins",system-ui,sans-serif;
 
   --fs-xs:12px; --fs-sm:14px; --fs-base:16px; --fs-md:18px; --fs-lg:20px; --fs-xl:24px; --fs-2xl:30px;
   --lh-tight:1.05; --lh-snug:1.18; --lh-normal:1.45;
@@ -28,7 +33,7 @@
   --r-sm:6px; --r-md:10px; --r-lg:14px; --r-xl:20px; --r-2xl:28px; --r-pill:999px;
   --shadow-xs:0 1px 2px rgba(17,46,102,.06); --shadow-sm:0 2px 6px rgba(17,46,102,.08);
   --shadow-md:0 8px 20px rgba(17,46,102,.10); --shadow-lg:0 20px 40px rgba(17,46,102,.14);
-  --shadow-cta:0 10px 24px rgba(243,111,33,.32);
+  --shadow-cta:0 10px 24px rgba(232,101,10,.32);
   --ease-out:cubic-bezier(0.22,1,0.36,1); --dur-fast:120ms; --dur-base:200ms;
   --tap:44px;
 }
@@ -49,8 +54,10 @@ body { font-family:var(--font-body); color:var(--fg); background:var(--bg-soft);
 }
 .brand { display:flex; align-items:center; gap:9px; }
 .brand .mark { width:38px; height:38px; object-fit:contain; display:block; flex:0 0 auto; }
-.brand .wm { font-family:var(--font-display); font-weight:800; font-size:14px; line-height:1; color:var(--navy-700); text-transform:uppercase; letter-spacing:.01em; }
-.brand .wm b { color:var(--brand-declick); }   /* 2ᵉ mot du nom en vert (« DIGITAL »), comme le prototype */
+.brand .wm { font-family:var(--font-display); font-weight:800; font-size:14px; line-height:1; color:var(--navy-600); text-transform:uppercase; letter-spacing:.01em; }
+/* « DIGITAL » en vert dégradé texturé de la charte (dégradé seul : le grain
+   disparaît de toute façon sous 64 px). Repli : vert plein. */
+.brand .wm b { color:var(--brand-declick); background:var(--brand-grad); -webkit-background-clip:text; background-clip:text; -webkit-text-fill-color:transparent; }
 .brand .wm .sub { display:block; font-size:8.5px; letter-spacing:.04em; color:var(--fg-3); font-weight:700; margin-top:3px; text-transform:none; white-space:nowrap; }
 .appbar .tools { display:flex; align-items:center; gap:12px; }
 .iconbtn { width:38px; height:38px; border-radius:50%; display:grid; place-items:center; background:var(--bg-soft); color:var(--navy-600); border:1px solid var(--line); cursor:pointer; }

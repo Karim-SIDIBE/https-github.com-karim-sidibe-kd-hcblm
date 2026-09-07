@@ -76,8 +76,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     return (
       <form className="card" onSubmit={submitSignup} style={card}>
         {langRow}
-        <h1>{brand.name}</h1>
-        <p className="muted">{t("signup.subtitle", { operator: brand.operator })}</p>
+        <img src="/logo-lockup.png" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
+        <p className="muted" style={{ textAlign: "center" }}>{t("signup.subtitle", { operator: brand.operator })}</p>
         <label>{t("signup.fullName")}<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required /></label>
         <label>{t("login.email")}<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder={t("ph.email")} required /></label>
         <label>{t("signup.phone")} <span className="muted">{t("common.optional")}</span><input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" autoComplete="tel" placeholder="+225 07 00 00 00 00" /></label>
@@ -149,8 +149,8 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   return (
     <form className="card" onSubmit={submitLogin} style={card}>
       {langRow}
-      <h1>{brand.name}</h1>
-      <p className="muted">{t("login.subtitle", { operator: brand.operator })}</p>
+      <img src="/logo-lockup.png" alt={brand.name} style={{ width: "100%", maxWidth: 250, display: "block", margin: "2px auto 6px", objectFit: "contain" }} />
+      <p className="muted" style={{ textAlign: "center" }}>{t("login.subtitle", { operator: brand.operator })}</p>
       {info && <p className="muted">{info}</p>}
       <label>{t("login.email")}<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="username" placeholder={t("ph.email")} required /></label>
       <label>{t("login.password")}<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="current-password" required /></label>

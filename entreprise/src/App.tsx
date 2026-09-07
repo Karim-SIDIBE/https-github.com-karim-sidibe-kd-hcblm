@@ -54,7 +54,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
     return (
       <div className="login-wrap">
         <form className="card login-card" onSubmit={submitCode}>
-          <div className="brandline"><img src="/logo-icon.png" alt="DECLICK DIGITAL" style={{ width: 34, height: 34, objectFit: "contain", verticalAlign: "middle", marginRight: 8 }} /><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
+          <div className="brandline"><img src="/logo-lockup.png" alt="DECLICK DIGITAL" style={{ height: 40, maxWidth: "100%", objectFit: "contain", display: "block" }} /></div>
           <div className="eyebrow" style={{ marginBottom: 14 }}>Double authentification</div>
           <p className="muted" style={{ fontSize: 13, margin: "0 0 10px" }}>Saisissez le code de votre application d'authentification (ou un code de secours).</p>
           <label className="lbl">Code<input className="field" value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" autoFocus required /></label>
@@ -69,7 +69,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
   return (
     <div className="login-wrap">
       <form className="card login-card" onSubmit={submit}>
-        <div className="brandline"><img src="/logo-icon.png" alt="DECLICK DIGITAL" style={{ width: 34, height: 34, objectFit: "contain", verticalAlign: "middle", marginRight: 8 }} /><b>DECLICK</b> <span className="accent">DIGITAL</span></div>
+        <div className="brandline"><img src="/logo-lockup.png" alt="DECLICK DIGITAL" style={{ height: 40, maxWidth: "100%", objectFit: "contain", display: "block" }} /></div>
         <div className="eyebrow" style={{ marginBottom: 14 }}>Espace entreprise</div>
         <label className="lbl">E-mail<input className="field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" required /></label>
         <label className="lbl">Mot de passe<input className="field" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" required /></label>
@@ -495,7 +495,7 @@ function Learners({ orgId, members, progress, selectedCourse, onChange }: {
                                 {e.status === "CERTIFIED" && <span className="pill pill--green" style={{ fontSize: 10, marginLeft: 6 }}>Certifié</span>}
                               </div>
                               <div className="row" style={{ gap: 8, alignItems: "center" }}>
-                                <div className="bar" style={{ flex: 1, maxWidth: 180 }}><i style={{ width: `${Math.max(e.progressPercent, 2)}%`, background: e.progressPercent === 100 ? "var(--green, #2DAA4F)" : "var(--accent)" }} /></div>
+                                <div className="bar" style={{ flex: 1, maxWidth: 180 }}><i style={{ width: `${Math.max(e.progressPercent, 2)}%`, background: e.progressPercent === 100 ? "var(--green, #2E9E4F)" : "var(--accent)" }} /></div>
                                 <b style={{ fontSize: 12 }}>{e.progressPercent}%</b>
                                 <span className="muted" style={{ fontSize: 11 }}>{statusFr[e.status] ?? e.status}</span>
                               </div>
@@ -543,7 +543,7 @@ function KpiBoard({ kpis, onExport }: { kpis: OrgKpis; onExport: () => void }) {
         {kpiCell(`${kpis.enrolled}/${kpis.members}`, "Apprenants inscrits", `${kpis.seats.used}/${kpis.seats.total} licences`)}
         {kpiCell(kpis.active7d, "Actifs (7 derniers jours)")}
         {kpiCell(kpis.avgProgressPct != null ? `${kpis.avgProgressPct} %` : "—", "Progression moyenne")}
-        {kpiCell(<span style={{ color: "var(--green, #2DAA4F)" }}>{kpis.certified}</span>, "Certifiés", kpis.certificationRatePct != null ? `taux ${kpis.certificationRatePct} %` : undefined)}
+        {kpiCell(<span style={{ color: "var(--green, #2E9E4F)" }}>{kpis.certified}</span>, "Certifiés", kpis.certificationRatePct != null ? `taux ${kpis.certificationRatePct} %` : undefined)}
         {kpiCell(kpis.badges, "Badges de bloc obtenus", `${kpis.certificates} certificat(s) délivré(s)`)}
       </div>
       <div className="grid" style={{ gridTemplateColumns: "2fr 1fr", gap: 10, marginTop: 10, alignItems: "start" }}>
@@ -554,7 +554,7 @@ function KpiBoard({ kpis, onExport }: { kpis: OrgKpis; onExport: () => void }) {
               <div key={i} style={{ flex: 1, textAlign: "center" }}>
                 <div style={{ fontSize: 12, fontWeight: 700 }}>{n}</div>
                 <div style={{ height: 46, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
-                  <div style={{ width: "70%", height: `${Math.max((n / maxBlock) * 100, n > 0 ? 8 : 2)}%`, borderRadius: 4, background: i === 5 ? "var(--green, #2DAA4F)" : "var(--accent)" , opacity: n > 0 ? 1 : 0.25 }} />
+                  <div style={{ width: "70%", height: `${Math.max((n / maxBlock) * 100, n > 0 ? 8 : 2)}%`, borderRadius: 4, background: i === 5 ? "var(--green, #2E9E4F)" : "var(--accent)" , opacity: n > 0 ? 1 : 0.25 }} />
                 </div>
                 <div className="muted" style={{ fontSize: 10.5, marginTop: 3 }}>{BLOCK_LABELS[i]}</div>
               </div>

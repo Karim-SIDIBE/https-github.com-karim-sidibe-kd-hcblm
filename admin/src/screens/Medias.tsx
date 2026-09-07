@@ -218,7 +218,7 @@ export function Medias() {
   const selFolder = folders.find((f) => f.id === sel) ?? null;
   const chip = (active: boolean): CSSProperties => ({
     padding: "5px 12px", borderRadius: 999, fontSize: 12.5, cursor: "pointer", whiteSpace: "nowrap",
-    border: `1px solid ${active ? "var(--accent, #F36F21)" : "var(--border, #d8dce4)"}`,
+    border: `1px solid ${active ? "var(--accent, #E8650A)" : "var(--border, #d8dce4)"}`,
     background: active ? "var(--accent-tint, #FFF3E8)" : "transparent",
     fontWeight: active ? 600 : 400,
   });
