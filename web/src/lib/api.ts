@@ -15,7 +15,7 @@ export type EnrollmentSummary = {
   startedAt: string;
 };
 
-export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; paid?: boolean; prices?: { currency: string; display: string }[] };
+export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; paid?: boolean; entitled?: boolean; prices?: { currency: string; display: string }[] };
 export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
 export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
 export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };

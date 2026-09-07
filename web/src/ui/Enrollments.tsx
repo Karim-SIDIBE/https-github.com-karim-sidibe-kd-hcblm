@@ -105,13 +105,15 @@ export function Enrollments() {
                   <h3 style={{ margin: 0 }}>{c.title}</h3>
                   <span className="chip">{levelLabel(c.level)}</span>
                 </div>
-                {c.paid && c.prices?.[0] && <p className="muted" style={{ margin: "6px 0 0" }}>💳 {c.prices[0].display}</p>}
+                {c.paid && !c.entitled && c.prices?.[0] && <p className="muted" style={{ margin: "6px 0 0" }}>💳 {c.prices[0].display}</p>}
+                {/* Droit déjà détenu (achat, cadeau, licence) → « Enrôler » : le
+                    client ne doit JAMAIS revoir « Acheter » sur un cours acquis. */}
                 <button className="block" style={{ marginTop: 10 }} disabled={enrolling === c.courseId} onClick={() => enroll(c)}>
-                  {enrolling === c.courseId ? t("enr.enrolling") : c.paid ? t("pay.buy") : t("enr.enroll")}
+                  {enrolling === c.courseId ? t("enr.enrolling") : !c.paid ? t("enr.enroll") : c.entitled ? t("enr.enrollOwned") : t("pay.buy")}
                 </button>
                 {/* Argumentaire (positionnement pédagogique) : donne à voir la valeur
-                    avant l'achat. Textes surchargables via l'admin (clés pitch.*). */}
-                {c.paid && <PitchSection />}
+                    avant l'achat — inutile pour un droit déjà acquis. */}
+                {c.paid && !c.entitled && <PitchSection />}
               </article>
             ))}
           </div>
