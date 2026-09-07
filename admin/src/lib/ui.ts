@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const AV = ["#F36F21", "#112E66", "#2DAA4F", "#2563EB", "#DB5E15", "#1A3B7A"];
+const AV = ["#E8650A", "#182B56", "#2E9E4F", "#228741", "#CB5607", "#2B4479"];
 export const avatarColor = (s: string) => AV[[...s].reduce((a, c) => a + c.charCodeAt(0), 0) % AV.length];
 export const initials = (n: string) => (n.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join("") || "?").toUpperCase();
 

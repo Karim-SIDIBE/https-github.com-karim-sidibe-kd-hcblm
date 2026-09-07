@@ -78,7 +78,7 @@ export function initNative(): void {
   // Brand-coloured status bar with light content.
   try {
     P.StatusBar?.setStyle?.({ style: "DARK" });
-    P.StatusBar?.setBackgroundColor?.({ color: "#F36F21" }); // Android only; iOS ignores
+    P.StatusBar?.setBackgroundColor?.({ color: "#E8650A" }); // Android only; iOS ignores
   } catch { /* plugin absent */ }
 
   registerPush(P);

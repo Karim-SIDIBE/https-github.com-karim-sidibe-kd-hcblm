@@ -39,9 +39,8 @@ export function Login({ onDone }: { onDone: () => void }) {
   const field: React.CSSProperties = { width: "100%", padding: "11px 13px", border: "1px solid var(--line-strong)", borderRadius: 10, fontFamily: "inherit", fontSize: 14 };
   const lbl: React.CSSProperties = { display: "block", fontSize: 13, fontWeight: 700, marginBottom: 6, color: "var(--fg-1)" };
   const Logo = (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-      <img src="/logo-icon.png" width={34} height={34} style={{ objectFit: "contain" }} alt="" onError={(e) => (e.currentTarget.style.display = "none")} />
-      <span style={{ fontFamily: "var(--font-display)", fontWeight: 800, color: "var(--navy-700)", letterSpacing: ".01em" }}>DECLICK <span style={{ color: "var(--green)" }}>DIGITAL</span></span>
+    <div style={{ marginBottom: 6 }}>
+      <img src="/logo-lockup.png" style={{ height: 40, maxWidth: "100%", objectFit: "contain", display: "block" }} alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
     </div>
   );
 

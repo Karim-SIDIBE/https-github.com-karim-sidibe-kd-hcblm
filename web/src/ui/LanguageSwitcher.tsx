@@ -16,7 +16,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
             border: 0, cursor: "pointer", borderRadius: 999,
             padding: compact ? "2px 8px" : "3px 10px", fontSize: compact ? 11 : 12, fontWeight: 700,
             fontFamily: "inherit",
-            background: lang === l ? "var(--accent, #F36F21)" : "transparent",
+            background: lang === l ? "var(--accent, #E8650A)" : "transparent",
             color: lang === l ? "#fff" : "var(--fg-2, #667)",
           }}
         >
