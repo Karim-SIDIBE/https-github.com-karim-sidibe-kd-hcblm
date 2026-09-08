@@ -1,0 +1,24 @@
+# app.declick.digital — PWA apprenant DECLICK DIGITAL.
+# Le contenu pédagogique est derrière authentification et droits d'accès :
+# les robots n'y accèdent pas. L'indexation de l'app elle-même est permise.
+User-agent: *
+Allow: /
+
+# Aspirateurs de site : interdiction explicite (base d'action en cas d'abus).
+User-agent: HTTrack
+Disallow: /
+
+User-agent: WebCopier
+Disallow: /
+
+User-agent: WebZIP
+Disallow: /
+
+User-agent: Offline Explorer
+Disallow: /
+
+User-agent: SiteSnagger
+Disallow: /
+
+User-agent: Teleport
+Disallow: /

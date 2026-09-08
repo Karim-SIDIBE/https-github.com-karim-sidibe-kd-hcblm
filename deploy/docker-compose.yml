@@ -149,6 +149,7 @@ services:
       - "443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-logs:/var/log/caddy         # journaux d'accès JSON, lus par fail2ban sur l'hôte
       - ../web/dist:/srv/pwa:ro          # static PWA build, served on app.declick.digital
       - ../admin/dist:/srv/admin:ro      # static admin console, served on admin.declick.digital
       - ../entreprise/dist:/srv/entreprise:ro  # enterprise console, served on entreprise.declick.digital

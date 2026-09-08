@@ -1,0 +1,3 @@
+# Espace entreprise — aucune indexation, aucun robot.
+User-agent: *
+Disallow: /

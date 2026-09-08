@@ -1,0 +1,42 @@
+# Jails fail2ban K-HCBLM — à copier dans /etc/fail2ban/jail.d/ sur le VPS.
+#
+# IMPORTANT (Docker) : les ports publiés par Docker contournent la chaîne
+# INPUT d'iptables — un bannissement classique ne bloquerait PAS le trafic
+# vers Caddy. Les jails Caddy bannissent donc dans la chaîne DOCKER-USER,
+# traversée AVANT les règles de Docker. SSH (hors Docker) garde l'action
+# par défaut (chaîne INPUT).
+#
+# IMPORTANT (Cloudflare) : si un jour les domaines passent derrière le proxy
+# Cloudflare, les "remote_ip" des journaux Caddy deviendront des IP
+# Cloudflare — il faudra alors DÉSACTIVER caddy-abuse/caddy-flood (enabled =
+# false) et s'appuyer sur le rate-limiting Cloudflare, sous peine de bannir
+# Cloudflare lui-même. Voir docs/ops/protection-anti-aspiration.md.
+
+[sshd]
+enabled  = true
+maxretry = 5
+findtime = 600
+bantime  = 3600
+
+# Accumulation de 401/403/429 : brute-force, scan de routes, dépassements de
+# rate-limit répétés sur l'API.
+[caddy-abuse]
+enabled   = true
+filter    = caddy-abuse
+banaction = iptables-allports[chain=DOCKER-USER]
+logpath   = /root/kd-hcblm/deploy/caddy-logs/*.access.log
+maxretry  = 20
+findtime  = 60
+bantime   = 3600
+
+# Rafale brute (aspiration) : plus de 400 requêtes en 60 s depuis une même IP.
+# Marge large : une page du PWA charge quelques dizaines de ressources, pas
+# des centaines par minute en continu.
+[caddy-flood]
+enabled   = true
+filter    = caddy-flood
+banaction = iptables-allports[chain=DOCKER-USER]
+logpath   = /root/kd-hcblm/deploy/caddy-logs/*.access.log
+maxretry  = 400
+findtime  = 60
+bantime   = 3600
