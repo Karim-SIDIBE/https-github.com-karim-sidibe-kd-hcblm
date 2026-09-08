@@ -21,6 +21,20 @@
 	}
 }
 
+# Journal d'accès par site (JSON, roulant) — consommé par fail2ban sur l'hôte
+# (bannissement des IP en rafale : aspiration, scan, brute-force). Le dossier
+# est monté depuis l'hôte : deploy/caddy-logs → /var/log/caddy.
+(accesslog) {
+	log {
+		output file /var/log/caddy/{args[0]}.access.log {
+			roll_size 20MiB
+			roll_keep 3
+			roll_keep_for 168h
+		}
+		format json
+	}
+}
+
 # Extra headers for the static single-page front-ends (PWA / admin / entreprise).
 # The CSP shipped in Report-Only first (2026-07-02 → 2026-07-07); the observation
 # window showed no legitimate violations, so it is now ENFORCED. If a front ever
@@ -43,6 +57,7 @@
 # LTI launch HTML (framed by the consumer LMS), which those headers would break.
 api.declick.digital {
 	import sec_common
+	import accesslog api
 	encode zstd gzip
 	reverse_proxy api:4000
 }
@@ -50,6 +65,7 @@ api.declick.digital {
 # --- PWA (learner app, static) — built into web/dist, mounted at /srv/pwa ---
 app.declick.digital {
 	import sec_spa
+	import accesslog app
 	encode zstd gzip
 	root * /srv/pwa
 	try_files {path} /index.html   # SPA fallback (deep links / refresh)
@@ -68,7 +84,10 @@ app.declick.digital {
 # --- Admin console (staff, static SPA) — built into admin/dist, mounted at /srv/admin ---
 admin.declick.digital {
 	import sec_spa
+	import accesslog admin
 	encode zstd gzip
+	# Console interne : jamais dans les moteurs de recherche.
+	header X-Robots-Tag "noindex, nofollow"
 	root * /srv/admin
 	try_files {path} /index.html   # hash-routed SPA fallback
 	file_server
@@ -80,7 +99,10 @@ admin.declick.digital {
 # --- Enterprise console (org admins, static SPA) — built into entreprise/dist ---
 entreprise.declick.digital {
 	import sec_spa
+	import accesslog entreprise
 	encode zstd gzip
+	# Console interne : jamais dans les moteurs de recherche.
+	header X-Robots-Tag "noindex, nofollow"
 	root * /srv/entreprise
 	try_files {path} /index.html
 	file_server
