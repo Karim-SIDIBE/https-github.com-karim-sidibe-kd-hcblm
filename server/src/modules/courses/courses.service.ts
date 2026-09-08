@@ -95,11 +95,22 @@ export async function listCatalog(userId: string, memberOrgIds: string[]) {
     include: { prices: { where: { active: true } } },
   });
   const paywalls = new Map(products.filter((p) => p.prices.length > 0).map((p) => [p.courseId!, p.prices.map((pr) => ({ currency: pr.currency as Currency, display: formatAmount(pr.amountMinor, pr.currency as Currency) }))]));
+  // Droits d'accès déjà détenus (achat, cadeau, licence d'organisation) : la
+  // carte d'un cours acquis mais non commencé doit dire « Enrôler », pas
+  // « Acheter » — mêmes règles que hasCourseEntitlement, en une passe.
+  const entitlements = await prisma.entitlement.findMany({
+    where: {
+      scope: "COURSE_ACCESS", revokedAt: null, courseId: { in: courses.map((c) => c.id) },
+      OR: [{ holderUserId: userId }, ...(memberOrgIds.length ? [{ holderOrgId: { in: memberOrgIds } }] : [])],
+    },
+    select: { courseId: true },
+  });
+  const entitled = new Set(entitlements.map((e) => e.courseId).filter((id): id is string => id != null));
   return courses
     .filter((c) => c.versions.length > 0)
     .map((c) => ({
       courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level as string, enrolled: enrolled.has(c.id),
-      paid: paywalls.has(c.id), prices: paywalls.get(c.id) ?? [],
+      paid: paywalls.has(c.id), entitled: !paywalls.has(c.id) || entitled.has(c.id), prices: paywalls.get(c.id) ?? [],
     }));
 }
 

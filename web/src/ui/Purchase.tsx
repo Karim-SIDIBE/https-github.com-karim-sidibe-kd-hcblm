@@ -13,6 +13,7 @@ import type { CourseCatalog, GuestCourseInfo } from "../lib/api";
 import { rememberOrderToken } from "../lib/guestOrder";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
+import { PitchSection } from "./Pitch";
 
 const CUR_KEY = "klms_currency";
 const CUR_LABELS: Record<string, string> = { XOF: "XOF (Afrique de l'Ouest)", XAF: "XAF (Afrique Centrale)", EUR: "EUR" };
@@ -135,7 +136,9 @@ function GuestPurchase({ courseId }: { courseId: string }) {
     if (!emailOk) { setError(t("pay.emailInvalid")); return; }
     setBusy(true); setError(null);
     try {
-      const out = await api.guestCheckout({ courseId, currency: active, email: email.trim() });
+      // info.courseId : l'id technique résolu par le serveur — l'URL peut
+      // porter le slug lisible (liens du site vitrine, ex. #/buy/gestion-du-temps-n1).
+      const out = await api.guestCheckout({ courseId: info!.courseId, currency: active, email: email.trim() });
       if (out.alreadyEntitled) { setEntitled(true); return; }
       // Jeton de suivi conservé sur l'appareil : la page de retour du paiement
       // (#/order/:id) peut alors suivre la commande sans session.
@@ -180,6 +183,8 @@ function GuestPurchase({ courseId }: { courseId: string }) {
         {error && <p className="banner offline">⚠️ {error}</p>}
         <button className="block" disabled={busy || !emailOk} onClick={() => void buy()}>{busy ? t("pay.buying") : t("pay.buy")}</button>
         <button className="block secondary" style={{ marginTop: 8 }} onClick={() => navigate(routes.enrollments())}>{t("pay.goLogin")}</button>
+        {/* Page d'atterrissage du trafic vitrine : l'argumentaire y a toute sa place. */}
+        <PitchSection />
       </article>
     </div>
   );

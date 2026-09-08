@@ -28,6 +28,7 @@ const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Re
 const Purchase = lazy(() => import("./ui/Purchase").then((m) => ({ default: m.Purchase })));
 const OrderStatus = lazy(() => import("./ui/OrderStatus").then((m) => ({ default: m.OrderStatus })));
 const Magic = lazy(() => import("./ui/Magic").then((m) => ({ default: m.Magic })));
+const GuestCatalog = lazy(() => import("./ui/GuestCatalog").then((m) => ({ default: m.GuestCatalog })));
 
 /** The eid of a course-scoped route (null on the enrolments list). */
 function eidOf(route: Route): string | null {
@@ -63,6 +64,7 @@ function Screen({ route }: { route: Route }) {
     case "onboarding": return <Onboarding eid={route.eid} />;
     case "purchase": return <Purchase key={`buy:${route.courseId}`} courseId={route.courseId} />;
     case "order": return <OrderStatus key={`ord:${route.orderId}`} orderId={route.orderId} />;
+    case "catalogue": return <GuestCatalog />;
     case "block": return <Course eid={route.eid} />;
     case "account": return <Account />;
     case "revision": return <Revision eid={route.eid} />;
@@ -167,7 +169,7 @@ export function App() {
   // Le lien magique se consomme même si une session existe déjà : c'est un
   // lien de CONNEXION (il installe la session du destinataire de l'e-mail).
   if (route.name === "magic") return publicShell(<Magic token={route.token} onLogin={() => setAuthed(true)} />);
-  if (!authed && (route.name === "purchase" || route.name === "order")) return publicShell(<Screen route={route} />);
+  if (!authed && (route.name === "purchase" || route.name === "order" || route.name === "catalogue")) return publicShell(<Screen route={route} />);
 
   if (!authed) return <Login onLogin={() => setAuthed(true)} />;
 

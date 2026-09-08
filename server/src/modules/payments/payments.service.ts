@@ -388,7 +388,8 @@ export async function hasCourseEntitlement(userId: string, courseId: string): Pr
 }
 
 /** Catalogue d'un cours pour l'écran d'achat : paywall + droit du demandeur. */
-export async function courseCatalog(courseId: string, userId?: string) {
+export async function courseCatalog(idOrSlug: string, userId?: string) {
+  const courseId = await resolveCourseId(idOrSlug);
   const paywall = await coursePaywall(courseId);
   const entitled = paywall.paid && userId ? await hasCourseEntitlement(userId, courseId) : !paywall.paid;
   return { ...paywall, entitled };
@@ -491,13 +492,48 @@ export async function listGifts() {
 // --- tunnel d'achat invité (PAY-2bis) : e-mail seul champ ----------------------
 
 /** Fiche publique d'un cours payant (page d'achat sans compte). */
-export async function guestCourseInfo(courseId: string) {
+/** Résout un identifiant public de cours : slug lisible (liens du site
+ *  vitrine, ex. « gestion-du-temps-n1 ») ou id technique — les deux marchent. */
+async function resolveCourseId(idOrSlug: string): Promise<string> {
+  const bySlug = await prisma.course.findUnique({ where: { slug: idOrSlug }, select: { id: true } });
+  return bySlug?.id ?? idOrSlug;
+}
+
+export async function guestCourseInfo(idOrSlug: string) {
+  const courseId = await resolveCourseId(idOrSlug);
   const paywall = await coursePaywall(courseId);
-  const version = await prisma.courseVersion.findFirst({
-    where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { title: true, level: true },
-  });
+  const [version, course] = await Promise.all([
+    prisma.courseVersion.findFirst({
+      where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { title: true, level: true },
+    }),
+    prisma.course.findUnique({ where: { id: courseId }, select: { slug: true } }),
+  ]);
   if (!version) throw new PaymentError(404, "course_not_found", "Parcours introuvable");
-  return { courseId, title: version.title, level: version.level, ...paywall };
+  return { courseId, slug: course?.slug ?? null, title: version.title, level: version.level, ...paywall };
+}
+
+/** Catalogue PUBLIC (site vitrine / achat sans compte, PAY-2ter) : les cours
+ *  publiés hors cours réservés à une organisation, avec leur paywall. Aucune
+ *  donnée personnelle — consultable sans session ; le vitrine peut l'appeler
+ *  pour afficher titres et prix à jour. */
+export async function guestCatalog() {
+  const courses = await prisma.course.findMany({
+    where: { organizationId: null, versions: { some: { status: "PUBLISHED" } } },
+    orderBy: { updatedAt: "desc" },
+    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true } } },
+  });
+  const products = await prisma.product.findMany({
+    where: { courseId: { in: courses.map((c) => c.id) }, active: true },
+    include: { prices: { where: { active: true } } },
+  });
+  const paywalls = new Map(products.filter((p) => p.prices.length > 0)
+    .map((p) => [p.courseId!, p.prices.map((pr) => ({ currency: pr.currency as Currency, display: formatAmount(pr.amountMinor, pr.currency as Currency) }))]));
+  return courses
+    .filter((c) => c.versions.length > 0)
+    .map((c) => ({
+      courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level,
+      paid: paywalls.has(c.id), prices: paywalls.get(c.id) ?? [],
+    }));
 }
 
 const nameFromEmail = (email: string) => {

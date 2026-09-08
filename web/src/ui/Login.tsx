@@ -158,6 +158,9 @@ export function Login({ onLogin }: { onLogin: () => void }) {
       <button disabled={busy}>{busy ? "…" : t("login.signIn")}</button>
       <p className="muted" style={{ marginTop: 10, textAlign: "center" }}><a href="#" onClick={(e) => { e.preventDefault(); setMode("forgot"); setError(null); setInfo(null); }}>{t("login.forgot")}</a></p>
       <p className="muted" style={{ marginTop: 4, textAlign: "center" }}>{t("login.noAccount")} <a href="#" onClick={(e) => { e.preventDefault(); setMode("signup"); setError(null); setInfo(null); }}>{t("login.create")}</a></p>
+      {/* PAY-2ter : l'offre est visible et achetable SANS compte — le mur de
+          connexion ne doit pas être un mur de vente. */}
+      <p style={{ marginTop: 14, textAlign: "center" }}><a href="#/catalogue">{t("login.browseCatalog")}</a></p>
     </form>
   );
 }
