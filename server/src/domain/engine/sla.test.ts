@@ -29,11 +29,12 @@ test("alert fires only at/after 5 business days", () => {
   assert.equal(SLA_ALERT_BUSINESS_DAYS, 5);
 });
 
-test("relances multi-étages : 0 avant J+3, puis 1, 2 (J+5), 3 (J+7)", () => {
-  // MON = lundi 01/06 ; jeudi 04/06 = 3 j ouvrés ; lundi 08/06 = 5 ; mercredi 10/06 = 7.
-  assert.equal(dueReminderStage(MON, new Date("2026-06-03T09:00:00Z")), 0);
-  assert.equal(dueReminderStage(MON, new Date("2026-06-04T09:00:00Z")), 1);
-  assert.equal(dueReminderStage(MON, new Date("2026-06-08T09:00:00Z")), 2);
-  assert.equal(dueReminderStage(MON, new Date("2026-06-10T09:00:00Z")), 3);
-  assert.equal(SLA_REMINDER_STAGES.length, 3);
+test("relances multi-étages : 0 avant J+2, puis 1 (J+2), 2 (J+4), 3 (J+6), 4 (J+7)", () => {
+  // MON = lundi 01/06 ; mer 03/06 = 2 j ouvrés ; ven 05/06 = 4 ; mar 09/06 = 6 ; mer 10/06 = 7.
+  assert.equal(dueReminderStage(MON, new Date("2026-06-02T09:00:00Z")), 0);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-03T09:00:00Z")), 1);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-05T09:00:00Z")), 2);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-09T09:00:00Z")), 3);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-10T09:00:00Z")), 4);
+  assert.equal(SLA_REMINDER_STAGES.length, 4);
 });

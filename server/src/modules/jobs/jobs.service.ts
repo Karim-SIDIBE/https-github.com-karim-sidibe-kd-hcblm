@@ -21,9 +21,9 @@ const ADMIN_EMAIL = "admin@kompetences.net";
 /**
  * Bloc 4 SLA enforcement (spec §6.3, AC#14 — renforcé, décision produit
  * 09/2026) : après la notification de dépôt complet (immédiate), le job
- * quotidien relance l'administrateur par ÉTAGES tant qu'un projet soumis n'est
- * pas évalué — J+3 ouvrés (rappel), J+5 (urgence, 2 jours restants), J+7
- * (engagement atteint). Idempotent par étage via `slaStage`. La date qui fait
+ * quotidien relance par ÉTAGES tant qu'un projet soumis n'est pas évalué —
+ * J+2, J+4, J+6 et J+7 ouvrés — aux admins, plus l'évaluateur dès qu'il est
+ * assigné. Idempotent par étage via `slaStage`. La date qui fait
  * foi est celle du DERNIER élément déposé (journal compris — dossiers
  * historiques assemblés avant la fin du journal).
  */
@@ -45,18 +45,20 @@ export async function runProjectSlaAlerts(now: Date = new Date()) {
     const st = SLA_REMINDER_STAGES[due - 1]!;
     const days = businessDaysBetween(submittedAt, now);
     const remaining = Math.max(0, SLA_TURNAROUND_BUSINESS_DAYS - days);
-    const who = s.evaluator ? `assigné à ${s.evaluator.name}` : "NON ENCORE ASSIGNÉ";
-    await enqueueNotification({
-      enrollmentId: s.enrollmentId, recipientKind: "ADMIN", recipient: ADMIN_EMAIL,
-      subject: `${st.label} — projet de ${s.enrollment.user.name} sans évaluation (J+${days} ouvrés)`,
-      body:
-        `Le projet de certification de ${s.enrollment.user.name} est complet depuis le ` +
-        `${submittedAt.toISOString().slice(0, 10)} et n'a toujours pas d'évaluation après ` +
-        `${days} jours ouvrés (engagement : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés — ` +
-        `${remaining > 0 ? `${remaining} jour(s) ouvré(s) restant(s)` : "délai atteint"}). ` +
-        `Évaluateur : ${who}. Relance ${due}/${SLA_REMINDER_STAGES.length}.`,
-      provider: "project-sla",
-    });
+    const who = s.evaluator ? `assigné à ${s.evaluator.name}` : "NON ENCORE ASSIGNÉ — assignez un évaluateur";
+    const subject = `${st.label} — projet de ${s.enrollment.user.name} sans évaluation (J+${days} ouvrés)`;
+    const body =
+      `Le projet de certification de ${s.enrollment.user.name} est complet depuis le ` +
+      `${submittedAt.toISOString().slice(0, 10)} et n'a toujours pas d'évaluation après ` +
+      `${days} jours ouvrés (engagement : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés — ` +
+      `${remaining > 0 ? `${remaining} jour(s) ouvré(s) restant(s)` : "délai atteint"}). ` +
+      `Évaluateur : ${who}. Relance ${due}/${SLA_REMINDER_STAGES.length}.`;
+    // Les admins reçoivent chaque relance ; l'évaluateur aussi dès qu'il est
+    // assigné (avant l'assignation, la relance sert justement à la provoquer).
+    const recipients = [ADMIN_EMAIL, ...(s.evaluator?.email && s.evaluator.email !== ADMIN_EMAIL ? [s.evaluator.email] : [])];
+    for (const recipient of recipients) {
+      await enqueueNotification({ enrollmentId: s.enrollmentId, recipientKind: "ADMIN", recipient, subject, body, provider: "project-sla" });
+    }
     await prisma.projectSubmission.update({ where: { id: s.id }, data: { slaStage: due, slaAlertedAt: now } });
     alerted.push({ enrollmentId: s.enrollmentId, submittedAt, stage: due, evaluator: s.evaluator?.name ?? null });
   }
