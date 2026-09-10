@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, guestCatalog, guestCheckout, guestCourseInfo, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -177,10 +177,36 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // --- webhooks publics (pas d'auth : la sécurité EST la signature + le check) ----
-  for (const key of ["cinetpay", "flutterwave"] as const) {
+  for (const key of ["cinetpay", "flutterwave", "paydunya"] as const) {
     app.post(`/payments/webhooks/${key}`, async (req, reply) => {
       const out = await handleProviderWebhook(key, req.headers, rawBodyOf(req), req.ip);
       return reply.status(out.httpStatus).send(out.body);
     });
   }
+
+  // InTouch notifie en GET ou POST selon le canal — la requête est enveloppée
+  // { query, body } pour que l'adaptateur voie le secret d'URL (?s=…) ET le
+  // payload, quel que soit le format.
+  for (const method of ["GET", "POST"] as const) {
+    app.route({
+      method, url: "/payments/webhooks/intouch",
+      handler: async (req, reply) => {
+        const envelope = JSON.stringify({ query: req.query ?? {}, body: rawBodyOf(req) });
+        const out = await handleProviderWebhook("intouch", req.headers, envelope, req.ip);
+        return reply.status(out.httpStatus).send(out.body);
+      },
+    });
+  }
+
+  // Page-pont InTouch (TouchPay) : HTML public qui charge le widget officiel —
+  // l'identifiant de paiement (cuid non devinable) est la capacité, et la page
+  // n'expose que le libellé et le montant. Même famille que les pages HTML
+  // SAML/LTI déjà servies par l'API.
+  app.get("/payments/intouch/bridge/:paymentId", async (req, reply) => {
+    const { paymentId } = z.object({ paymentId: z.string() }).parse(req.params);
+    try {
+      const html = await intouchBridgePage(paymentId);
+      return reply.header("content-type", "text/html; charset=utf-8").send(html);
+    } catch (err) { return handle(reply, err); }
+  });
 }

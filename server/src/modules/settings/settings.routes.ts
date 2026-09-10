@@ -15,10 +15,10 @@ import { audit } from "../../lib/audit.js";
 const KNOWN = {
   require_staff_2fa: z.boolean(),
   /// Fournisseur de paiement ACTIF pour les nouveaux checkouts (spec paiement
-  /// §09) — bascule Super Admin sans redéploiement ; les webhooks des deux
+  /// §09) — bascule Super Admin sans redéploiement ; les webhooks de TOUS les
   /// agrégateurs restent toujours acceptés. Défaut : « manual » (aucun compte
   /// marchand requis).
-  payment_provider: z.enum(["manual", "cinetpay", "flutterwave"]),
+  payment_provider: z.enum(["manual", "cinetpay", "flutterwave", "paydunya", "intouch"]),
   /// Mentions légales imprimées en pied des reçus PDF (PAY-4) : n° contribuable,
   /// RCCM, régime de TVA… Texte libre multi-lignes, rédigé par le Super Admin.
   receipt_legal: z.string().max(2000),

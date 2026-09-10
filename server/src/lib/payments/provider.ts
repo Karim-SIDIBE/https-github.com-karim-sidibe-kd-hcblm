@@ -9,7 +9,7 @@
  */
 import type { Currency } from "../../domain/payments/money.js";
 
-export type ProviderKey = "cinetpay" | "flutterwave" | "manual";
+export type ProviderKey = "cinetpay" | "flutterwave" | "paydunya" | "intouch" | "manual";
 
 export type CheckoutInput = {
   /** Notre identifiant de Paiement — devient la référence de transaction chez

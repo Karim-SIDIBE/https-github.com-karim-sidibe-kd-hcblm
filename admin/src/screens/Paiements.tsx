@@ -13,7 +13,7 @@ import { modal } from "../lib/modal";
 const inp: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 8, fontSize: 13.5 };
 const statCell: React.CSSProperties = { flex: 1, minWidth: 110, background: "var(--bg-soft, #f5f7fb)", borderRadius: 10, padding: "10px 12px" };
 
-const PROVIDER_LABEL: Record<string, string> = { manual: "Virement (constat manuel)", cinetpay: "CinetPay", flutterwave: "Flutterwave" };
+const PROVIDER_LABEL: Record<string, string> = { manual: "Virement (constat manuel)", cinetpay: "CinetPay", flutterwave: "Flutterwave", paydunya: "PayDunya", intouch: "InTouch (TouchPay)" };
 const STATUS_PILL: Record<string, string> = { PAID: "pill--green", PENDING: "pill--warn", FAILED: "pill--red", CANCELLED: "pill--red", REFUNDED: "pill--info" };
 
 export function Paiements() {

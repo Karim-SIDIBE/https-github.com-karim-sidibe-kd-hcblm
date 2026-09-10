@@ -9,18 +9,22 @@ import type { PaymentProviderId } from "../../generated/prisma/client.js";
 import { getSetting } from "../../modules/settings/settings.routes.js";
 import { cinetpayProvider } from "./cinetpay.js";
 import { flutterwaveProvider } from "./flutterwave.js";
+import { paydunyaProvider } from "./paydunya.js";
+import { intouchProvider } from "./intouch.js";
 import { manualProvider } from "./manual.js";
 import type { PaymentProvider, ProviderKey } from "./provider.js";
 
 export const PROVIDERS: Record<ProviderKey, PaymentProvider> = {
   cinetpay: cinetpayProvider,
   flutterwave: flutterwaveProvider,
+  paydunya: paydunyaProvider,
+  intouch: intouchProvider,
   manual: manualProvider,
 };
 
 /** Clé de registre ↔ enum Prisma porté par chaque Paiement. */
 export const PROVIDER_ENUM: Record<ProviderKey, PaymentProviderId> = {
-  cinetpay: "CINETPAY", flutterwave: "FLUTTERWAVE", manual: "MANUAL",
+  cinetpay: "CINETPAY", flutterwave: "FLUTTERWAVE", paydunya: "PAYDUNYA", intouch: "INTOUCH", manual: "MANUAL",
 };
 export function providerKeyOf(id: PaymentProviderId): ProviderKey {
   return id.toLowerCase() as ProviderKey;

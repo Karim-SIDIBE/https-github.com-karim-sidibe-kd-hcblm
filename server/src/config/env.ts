@@ -96,6 +96,28 @@ const EnvSchema = z.object({
   /// Valeur secrète de l'en-tête `verif-hash` (dashboard Flutterwave → Webhooks).
   FLUTTERWAVE_WEBHOOK_HASH: z.string().optional(),
   FLUTTERWAVE_BASE_URL: z.string().url().default("https://api.flutterwave.com"),
+  /// PayDunya (EDP BCEAO, zone UEMOA/XOF) — les 3 clés du portail marchand.
+  /// Sandbox : PAYDUNYA_BASE_URL=https://app.paydunya.com/sandbox-api/v1 avec les clés de test.
+  PAYDUNYA_MASTER_KEY: z.string().optional(),
+  PAYDUNYA_PRIVATE_KEY: z.string().optional(),
+  PAYDUNYA_TOKEN: z.string().optional(),
+  PAYDUNYA_BASE_URL: z.string().url().default("https://app.paydunya.com/api/v1"),
+  /// InTouch / TouchPay (EDP BCEAO, seul agrégateur présent sur PI-SPI) — codes
+  /// du portail marchand. Le paiement passe par une page-pont servie par l'API
+  /// qui charge le widget officiel ; la vérité passe par INTOUCH_STATUS_URL
+  /// (gabarit avec {orderNumber}, fourni dans le portail à l'onboarding) —
+  /// sans lui, aucun règlement n'est accordé automatiquement (UNKNOWN).
+  INTOUCH_AGENCY_CODE: z.string().optional(),
+  INTOUCH_SECURE_CODE: z.string().optional(),
+  INTOUCH_DOMAIN: z.string().optional(),
+  /// Secret ajouté par NOS soins à l'URL de notification (?s=…) — InTouch ne
+  /// documente pas publiquement de signature de webhook ; ce secret prouve que
+  /// l'appelant connaît l'URL confidentielle déclarée chez eux.
+  INTOUCH_NOTIFY_SECRET: z.string().optional(),
+  INTOUCH_SCRIPT_URL: z.string().url().default("https://touchpay.gutouch.com/touchpayv2/script/touchpaynr/prod_touchpay-0.0.1.js"),
+  INTOUCH_STATUS_URL: z.string().optional(),
+  /// Basic auth « login:motdepasse » de l'API de statut, si le portail en fournit une.
+  INTOUCH_STATUS_AUTH: z.string().optional(),
   CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES SOFT SKILLS"),
   CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
 
