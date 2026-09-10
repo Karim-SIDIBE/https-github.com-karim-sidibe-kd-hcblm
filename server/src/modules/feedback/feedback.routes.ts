@@ -1,8 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  FeedbackError, aiCalibrationStatus, listAssessments, requestFormativeFeedback,
-  requestRubricSuggestion, runAiCalibration,
+  FeedbackError, aiCalibrationStatus, listAssessments, requestEvidenceAssist,
+  requestFormativeFeedback, requestRubricSuggestion, runAiCalibration,
 } from "./feedback.service.js";
 import { authenticate, authorize, requireEnrollmentAccess } from "../../lib/auth.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
@@ -33,6 +33,15 @@ export async function feedbackRoutes(app: FastifyInstance) {
   app.post("/enrollments/:id/rubric-suggestion", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await requestRubricSuggestion(id, req.principal) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Evaluator/admin: AIDE À LA PREUVE pré-notation — par critère, les seules
+  // citations vérifiées par la plateforme (§8.4), SANS aucun score ni bande.
+  // Gardes §8.2/§8.7/§8.8 ; dérogation §8.6 documentée (décision produit
+  // 09/2026) : des extraits bruts servent de surligneur, pas de correcteur.
+  app.post("/enrollments/:id/evidence-assist", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await requestEvidenceAssist(id, req.principal) }; } catch (err) { return handle(reply, err); }
   });
 
   // Admin: calibration de la suggestion sur les 5 dossiers de référence (§8.8).

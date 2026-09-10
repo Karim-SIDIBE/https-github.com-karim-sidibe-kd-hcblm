@@ -265,6 +265,44 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Aide à la preuve (pré-notation) — vue SANS SCORE de la suggestion stockée.
+// Dérogation §8.6 assumée (décision produit 09/2026) : avant la saisie du
+// score humain, l'évaluateur peut consulter les seules CITATIONS vérifiées
+// par la plateforme (§8.4) comme surligneur du dossier. Aucun chiffre, aucune
+// bande, aucun commentaire ne transite — seule nuance d'ancrage résiduelle :
+// le modèle choisit ses extraits selon la bande qu'il a retenue en interne.
+// La suggestion chiffrée, elle, reste verrouillée par §8.6.
+// ---------------------------------------------------------------------------
+
+export type EvidenceAssistCriterion = {
+  label: string;
+  /** Preuve VÉRIFIÉE seulement : citations littérales retrouvées dans le
+   *  dossier, ou déclaration d'absence conforme. Rien sinon. */
+  citations?: string[];
+  absence?: string;
+  verified: boolean;
+};
+
+/** Projette une suggestion stockée (criteria + verification §8.4) en vue
+ *  « aide à la preuve » : par critère, la preuve vérifiée ou rien — jamais
+ *  `suggested`, `comment` ni `weightPoints`. Un critère dont la preuve a
+ *  échoué s'affiche non vérifié SANS son contenu (une citation introuvable
+ *  est une falsification, elle ne doit pas aider). */
+export function toEvidenceAssist(
+  perCriterion: (SuggestedCriterionScore & { verification?: { ok: boolean } })[],
+): EvidenceAssistCriterion[] {
+  return perCriterion.map((c) => {
+    const ok = c.verification?.ok === true;
+    return {
+      label: c.label,
+      verified: ok,
+      citations: ok && c.citations?.length ? c.citations : undefined,
+      absence: ok && !c.citations?.length && c.absence ? c.absence : undefined,
+    };
+  });
+}
+
 /** Libellé comparable : minuscules, sans numérotation de tête (« 1 · », « 2. »)
  *  ni parenthèse de code finale (« (D4.C1) ») — le modèle décore volontiers. */
 function comparableLabel(s: string): string {

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { api, auth, type Accreditation, type AiCalibrationStatus, type AiComplianceIndicators, type AppealsRegister, type EvalQueueItem, type ProjectDetail, type QcRegister, type RubricCriterion, type RubricSuggestion, type UserRow } from "../lib/api";
+import { api, auth, type Accreditation, type AiCalibrationStatus, type AiComplianceIndicators, type AppealsRegister, type EvalQueueItem, type EvidenceAssist, type ProjectDetail, type QcRegister, type RubricCriterion, type RubricSuggestion, type UserRow } from "../lib/api";
 import { avatarColor, initials, ago, useAsync } from "../lib/ui";
 import { modal } from "../lib/modal";
 
@@ -59,11 +59,14 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [points, setPoints] = useState<number[]>(() => (item.rubric?.criteria ?? []).map(() => 0));
   const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai" | "draft">("");
+  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai" | "draft" | "helper">("");
   const [msg, setMsg] = useState<string | null>(null);
   const [evaluators, setEvaluators] = useState<UserRow[]>([]);
   const [pick, setPick] = useState("");
   const [ai, setAi] = useState<RubricSuggestion | null>(null);
+  // Aide à la preuve pré-notation : citations vérifiées par critère, sans
+  // aucune note (le serveur ne les envoie pas) — pas soumise au verrou §8.6.
+  const [helper, setHelper] = useState<EvidenceAssist | null>(null);
   // §8.8 : le bouton de suggestion reste désactivé tant que la calibration du
   // couple (parcours, modèle, version de grille) n'est pas passée.
   const [calib, setCalib] = useState<AiCalibrationStatus | null>(null);
@@ -102,6 +105,12 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
       setDraftSaved(true);
       setMsg("Scores enregistrés (brouillon §8.6) — la suggestion est maintenant consultable.");
     } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
+  }
+  async function evidenceHelp() {
+    setBusy("helper"); setMsg(null);
+    try { setHelper(await api.evidenceAssist(item.enrollmentId)); }
+    catch (e: any) { setMsg(e?.message || "Aide à la preuve indisponible"); }
+    finally { setBusy(""); }
   }
   async function suggest() {
     setBusy("ai"); setMsg(null);
@@ -220,6 +229,13 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
               <button className="btn btn--sm" disabled={busy === "draft"} onClick={saveDraft}>
                 {busy === "draft" ? "…" : draftSaved ? "Ré-enregistrer mes scores" : "Enregistrer mes scores (brouillon)"}
               </button>
+              <button className="btn btn--sm btn--ghost" disabled={busy === "helper" || Boolean(helper) || !calib?.active || item.appealStage > 0}
+                title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
+                  : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8)"
+                  : "Affiche sous chaque critère les extraits du dossier vérifiés mot pour mot — sans aucune note"}
+                onClick={evidenceHelp}>
+                {busy === "helper" ? "Recherche des preuves…" : helper ? "🔎 Preuves affichées sous chaque critère" : "🔎 Aide à la preuve (IA, sans note)"}
+              </button>
               <button className="btn btn--sm btn--ghost" disabled={busy === "ai" || !calib?.active || !draftSaved || item.appealStage > 0}
                 title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
                   : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8) — panneau « Suggestion automatisée » ci-dessous"
@@ -227,6 +243,7 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                 onClick={suggest}>
                 {busy === "ai" ? "Analyse du dossier…" : "✨ Suggestion de note (IA, indicative)"}
               </button>
+              {helper && <span className="muted" style={{ fontSize: 11.5 }}>Extraits vérifiés mot pour mot par la plateforme, sans note — la suggestion chiffrée reste soumise à l'enregistrement de vos scores (§8.6).</span>}
               {!calib?.active && <span className="muted" style={{ fontSize: 11.5 }}>Suggestion désactivée : calibration §8.8 non passée{calib ? ` (${calib.provider})` : ""}.</span>}
               {calib?.active && !draftSaved && <span className="muted" style={{ fontSize: 11.5 }}>Saisissez et enregistrez VOS scores avant de consulter la suggestion (§8.6).</span>}
             </div>
@@ -294,6 +311,30 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                         );
                       })}
                     </div>
+                    {helper && (() => {
+                      // Aide à la preuve : extraits VÉRIFIÉS par la plateforme,
+                      // sans note — l'insertion reste une action explicite et
+                      // journalisée, le champ demeure la lecture de l'évaluateur.
+                      const h = helper.criteria.find((x) => x.label === c.label);
+                      if (!h) return null;
+                      return (
+                        <div style={{ marginTop: 6, fontSize: 12 }}>
+                          {(h.citations ?? []).map((t, k) => (
+                            <div key={k} className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
+                              <span className="muted" style={{ fontStyle: "italic", flex: 1 }}>🔎 « {t} » <span style={{ fontStyle: "normal" }}>✓ vérifiée dans le dossier</span></span>
+                              <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Insertion explicite — l'identité des preuves est journalisée (§8.9)" onClick={() => copyEvidence(i, t)}>Insérer</button>
+                            </div>
+                          ))}
+                          {h.absence && (
+                            <div className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
+                              <span className="muted" style={{ fontStyle: "italic", flex: 1 }}>🔎 Rien trouvé — {h.absence}</span>
+                              <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Insertion explicite — journalisée (§8.9)" onClick={() => copyEvidence(i, h.absence!)}>Insérer</button>
+                            </div>
+                          )}
+                          {!h.verified && <div className="muted" style={{ marginTop: 3 }}>🔎 Aucune preuve fiable trouvée pour ce critère — à établir par votre lecture.</div>}
+                        </div>
+                      );
+                    })()}
                     <textarea value={evidence[i] ?? ""} onChange={(e) => setEvidence((ev) => ev.map((v, j) => j === i ? e.target.value : v))}
                       placeholder="Preuve (obligatoire) : citation exacte du dossier — ou, pour une bande basse, sections parcourues et ce qui n'y figure pas…"
                       style={{ width: "100%", marginTop: 6, padding: "8px 10px", border: `1px solid ${evidence[i]?.trim() ? "var(--line-strong)" : "var(--danger, #b91c1c)"}`, borderRadius: 8, fontFamily: "inherit", fontSize: 12, minHeight: 46, resize: "vertical" }} />

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // La clé est neutralisée AVANT l'import du module (config/env est parsé à
 // l'import) : ces tests couvrent le comportement hors-ligne et le mode strict.
 process.env.ANTHROPIC_API_KEY = "";
-const { buildFormativeRequest, buildRubricRequest, normalize, rubricOutputConfig, suggestRubricScores } = await import("./feedback.js");
+const { buildFormativeRequest, buildRubricRequest, normalize, rubricOutputConfig, suggestRubricScores, toEvidenceAssist } = await import("./feedback.js");
 const { effortFor } = await import("./client.js");
 
 const criteria = [
@@ -80,6 +80,32 @@ test("notation : sortie structurée (JSON garanti) sur modèle capable, sans eff
   // citations/absence toujours présents (vides autorisés) — normalize neutralise
   assert.ok((schema.properties.perCriterion.items.required as string[]).includes("citations"));
   assert.equal(rubricOutputConfig("claude-haiku-4-5-20251001"), undefined);
+});
+
+test("aide à la preuve : AUCUN score, bande ni commentaire ne transite — citations vérifiées seulement", () => {
+  const out = toEvidenceAssist([
+    { label: "Organisation personnelle", weightPoints: 20, suggested: 15, comment: "bande 3 car…",
+      citations: ["de 9h à 11h tous les mercredi matin sans exception"], verification: { ok: true } },
+    { label: "Gestion des priorités", weightPoints: 20, suggested: 4, comment: "bande 1",
+      absence: "Sections 1, 2 et 3 parcourues : aucune méthode n'y figure", verification: { ok: true } },
+    { label: "S3 — Ancrage culturel et organisationnel", weightPoints: 10, suggested: 8, comment: "…",
+      citations: ["extrait reformulé introuvable dans le dossier soumis ici"], verification: { ok: false } },
+  ]);
+  // Jamais de fuite de la notation interne : uniquement label / preuve / verified.
+  for (const c of out) assert.deepEqual(Object.keys(c).sort(), ["absence", "citations", "label", "verified"].sort());
+  assert.deepEqual(out[0], { label: "Organisation personnelle", verified: true,
+    citations: ["de 9h à 11h tous les mercredi matin sans exception"], absence: undefined });
+  assert.deepEqual(out[1], { label: "Gestion des priorités", verified: true, citations: undefined,
+    absence: "Sections 1, 2 et 3 parcourues : aucune méthode n'y figure" });
+  // Preuve NON vérifiée (§8.4 en échec) : rien ne s'affiche — une citation
+  // introuvable ne doit pas « aider ».
+  assert.deepEqual(out[2], { label: "S3 — Ancrage culturel et organisationnel", verified: false, citations: undefined, absence: undefined });
+});
+
+test("aide à la preuve : sans verdict de vérification stocké, le critère est non vérifié", () => {
+  const out = toEvidenceAssist([{ label: "X", weightPoints: 10, suggested: 5, comment: "", citations: ["a b c d e f g h"] }]);
+  assert.equal(out[0]!.verified, false);
+  assert.equal(out[0]!.citations, undefined);
 });
 
 test("normalize : citations vide et absence vide (sortie structurée) valent omission", () => {
