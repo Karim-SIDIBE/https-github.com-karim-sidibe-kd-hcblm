@@ -14,6 +14,40 @@ const STATUS: Record<string, { cls: string; label: string }> = {
   NOT_CERTIFIED: { cls: "pill--red", label: "Non certifié" },
 };
 
+/** Ordre du parcours : « Micro-session 4.2 — … » → 402. Les titres sans numéro
+ *  gardent leur ordre d'arrivée, après les micro-sessions numérotées. */
+function sectionOrder(title: string): number {
+  const m = title.match(/(\d+)[.,](\d+)/);
+  return m ? Number(m[1]) * 100 + Number(m[2]) : Number.MAX_SAFE_INTEGER;
+}
+
+/** Dates du journal S1 en pastilles : vert = jour de saisie distinct,
+ *  orange = plusieurs entrées saisies le même jour (rattrapage cumulé),
+ *  gris = entrée manquante. Le cumul se voit d'un coup d'œil. */
+function JournalDates({ entries }: { entries: { day: number; completedAt: string | null }[] }) {
+  const counts = new Map<string, number>();
+  for (const e of entries) {
+    if (!e.completedAt) continue;
+    const d = new Date(e.completedAt).toLocaleDateString("fr-FR");
+    counts.set(d, (counts.get(d) ?? 0) + 1);
+  }
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 6 }}>
+      {entries.map((e) => {
+        const d = e.completedAt ? new Date(e.completedAt).toLocaleDateString("fr-FR") : null;
+        const cumul = d != null && (counts.get(d) ?? 0) > 1;
+        return (
+          <span key={e.day} className={`pill pill--sm ${d == null ? "pill--soft" : cumul ? "pill--warn" : "pill--green"}`}
+            title={d == null ? "Entrée manquante" : cumul ? "Plusieurs entrées saisies ce jour-là (cumul)" : "Jour de saisie distinct"}>
+            J+{e.day} · {d ?? "—"}
+          </span>
+        );
+      })}
+      <span className="muted" style={{ fontSize: 11, alignSelf: "center" }}>vert = saisie étalée · orange = cumul (même jour)</span>
+    </div>
+  );
+}
+
 function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: () => void; onDone: () => void }) {
   const me = auth.user();
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
@@ -95,7 +129,7 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <aside className="drawer">
+      <aside className="drawer drawer--wide">
         <div className="dh">
           <div>
             <div className="eyebrow">Projet Bloc 4</div>
@@ -115,10 +149,10 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                   {item.journal.completed}/{item.journal.expected} entrées
                 </span>
               </div>
-              <div className="muted" style={{ fontSize: 12.5, marginTop: 4 }}>
-                {item.journal.entries.map((e) => `J+${e.day} : ${e.completedAt ? new Date(e.completedAt).toLocaleDateString("fr-FR") : "—"}`).join(" · ")}
-                {item.journal.groupedCatchup && <span style={{ color: "var(--red, #b91c1c)" }}> · ⚠️ rattrapage groupé (plus de 2 entrées le même jour)</span>}
-              </div>
+              <JournalDates entries={item.journal.entries} />
+              {item.journal.groupedCatchup && (
+                <div style={{ color: "var(--red, #b91c1c)", fontSize: 12.5, marginTop: 4 }}>⚠️ rattrapage groupé (plus de 2 entrées le même jour)</div>
+              )}
             </div>
           )}
           <div className="row between" style={{ marginBottom: 14 }}>
@@ -142,9 +176,13 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>Copie de l'apprenant</div>
           {Object.keys(sections).length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{detail ? "Aucune section." : "Chargement…"}</p>
-            : Object.entries(sections).map(([title, body]) => (
-              <div className="section" key={title}><h4>{title}</h4><p>{body}</p></div>
-            ))}
+            // Copies affichées dans l'ORDRE DU PARCOURS (micro-session 4.1 → 4.5) :
+            // l'évaluateur suit la logique de continuité de la conception.
+            : Object.entries(sections)
+              .sort(([a], [b]) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, "fr"))
+              .map(([title, body]) => (
+                <div className="section" key={title}><h4>{title}</h4><p>{body}</p></div>
+              ))}
 
           <div className="eyebrow" style={{ margin: "20px 0 6px" }}>Grille d'évaluation</div>
           {crit.length > 0 && !ai && (
@@ -192,7 +230,7 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
             </div>
           )}
           {crit.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>Grille indisponible.</p> : (<>
-            {banded && <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>Notation PAR BANDE (socle §5) : choisissez la bande la plus haute dont <b>tous</b> les éléments sont satisfaits — milieu de bande par défaut. La preuve (citation exacte ou déclaration d'absence) est obligatoire pour chaque critère.</p>}
+            {banded && <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>Notation PAR BANDE (socle §5) : bandes de la plus faible (à gauche) à la plus forte (à droite) — choisissez la bande la plus haute dont <b>tous</b> les éléments sont satisfaits, milieu de bande par défaut. La preuve (citation exacte ou déclaration d'absence) est obligatoire pour chaque critère.</p>}
             {crit.map((c, i) => (
               <div className="crit" key={c.label} style={{ display: "block" }}>
                 <div className="row between" style={{ gap: 8 }}>
@@ -208,23 +246,27 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                   </div>
                 </div>
                 {(c.bands ?? []).length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "6px 0 4px" }}>
-                    {[...c.bands!].sort((a, b) => b.band - a.band).map((b) => {
-                      const active = points[i]! >= b.scoreRange[0] && points[i]! <= b.scoreRange[1];
-                      const mid = Math.ceil((b.scoreRange[0] + b.scoreRange[1]) / 2);
-                      return (
-                        <button key={b.band} type="button" title={b.descriptor}
-                          onClick={() => setPoints((p) => p.map((v, j) => j === i ? mid : v))}
-                          style={{ textAlign: "left", fontSize: 11.5, lineHeight: 1.35, padding: "6px 8px", borderRadius: 7, cursor: "pointer",
-                            border: `1px solid ${active ? "var(--orange-500, #E8722A)" : "var(--line)"}`,
-                            background: active ? "var(--orange-50, #FDF1E8)" : "transparent", color: "inherit" }}>
-                          <b>Bande {b.band} · {b.scoreRange[0]}–{b.scoreRange[1]}</b> — {b.descriptor}
-                        </button>
-                      );
-                    })}
+                  <div style={{ margin: "6px 0 4px" }}>
+                    {/* Bandes À L'HORIZONTALE, faible → fort (gauche → droite) ; la
+                        preuve obligatoire prend toute la largeur en dessous. */}
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 6 }}>
+                      {[...c.bands!].sort((a, b) => a.band - b.band).map((b) => {
+                        const active = points[i]! >= b.scoreRange[0] && points[i]! <= b.scoreRange[1];
+                        const mid = Math.ceil((b.scoreRange[0] + b.scoreRange[1]) / 2);
+                        return (
+                          <button key={b.band} type="button" title={b.descriptor}
+                            onClick={() => setPoints((p) => p.map((v, j) => j === i ? mid : v))}
+                            style={{ textAlign: "left", fontSize: 11.5, lineHeight: 1.35, padding: "6px 8px", borderRadius: 7, cursor: "pointer", height: "100%",
+                              border: `1px solid ${active ? "var(--orange-500, #E8722A)" : "var(--line)"}`,
+                              background: active ? "var(--orange-50, #FDF1E8)" : "transparent", color: "inherit" }}>
+                            <b>Bande {b.band} · {b.scoreRange[0]}–{b.scoreRange[1]}</b> — {b.descriptor}
+                          </button>
+                        );
+                      })}
+                    </div>
                     <textarea value={evidence[i] ?? ""} onChange={(e) => setEvidence((ev) => ev.map((v, j) => j === i ? e.target.value : v))}
                       placeholder="Preuve (obligatoire) : citation exacte du dossier — ou, pour une bande basse, sections parcourues et ce qui n'y figure pas…"
-                      style={{ width: "100%", padding: "8px 10px", border: `1px solid ${evidence[i]?.trim() ? "var(--line-strong)" : "var(--danger, #b91c1c)"}`, borderRadius: 8, fontFamily: "inherit", fontSize: 12, minHeight: 46, resize: "vertical" }} />
+                      style={{ width: "100%", marginTop: 6, padding: "8px 10px", border: `1px solid ${evidence[i]?.trim() ? "var(--line-strong)" : "var(--danger, #b91c1c)"}`, borderRadius: 8, fontFamily: "inherit", fontSize: 12, minHeight: 46, resize: "vertical" }} />
                   </div>
                 )}
               </div>
