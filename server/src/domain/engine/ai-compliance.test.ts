@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   checkCalibration, evidenceCopied, isLowBand, normalizeWhitespace,
-  sharesConsecutiveWords, verifyCitation, verifyEvidence,
+  rubricFingerprint, sharesConsecutiveWords, verifyCitation, verifyEvidence,
   type CalibrationRun, type ComplianceCriterion, type SuggestedCriterion,
 } from "./ai-compliance.js";
 
@@ -189,4 +189,19 @@ test("calibration refusée : pas exactement 5 dossiers de référence", () => {
   const v = checkCalibration(GRID, [runOk("A"), runOk("B")]);
   assert.equal(v.passed, false);
   assert.equal(v.issues.length > 0, true);
+});
+
+test("rubricFingerprint : insensible à l'ordre des clés (jsonb ne le préserve pas)", () => {
+  const a = { threshold: 70, criteria: [{ label: "X", weightPoints: 20, bands: [{ band: 1, scoreRange: [0, 5], descriptor: "d" }] }] };
+  const b = { criteria: [{ bands: [{ descriptor: "d", scoreRange: [0, 5], band: 1 }], weightPoints: 20, label: "X" }], threshold: 70 };
+  assert.equal(rubricFingerprint(a), rubricFingerprint(b));
+});
+
+test("rubricFingerprint : toute révision réelle de la grille change l'empreinte (§8.8)", () => {
+  const base = { threshold: 70, criteria: [{ label: "X", weightPoints: 20 }] };
+  assert.notEqual(rubricFingerprint(base), rubricFingerprint({ ...base, threshold: 75 }));
+  assert.notEqual(rubricFingerprint(base), rubricFingerprint({ threshold: 70, criteria: [{ label: "X", weightPoints: 25 }] }));
+  // L'ordre des CRITÈRES fait partie de la grille (tableaux ordonnés).
+  const two = { threshold: 70, criteria: [{ label: "A" }, { label: "B" }] };
+  assert.notEqual(rubricFingerprint(two), rubricFingerprint({ threshold: 70, criteria: [{ label: "B" }, { label: "A" }] }));
 });

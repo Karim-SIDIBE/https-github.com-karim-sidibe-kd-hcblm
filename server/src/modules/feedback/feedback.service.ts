@@ -8,7 +8,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type Block, type CourseContent as CourseContentT } from "../../domain/content-model.js";
-import { checkCalibration, verifyEvidence } from "../../domain/engine/ai-compliance.js";
+import { checkCalibration, rubricFingerprint, verifyEvidence } from "../../domain/engine/ai-compliance.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { env } from "../../config/env.js";
@@ -135,6 +135,53 @@ export function currentAiProvider(): string {
 
 const gridVersionOf = (v: { version: number; id: string }) => `v${v.version} (${v.id})`;
 
+/** Grille (rubric) d'une version de cours désignée par sa clé `gridVersion`
+ *  (« v2 (cmt…) ») — null si la version n'existe plus ou n'a pas de Bloc 4. */
+async function rubricOfGridVersion(gridVersion: string): Promise<unknown | null> {
+  const id = /\(([^)]+)\)\s*$/.exec(gridVersion)?.[1];
+  if (!id) return null;
+  const version = await prisma.courseVersion.findUnique({ where: { id } });
+  if (!version) return null;
+  try {
+    const cert = CourseContent.parse(version.content).blocks.find((b) => b.type === "CERTIFICATION");
+    return cert?.type === "CERTIFICATION" ? cert.payload.rubric : null;
+  } catch { return null; }
+}
+
+/**
+ * §8.8 — la calibration qui couvre une grille donnée, ou null.
+ * Clé exacte d'abord : le DERNIER passage (parcours, modèle, version de
+ * grille) décide — un passage refusé révoque, comme avant. À défaut de tout
+ * enregistrement pour cette version : une calibration passée du même
+ * (parcours, modèle) sur une AUTRE version dont la grille est identique
+ * champ à champ (empreinte canonique) reste valable — republier le cours
+ * pour un correctif de texte ne change pas la grille, et exiger une
+ * recalibration créait un faux refus pour les inscrits d'une version
+ * antérieure (bouton actif côté console, garde fermée côté dossier). Une
+ * grille réellement révisée a une empreinte différente → recalibration.
+ */
+async function findPassedCalibration(courseId: string, provider: string, gridVersion: string, rubric: unknown) {
+  const exact = await prisma.aiCalibration.findFirst({
+    where: { courseId, provider, gridVersion }, orderBy: { createdAt: "desc" },
+  });
+  if (exact) return exact.passed ? exact : null;
+
+  const wanted = rubricFingerprint(rubric);
+  const others = await prisma.aiCalibration.findMany({
+    where: { courseId, provider, NOT: { gridVersion } }, orderBy: { createdAt: "desc" }, take: 25,
+  });
+  const seen = new Set<string>();
+  for (const c of others) {
+    const key = c.gridVersion ?? "";
+    if (seen.has(key)) continue; // seul le DERNIER passage d'une clé compte
+    seen.add(key);
+    if (!c.passed || !key) continue;
+    const otherRubric = await rubricOfGridVersion(key);
+    if (otherRubric && rubricFingerprint(otherRubric) === wanted) return c;
+  }
+  return null;
+}
+
 /** Gardes COMMUNES de l'assistance IA sur le projet Bloc 4, dans l'ordre :
  *   §8.2 — réservée à l'évaluateur ASSIGNÉ au dossier ou à un administrateur ;
  *   §8.7 — indisponible en procédure de recours (notation à l'aveugle) ;
@@ -165,11 +212,8 @@ async function loadProjectAiContext(enrollmentId: string, principal?: Principal)
   const rubric = cert.payload.rubric;
   const gridVersion = gridVersionOf(enrollment.courseVersion);
   const provider = currentAiProvider();
-  const calibration = await prisma.aiCalibration.findFirst({
-    where: { courseId: enrollment.courseId, provider, gridVersion },
-    orderBy: { createdAt: "desc" },
-  });
-  if (!calibration?.passed) {
+  const calibration = await findPassedCalibration(enrollment.courseId, provider, gridVersion, rubric);
+  if (!calibration) {
     throw new FeedbackError(409, "ai_not_calibrated", `Assistance désactivée sur ce parcours : calibration non passée pour ${provider} / ${gridVersion} (5 dossiers de référence, écart ≤ 8 pts, ≤ 1 bande — §8.8)`);
   }
 
@@ -350,10 +394,19 @@ export async function aiCalibrationStatus(courseId: string) {
   const provider = currentAiProvider();
   if (!version) return { active: false, provider, gridVersion: null, latest: null };
   const gridVersion = gridVersionOf(version);
+  // Même règle d'équivalence que la garde des dossiers (findPassedCalibration) :
+  // le statut affiché et la garde ne peuvent plus diverger sur une republication
+  // qui n'a pas touché la grille.
+  let rubric: unknown = null;
+  try {
+    const cert = CourseContent.parse(version.content).blocks.find((b) => b.type === "CERTIFICATION");
+    rubric = cert?.type === "CERTIFICATION" ? cert.payload.rubric : null;
+  } catch { /* contenu illisible : statut inactif ci-dessous */ }
+  const covering = rubric ? await findPassedCalibration(courseId, provider, gridVersion, rubric) : null;
   const latest = await prisma.aiCalibration.findFirst({
     where: { courseId, provider, gridVersion }, orderBy: { createdAt: "desc" },
   });
-  return { active: Boolean(latest?.passed), provider, gridVersion, latest };
+  return { active: Boolean(covering), provider, gridVersion, latest: latest ?? covering };
 }
 
 export async function listAssessments(enrollmentId: string) {

@@ -248,6 +248,10 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
               {calib?.active && !draftSaved && <span className="muted" style={{ fontSize: 11.5 }}>Saisissez et enregistrez VOS scores avant de consulter la suggestion (§8.6).</span>}
             </div>
           )}
+          {/* Les refus serveur (calibration §8.8, recours §8.7…) doivent se lire
+              À CÔTÉ des boutons qui les provoquent — pas seulement tout en bas
+              du volet (retour terrain : « le bouton ne fait rien »). */}
+          {msg && busy === "" && <p style={{ margin: "0 0 8px", fontSize: 12.5, fontWeight: 600, color: "var(--navy-600)" }}>{msg}</p>}
           {ai && (
             <div className="card" style={{ marginBottom: 10, background: "var(--bg)" }}>
               <div className="card-b" style={{ fontSize: 12.5 }}>
