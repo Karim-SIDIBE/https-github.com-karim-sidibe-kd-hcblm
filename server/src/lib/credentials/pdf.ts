@@ -38,9 +38,9 @@ export type CertificateData = {
 /** Per-level accents matching the branded templates (N1 blue, N2 green, N3 gold).
  *  dateX = measured center of each template's "Date de délivrance" rule line. */
 const LEVEL_STYLE: Record<1 | 2 | 3, { name: string; accent: string; dateX: number }> = {
-  1: { name: "#1E5AA6", accent: "#2B5EA7", dateX: 0.212 },
+  1: { name: "#1E5AA6", accent: "#2B5EA7", dateX: 0.228 },
   2: { name: "#17513F", accent: "#1E5B4F", dateX: 0.228 },
-  3: { name: "#111111", accent: "#B4691E", dateX: 0.212 },
+  3: { name: "#111111", accent: "#B4691E", dateX: 0.205 },
 };
 
 function templatePath(level: 1 | 2 | 3, dir?: string): string | null {
