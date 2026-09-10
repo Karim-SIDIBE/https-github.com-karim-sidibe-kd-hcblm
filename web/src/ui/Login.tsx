@@ -12,7 +12,6 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [phone, setPhone] = useState("");
   const [website, setWebsite] = useState(""); // honeypot — must stay empty
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
@@ -37,7 +36,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     if (!acceptTerms) { setError(t("signup.mustAccept")); return; }
     setBusy(true); setError(null);
     try {
-      await api.register({ name: name.trim(), email: email.trim(), password, phone: phone.trim() || undefined, acceptTerms, marketingOptIn, ...(website ? { website } as any : {}) });
+      await api.register({ name: name.trim(), email: email.trim(), password, acceptTerms, marketingOptIn, ...(website ? { website } as any : {}) });
       setMode("verify"); setInfo(t("signup.codeSent", { email }));
     } catch (err: any) { setError(err?.message || t("signup.fail")); }
     finally { setBusy(false); }
@@ -80,7 +79,6 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         <p className="muted" style={{ textAlign: "center" }}>{t("signup.subtitle", { operator: brand.operator })}</p>
         <label>{t("signup.fullName")}<input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" required /></label>
         <label>{t("login.email")}<input value={email} onChange={(e) => setEmail(e.target.value)} type="email" autoComplete="email" placeholder={t("ph.email")} required /></label>
-        <label>{t("signup.phone")} <span className="muted">{t("common.optional")}</span><input value={phone} onChange={(e) => setPhone(e.target.value)} type="tel" autoComplete="tel" placeholder="+225 07 00 00 00 00" /></label>
         <label>{t("login.password")}<input value={password} onChange={(e) => setPassword(e.target.value)} type="password" autoComplete="new-password" minLength={10} placeholder={t("signup.passwordMin")} required /></label>
         {/* honeypot: hidden from users, tab-skipped */}
         <input value={website} onChange={(e) => setWebsite(e.target.value)} name="website" tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: "-9999px", width: 1, height: 1 }} />
