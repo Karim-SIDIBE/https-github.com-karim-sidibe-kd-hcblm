@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { businessDaysBetween, slaAlertDue, SLA_ALERT_BUSINESS_DAYS } from "./sla.js";
+import { businessDaysBetween, dueReminderStage, slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_REMINDER_STAGES } from "./sla.js";
 
 // Reference anchor: 2026-06-01 is a Monday.
 const MON = new Date("2026-06-01T09:00:00Z");
@@ -27,4 +27,13 @@ test("alert fires only at/after 5 business days", () => {
   assert.equal(slaAlertDue(MON, new Date("2026-06-05T23:59:00Z")), false); // Fri = 4 days
   assert.equal(slaAlertDue(MON, new Date("2026-06-08T09:00:00Z")), true); // Mon = 5 days
   assert.equal(SLA_ALERT_BUSINESS_DAYS, 5);
+});
+
+test("relances multi-étages : 0 avant J+3, puis 1, 2 (J+5), 3 (J+7)", () => {
+  // MON = lundi 01/06 ; jeudi 04/06 = 3 j ouvrés ; lundi 08/06 = 5 ; mercredi 10/06 = 7.
+  assert.equal(dueReminderStage(MON, new Date("2026-06-03T09:00:00Z")), 0);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-04T09:00:00Z")), 1);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-08T09:00:00Z")), 2);
+  assert.equal(dueReminderStage(MON, new Date("2026-06-10T09:00:00Z")), 3);
+  assert.equal(SLA_REMINDER_STAGES.length, 3);
 });

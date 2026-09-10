@@ -328,6 +328,10 @@ export type ExerciseMeta = { timeMs?: number; feedbackViewed?: boolean; response
 //  - the FINAL quiz while below its pass threshold (the learner MUST retake
 //    it to unlock Bloc 4 — freezing a failed attempt would block the course);
 //  - PEER / PROFILE / PAM (idempotent identity data), video positions.
+/** Boîte des notifications d'administration certification (même destinataire
+ *  que les alertes SLA du job quotidien). */
+const PROJECT_ADMIN_EMAIL = "admin@kompetences.net";
+
 const FROZEN_ITEM_TYPES: ItemType[] = [
   "MICRO_SESSION", "CASE_STUDY", "GUIDED_SCENARIOS", "FIELD_APPLICATION",
   "SELF_ASSESSMENT", "ACTION_PLAN", "JOURNAL_ENTRY",
@@ -358,10 +362,13 @@ function textOfData(data: unknown): string {
  * Progressive Bloc 4 (« Amélioration » — déblocage séquentiel) :
  *  - a journal micro-entry opens only once its J+n date is reached, `n` days
  *    after the completion of micro-session 4.3 (the notification schedule) ;
- *  - Section 5 (the final micro-session) opens after sections 1–3. The journal
- *    NEVER gates the final submission (K-HCBLM v2.2, Pilier 5 : « la plateforme
- *    ne bloque jamais la soumission d'un journal incomplet ») — missing entries
- *    are sanctioned by rubric criterion S1, not by a technical lock.
+ *  - Section 5 (the final micro-session) opens after sections 1–3 AND the
+ *    submission of the LAST journal micro-entry (decision produit 09/2026) :
+ *    la Section 5 se remplit en fin de parcours et sa soumission fait foi
+ *    comme date de dépôt complet (départ de l'horloge SLA + 1re notification
+ *    admin). Une entrée INTERMÉDIAIRE manquée ne bloque pas (elle reste
+ *    sanctionnée par le critère S1) — seul le dernier jalon (J+max) verrouille,
+ *    pour qu'un apprenant ayant sauté une entrée ne soit pas bloqué à vie.
  * Server-enforced so the offline queue can never bypass the sequence.
  */
 function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, blockIndex: number, itemType: ItemType, itemKey: string) {
@@ -387,7 +394,18 @@ function assertBloc4ItemUnlocked(ctx: Awaited<ReturnType<typeof loadContext>>, b
     if (missingSections.length > 0) {
       throw new EngineError(423, "section_locked", "La Section 5 s'ouvre après les sections 1 à 3.");
     }
+    const lastDay = lastJournalDay(cert);
+    if (lastDay != null && !done.has(`J+${lastDay}`)) {
+      throw new EngineError(423, "section_locked",
+        `La Section 5 se remplit en fin de parcours : elle s'ouvre après la saisie de la dernière micro-entrée du journal (J+${lastDay}).`);
+    }
   }
+}
+
+/** Dernier jalon du journal du Bloc 4 (J+max), ou null sans journal. */
+function lastJournalDay(cert: { payload: { journal: { entries: { day: number }[] } } }): number | null {
+  const days = cert.payload.journal.entries.map((e) => e.day);
+  return days.length ? Math.max(...days) : null;
 }
 
 /** Plancher de rédaction du Bloc 4, opposable côté serveur (la file hors-ligne
@@ -473,6 +491,20 @@ export async function completeItem(
     await dispatchEvent("PROJECT_SUBMITTED", {
       enrollmentId, learnerId: ctx.enrollment.userId, courseId: ctx.enrollment.courseId, blockIndex,
     }, ctx.enrollment.course.organizationId);
+    // 1re notification admin : la Section 5 n'étant ouverte qu'après la dernière
+    // micro-entrée du journal, sa soumission = dépôt COMPLET du dossier — c'est
+    // elle qui démarre l'engagement de délai (les rappels J+3/J+5/J+7 ouvrés
+    // suivent via le job SLA).
+    await enqueueNotification({
+      enrollmentId, recipientKind: "ADMIN", recipient: PROJECT_ADMIN_EMAIL,
+      subject: `Projet complet à évaluer — ${ctx.enrollment.user.name}`,
+      body:
+        `${ctx.enrollment.user.name} (${ctx.enrollment.user.email}) a terminé son parcours ` +
+        `« ${ctx.enrollment.courseVersion.title} » : le projet de certification (Bloc 4) est déposé au complet ` +
+        `(journal inclus). Engagement de retour : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés — ` +
+        `assignez un évaluateur depuis la console (Projets Bloc 4).`,
+      provider: "project-complete",
+    });
   }
   // Exercise-submission webhook (§5.4): pass learner response + PAM + context so
   // an external service can generate contextualised feedback.
@@ -590,14 +622,69 @@ export async function assignEvaluator(enrollmentId: string, evaluatorId: string,
   return updated;
 }
 
-/** Full project record for verification / reporting (§6.3 metadata). */
+/** Full project record for verification / reporting (§6.3 metadata), enrichi
+ *  pour le poste d'évaluation :
+ *  - `sections` RECOMPOSÉES en direct depuis les complétions FIGÉES, dans
+ *    l'ordre du parcours (le stockage jsonb ne préserve pas l'ordre des clés)
+ *    — la Section 4 (journal) est recomposée même si le dossier avait été
+ *    assemblé avant la fin du journal (auto-guérison des dossiers historiques) ;
+ *  - `sectionMeta` : date de dépôt en face de chaque section ;
+ *  - `journalEntries` : les micro-entrées J+n datées, avec leur texte ;
+ *  - `submittedAt` effectif = date du DERNIER élément déposé (c'est elle qui
+ *    fait foi pour l'évaluation). */
 export async function getProjectSubmission(enrollmentId: string) {
   const submission = await prisma.projectSubmission.findUnique({
     where: { enrollmentId },
-    include: { evaluator: { select: { id: true, name: true, email: true } } },
+    include: {
+      evaluator: { select: { id: true, name: true, email: true } },
+      enrollment: {
+        select: {
+          courseVersion: { select: { content: true } },
+          completions: { select: { blockIndex: true, itemKey: true, completedAt: true, data: true } },
+        },
+      },
+    },
   });
   if (!submission) throw new EngineError(404, "no_submission", "Aucun projet soumis pour cette inscription");
-  return submission;
+  const { enrollment, ...record } = submission;
+
+  const content = enrollment.courseVersion.content as {
+    blocks?: { type: string; payload?: { sections?: { title: string }[]; journal?: { entries?: { day: number }[] } } }[];
+  } | null;
+  const cert = content?.blocks?.find((b) => b.type === "CERTIFICATION");
+  if (!cert?.payload?.sections?.length) return record;
+
+  const byKey = new Map(enrollment.completions
+    .filter((c) => c.blockIndex === submission.blockIndex)
+    .map((c) => [c.itemKey, c] as const));
+
+  const journalEntries = (cert.payload.journal?.entries ?? []).map((e) => {
+    const c = byKey.get(`J+${e.day}`);
+    return { day: e.day, completedAt: c?.completedAt?.toISOString() ?? null, text: textOfData(c?.data) };
+  });
+  const journalTexts = journalEntries.filter((e) => e.text).map(({ day, text }) => ({ day, text }));
+  const lastJournalAt = journalEntries.reduce<Date | null>((acc, e) => {
+    const d = e.completedAt ? new Date(e.completedAt) : null;
+    return d && (!acc || d > acc) ? d : acc;
+  }, null);
+
+  const parts = cert.payload.sections.map((sec, i) => {
+    if (i === 3) return { title: sec.title, submittedAt: lastJournalAt, journal: true, text: composeJournalChapter(journalTexts) };
+    const c = byKey.get(projectSectionKey(i));
+    return { title: sec.title, submittedAt: c?.completedAt ?? null, journal: false, text: textOfData(c?.data) };
+  });
+  const effectiveSubmittedAt = parts.reduce<Date>((acc, p) => (p.submittedAt && p.submittedAt > acc ? p.submittedAt : acc), record.submittedAt);
+
+  return {
+    ...record,
+    submittedAt: effectiveSubmittedAt,
+    content: {
+      ...(typeof record.content === "object" && record.content !== null ? record.content as Record<string, unknown> : {}),
+      sections: Object.fromEntries(parts.map((p) => [p.title, p.text])),
+    },
+    sectionMeta: parts.map((p) => ({ title: p.title, submittedAt: p.submittedAt ? p.submittedAt.toISOString() : null, journal: p.journal })),
+    journalEntries,
+  };
 }
 
 /**
@@ -622,12 +709,17 @@ export async function listEvaluationQueue() {
   return subs.map((s) => {
     const content = s.enrollment.courseVersion.content as { blocks?: { type: string; payload?: { rubric?: unknown; journal?: { entries?: { day: number }[] } } }[] } | null;
     const b4 = content?.blocks?.find((b) => b.type === "CERTIFICATION");
+    // La date qui fait foi est celle du DERNIER élément déposé : la Section 5
+    // est désormais verrouillée jusqu'à la fin du journal, mais les dossiers
+    // historiques ont pu être assemblés avant — on prend le max.
+    const lastJournalAt = s.enrollment.completions.reduce<Date>((acc, c) =>
+      (c.completedAt && c.completedAt > acc ? c.completedAt : acc), s.submittedAt);
     return {
       enrollmentId: s.enrollmentId,
       learner: { name: s.enrollment.user.name, email: s.enrollment.user.email },
       courseId: s.enrollment.courseId,
       courseTitle: s.enrollment.courseVersion.title,
-      submittedAt: s.submittedAt,
+      submittedAt: lastJournalAt,
       revisionStatus: s.revisionStatus,
       scoreTotal: s.scoreTotal,
       draftAt: s.draftAt,
@@ -1317,10 +1409,12 @@ export async function projectState(enrollmentId: string) {
   const sections = cert.payload.sections.map((sec, i) => {
     if (i === 3) return { key: "journal", title: sec.title, helpText: sec.helpText, auto: true as const, done: journalDone, text: composeJournalChapter(journalTexts), locked: false };
     const key = projectSectionKey(i);
-    // Section 5 opens after sections 1–3 only : the journal NEVER locks the
-    // final submission (K-HCBLM v2.2, Pilier 5) — missing entries are graded
-    // down by rubric criterion S1 instead.
-    const locked = i === 4 && [0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k));
+    // Section 5 se remplit en fin de parcours : ouverte après les sections 1–3
+    // ET la saisie de la DERNIÈRE micro-entrée du journal (J+max). Une entrée
+    // intermédiaire manquée ne bloque pas — sanctionnée par le critère S1.
+    const lastDay = lastJournalDay(cert);
+    const locked = i === 4 && ([0, 1, 2].map(projectSectionKey).some((k) => !byKey.has(k))
+      || (lastDay != null && !byKey.has(`J+${lastDay}`)));
     const saved = textOfData(byKey.get(key)?.data);
     const prefill = saved ? undefined : sec.prefillFromMomentAncrage ? sectionPrefill() : i === 1 ? solutionPrefill() : undefined;
     return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: saved, locked, ...(prefill ? { prefill } : {}) };

@@ -325,6 +325,11 @@ export type ProjectDetail = {
   revisionStatus: string; scoreTotal: number | null; feedback: string | null;
   criteria: { label?: string; points: number }[] | null;
   evaluator: { id: string; name: string } | null; submittedAt: string;
+  /** Ordre du parcours + date de dépôt de chaque section (le jsonb ne
+   *  préserve pas l'ordre des clés de `content.sections`). */
+  sectionMeta?: { title: string; submittedAt: string | null; journal: boolean }[];
+  /** Micro-entrées du journal (Section 4), datées, avec leur texte. */
+  journalEntries?: { day: number; completedAt: string | null; text: string }[];
 };
 
 // --- endpoints ---

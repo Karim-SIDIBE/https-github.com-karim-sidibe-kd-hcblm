@@ -994,6 +994,9 @@ model ProjectSubmission {
   gridVersion    String?
   /// Day+5 SLA: set once the admin alert has fired (idempotent).
   slaAlertedAt   DateTime?
+  /// Relances SLA multi-étages (0 = aucune ; 1 = J+3 ouvrés ; 2 = J+5 ;
+  /// 3 = J+7 — engagement atteint). Idempotent par étage.
+  slaStage       Int            @default(0)
   /// Brouillon de notation de l'évaluateur (socle §8.6) : la suggestion IA ne
   /// s'affiche qu'APRÈS saisie et enregistrement du score humain.
   draftScores    Json?

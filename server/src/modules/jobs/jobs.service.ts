@@ -7,7 +7,7 @@ import { CourseContent } from "../../domain/content-model.js";
 import { computeResume } from "../../domain/engine/resume.js";
 import { dueStage, daysInactive, type Stage } from "../../domain/engine/reengagement.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
-import { slaAlertDue, SLA_ALERT_BUSINESS_DAYS, SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
+import { businessDaysBetween, dueReminderStage, SLA_REMINDER_STAGES, SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { generateNudge } from "../../lib/ai/nudge.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
@@ -19,32 +19,46 @@ const MS_PER_DAY = 86_400_000;
 const ADMIN_EMAIL = "admin@kompetences.net";
 
 /**
- * Bloc 4 SLA enforcement (spec §6.3, AC#14) — alert the course administrator
- * when a submitted certification project has not been evaluated within
- * 5 business days. Idempotent per submission via `slaAlertedAt`.
+ * Bloc 4 SLA enforcement (spec §6.3, AC#14 — renforcé, décision produit
+ * 09/2026) : après la notification de dépôt complet (immédiate), le job
+ * quotidien relance l'administrateur par ÉTAGES tant qu'un projet soumis n'est
+ * pas évalué — J+3 ouvrés (rappel), J+5 (urgence, 2 jours restants), J+7
+ * (engagement atteint). Idempotent par étage via `slaStage`. La date qui fait
+ * foi est celle du DERNIER élément déposé (journal compris — dossiers
+ * historiques assemblés avant la fin du journal).
  */
 export async function runProjectSlaAlerts(now: Date = new Date()) {
   const pending = await prisma.projectSubmission.findMany({
-    where: { evaluatedAt: null, slaAlertedAt: null },
-    include: { enrollment: { include: { user: true } }, evaluator: true },
+    where: { evaluatedAt: null, slaStage: { lt: SLA_REMINDER_STAGES.length } },
+    include: {
+      enrollment: { include: { user: true, completions: { where: { itemType: "JOURNAL_ENTRY" }, select: { completedAt: true } } } },
+      evaluator: true,
+    },
   });
-  const alerted: { enrollmentId: string; submittedAt: Date; evaluator: string | null }[] = [];
+  const alerted: { enrollmentId: string; submittedAt: Date; stage: number; evaluator: string | null }[] = [];
 
   for (const s of pending) {
-    if (!slaAlertDue(s.submittedAt, now)) continue;
-    const who = s.evaluator ? `assigné à ${s.evaluator.name}` : "non encore assigné";
+    const submittedAt = s.enrollment.completions.reduce<Date>((acc, c) =>
+      (c.completedAt && c.completedAt > acc ? c.completedAt : acc), s.submittedAt);
+    const due = dueReminderStage(submittedAt, now);
+    if (due <= s.slaStage) continue;
+    const st = SLA_REMINDER_STAGES[due - 1]!;
+    const days = businessDaysBetween(submittedAt, now);
+    const remaining = Math.max(0, SLA_TURNAROUND_BUSINESS_DAYS - days);
+    const who = s.evaluator ? `assigné à ${s.evaluator.name}` : "NON ENCORE ASSIGNÉ";
     await enqueueNotification({
       enrollmentId: s.enrollmentId, recipientKind: "ADMIN", recipient: ADMIN_EMAIL,
-      subject: `SLA dépassé — projet de ${s.enrollment.user.name} sans évaluation`,
+      subject: `${st.label} — projet de ${s.enrollment.user.name} sans évaluation (J+${days} ouvrés)`,
       body:
-        `Le projet de certification de ${s.enrollment.user.name} a été soumis le ` +
-        `${s.submittedAt.toISOString().slice(0, 10)} et n'a pas reçu d'évaluation après ` +
-        `${SLA_ALERT_BUSINESS_DAYS} jours ouvrés (engagement : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés). ` +
-        `Évaluateur : ${who}. Merci d'intervenir pour préserver l'engagement de délai.`,
+        `Le projet de certification de ${s.enrollment.user.name} est complet depuis le ` +
+        `${submittedAt.toISOString().slice(0, 10)} et n'a toujours pas d'évaluation après ` +
+        `${days} jours ouvrés (engagement : ${SLA_TURNAROUND_BUSINESS_DAYS} jours ouvrés — ` +
+        `${remaining > 0 ? `${remaining} jour(s) ouvré(s) restant(s)` : "délai atteint"}). ` +
+        `Évaluateur : ${who}. Relance ${due}/${SLA_REMINDER_STAGES.length}.`,
       provider: "project-sla",
     });
-    await prisma.projectSubmission.update({ where: { id: s.id }, data: { slaAlertedAt: now } });
-    alerted.push({ enrollmentId: s.enrollmentId, submittedAt: s.submittedAt, evaluator: s.evaluator?.name ?? null });
+    await prisma.projectSubmission.update({ where: { id: s.id }, data: { slaStage: due, slaAlertedAt: now } });
+    alerted.push({ enrollmentId: s.enrollmentId, submittedAt, stage: due, evaluator: s.evaluator?.name ?? null });
   }
   return { scanned: pending.length, alerted };
 }
