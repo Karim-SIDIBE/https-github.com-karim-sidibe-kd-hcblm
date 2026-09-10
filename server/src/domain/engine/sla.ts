@@ -32,6 +32,27 @@ export function slaAlertDue(submittedAt: Date, now: Date): boolean {
   return businessDaysBetween(submittedAt, now) >= SLA_ALERT_BUSINESS_DAYS;
 }
 
+/** Rappels multi-étages (décision produit 09/2026) : après la notification de
+ *  dépôt complet (immédiate, à la soumission de la Section 5), le job
+ *  quotidien relance tant que le projet n'est pas évalué — J+2, J+4, J+6 et
+ *  J+7 ouvrés. Destinataires : les admins toujours ; l'évaluateur aussi dès
+ *  qu'il est assigné. Mieux vaut trop de relances que pas assez. */
+export const SLA_REMINDER_STAGES = [
+  { stage: 1, afterBusinessDays: 2, label: "Rappel" },
+  { stage: 2, afterBusinessDays: 4, label: "Relance" },
+  { stage: 3, afterBusinessDays: 6, label: "Urgence — 1 jour ouvré restant" },
+  { stage: 4, afterBusinessDays: SLA_TURNAROUND_BUSINESS_DAYS, label: "Engagement de délai atteint" },
+] as const;
+
+/** Étape de relance due (la plus avancée) pour un dossier non évalué ;
+ *  0 = aucune relance due pour l'instant. Pure, testée. */
+export function dueReminderStage(submittedAt: Date, now: Date): number {
+  const days = businessDaysBetween(submittedAt, now);
+  let due = 0;
+  for (const s of SLA_REMINDER_STAGES) if (days >= s.afterBusinessDays) due = s.stage;
+  return due;
+}
+
 function utcDay(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
 }

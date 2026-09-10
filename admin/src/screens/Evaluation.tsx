@@ -14,12 +14,18 @@ const STATUS: Record<string, { cls: string; label: string }> = {
   NOT_CERTIFIED: { cls: "pill--red", label: "Non certifié" },
 };
 
-/** Ordre du parcours : « Micro-session 4.2 — … » → 402. Les titres sans numéro
- *  gardent leur ordre d'arrivée, après les micro-sessions numérotées. */
+/** Ordre du parcours — clé primaire : le numéro de SECTION (« Section 4 »
+ *  avant « Section 5 », quel que soit le numéro de micro-session) ; repli sur
+ *  le numéro de micro-session, puis fin de liste. Utilisé seulement quand le
+ *  serveur ne fournit pas `sectionMeta` (déjà ordonné). */
 function sectionOrder(title: string): number {
-  const m = title.match(/(\d+)[.,](\d+)/);
-  return m ? Number(m[1]) * 100 + Number(m[2]) : Number.MAX_SAFE_INTEGER;
+  const sec = title.match(/section\s*(\d+)/i);
+  if (sec) return Number(sec[1]) * 100;
+  const ms = title.match(/(\d+)[.,](\d+)/);
+  return ms ? Number(ms[1]) * 100 + Number(ms[2]) : Number.MAX_SAFE_INTEGER;
 }
+
+const frDate = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleDateString("fr-FR") : null);
 
 /** Dates du journal S1 en pastilles : vert = jour de saisie distinct,
  *  orange = plusieurs entrées saisies le même jour (rattrapage cumulé),
@@ -176,13 +182,37 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>Copie de l'apprenant</div>
           {Object.keys(sections).length === 0 ? <p className="muted" style={{ fontSize: 13 }}>{detail ? "Aucune section." : "Chargement…"}</p>
-            // Copies affichées dans l'ORDRE DU PARCOURS (micro-session 4.1 → 4.5) :
-            // l'évaluateur suit la logique de continuité de la conception.
-            : Object.entries(sections)
-              .sort(([a], [b]) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, "fr"))
-              .map(([title, body]) => (
-                <div className="section" key={title}><h4>{title}</h4><p>{body}</p></div>
-              ))}
+            // Copies affichées dans l'ORDRE DU PARCOURS (Section 1 → 5) — ordre
+            // fourni par le serveur (sectionMeta), avec la date de dépôt en face
+            // de chaque section et les micro-entrées datées dans la Section 4.
+            : (detail?.sectionMeta?.length
+              ? detail.sectionMeta.map((m) => ({ title: m.title, body: sections[m.title] ?? "", submittedAt: m.submittedAt, journal: m.journal }))
+              : Object.entries(sections)
+                .sort(([a], [b]) => sectionOrder(a) - sectionOrder(b) || a.localeCompare(b, "fr"))
+                .map(([title, body]) => ({ title, body, submittedAt: null as string | null, journal: false }))
+            ).map((s) => (
+              <div className="section" key={s.title}>
+                <div className="row between" style={{ gap: 8, alignItems: "baseline" }}>
+                  <h4 style={{ margin: 0 }}>{s.title}</h4>
+                  <span className={`pill pill--sm ${s.submittedAt ? "pill--soft" : "pill--warn"}`} style={{ flexShrink: 0 }}>
+                    {s.submittedAt ? `déposée le ${frDate(s.submittedAt)}` : "non déposée"}
+                  </span>
+                </div>
+                {s.journal && (detail?.journalEntries?.length ?? 0) > 0 ? (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                    {detail!.journalEntries!.map((e) => (
+                      <div key={e.day} style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10 }}>
+                        <div className="row" style={{ gap: 8, alignItems: "center" }}>
+                          <b style={{ fontSize: 12.5 }}>J+{e.day}</b>
+                          <span className={`pill pill--sm ${e.completedAt ? "pill--soft" : "pill--red"}`}>{e.completedAt ? frDate(e.completedAt) : "manquante"}</span>
+                        </div>
+                        {e.text ? <p style={{ margin: "4px 0 0" }}>{e.text}</p> : <p className="muted" style={{ margin: "4px 0 0", fontSize: 12.5 }}>— aucune entrée saisie</p>}
+                      </div>
+                    ))}
+                  </div>
+                ) : <p>{s.body}</p>}
+              </div>
+            ))}
 
           <div className="eyebrow" style={{ margin: "20px 0 6px" }}>Grille d'évaluation</div>
           {crit.length > 0 && !ai && (
