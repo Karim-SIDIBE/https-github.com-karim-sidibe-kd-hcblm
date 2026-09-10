@@ -12,6 +12,14 @@ contre-vérification serveur→fournisseur qui fait foi.
 
 Pour CinetPay : `docs/ops/premier-paiement-reel.md` (toujours valable).
 
+**Tant que le fournisseur actif est `manual`** : l'achat en ligne B2C est
+suspendu — au clic « Acheter » (tunnel invité comme achat connecté), le client
+voit « *Paiement en ligne disponible bientôt — contactez nos services pour
+tout besoin.* », sans création de compte ni de commande. Le staff et les
+commandes d'organisation (virement B2B) ne sont pas concernés. La bascule du
+réglage vers un agrégateur configuré rouvre l'achat instantanément, sans mise
+en production.
+
 ## Vue d'ensemble
 
 | | PayDunya | InTouch (TouchPay) |
