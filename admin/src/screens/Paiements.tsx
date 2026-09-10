@@ -94,7 +94,7 @@ export function Paiements() {
       <div className="card">
         <div className="card-b">
           <h3 style={{ margin: 0 }}>🔀 Fournisseur de paiement actif</h3>
-          <p className="muted" style={{ fontSize: 12.5 }}>Les nouveaux checkouts partent sur le fournisseur actif ; les webhooks de TOUS les agrégateurs restent acceptés en permanence (un paiement engagé se confirme sur son fournisseur d'origine).</p>
+          <p className="muted" style={{ fontSize: 12.5 }}>Les nouveaux checkouts partent sur le fournisseur actif ; les webhooks de TOUS les agrégateurs restent acceptés en permanence (un paiement engagé se confirme sur son fournisseur d'origine). Tant que « Virement (constat manuel) » est actif, l'achat en ligne B2C est suspendu — les clients voient « Paiement en ligne disponible bientôt » ; basculer sur un agrégateur configuré rouvre l'achat.</p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {providers.map((p) => (
               <div key={p.key} style={{ ...statCell, border: p.active ? "2px solid var(--accent, #E4620F)" : "1px solid var(--border, #e3e6ec)" }}>

@@ -176,11 +176,26 @@ export async function getOrder(principal: Principal, orderId: string) {
 /** Démarre un règlement sur le FOURNISSEUR ACTIF (checkout hébergé, ou
  *  références de virement pour `manual`). Réutilise le paiement INITIATED
  *  existant du même fournisseur (anti double-débit). */
+/** Suspension de l'achat en ligne B2C : tant que le fournisseur ACTIF est
+ *  `manual`, un particulier ne peut pas déclencher de checkout — on affiche
+ *  « bientôt disponible » plutôt que d'exiger un virement dans un tunnel
+ *  e-commerce. Le staff (tests, régularisations) et les commandes
+ *  d'organisation (virement B2B assumé) restent servis. La bascule du réglage
+ *  `payment_provider` vers un agrégateur configuré lève le verrou — aucune
+ *  mise en production nécessaire. */
+async function assertOnlineCheckoutOpen() {
+  if ((await getActiveProvider()).key === "manual") {
+    throw new PaymentError(503, "online_payment_unavailable",
+      "Paiement en ligne disponible bientôt — contactez nos services pour tout besoin.");
+  }
+}
+
 export async function startCheckout(principal: Principal, orderId: string) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { product: true } });
   if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
   await assertOrderAccess(principal, order);
   if (order.status !== "PENDING") throw new PaymentError(409, "order_not_pending", `Commande déjà ${order.status}`);
+  if (!isStaff(principal.role) && !order.buyerOrgId) await assertOnlineCheckoutOpen();
 
   const provider = await getActiveProvider();
   const providerId = PROVIDER_ENUM[provider.key];
@@ -627,6 +642,9 @@ export async function guestCheckout(input: { courseId: string; currency: string;
   if (!paywall.paid || !paywall.product) {
     throw new PaymentError(409, "course_free", "Ce parcours est en accès libre — créez simplement un compte pour vous y inscrire");
   }
+  // Verrou AVANT toute création de compte ou de commande : aucun effet de
+  // bord tant que le paiement en ligne n'est pas ouvert.
+  await assertOnlineCheckoutOpen();
   const email = input.email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } })
     ?? await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
