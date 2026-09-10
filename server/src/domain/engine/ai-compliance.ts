@@ -84,6 +84,25 @@ export function sharesConsecutiveWords(a: string, b: string, n: number): boolean
   return false;
 }
 
+/** Sérialisation canonique (clés triées récursivement) : deux objets égaux
+ *  champ à champ donnent la même chaîne, quel que soit l'ordre de stockage
+ *  des clés (jsonb ne le préserve pas). */
+export function stableStringify(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(stableStringify).join(",")}]`;
+  if (v && typeof v === "object") {
+    return `{${Object.keys(v).sort().map((k) => `${JSON.stringify(k)}:${stableStringify((v as Record<string, unknown>)[k])}`).join(",")}}`;
+  }
+  return JSON.stringify(v) ?? "null";
+}
+
+/** Empreinte d'une grille d'évaluation (§8.8) : identique ⇔ la grille est la
+ *  même champ à champ. Republier un cours sans toucher la grille conserve
+ *  l'empreinte — la calibration reste valable ; toute révision réelle de la
+ *  grille la change — recalibration exigée. */
+export function rubricFingerprint(rubric: unknown): string {
+  return stableStringify(rubric);
+}
+
 export type CriterionVerification = { label: string; ok: boolean; issues: string[] };
 export type EvidenceVerdict = { ok: boolean; perCriterion: CriterionVerification[] };
 
