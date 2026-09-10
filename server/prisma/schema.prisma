@@ -1357,6 +1357,8 @@ enum OrderStatus {
 enum PaymentProviderId {
   CINETPAY
   FLUTTERWAVE
+  PAYDUNYA
+  INTOUCH
   MANUAL // constat staff : virements B2B, ventes hors-ligne, dév & tests
 }
 

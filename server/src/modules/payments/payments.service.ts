@@ -16,7 +16,7 @@ import { prisma } from "../../db/prisma.js";
 import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { isStaff } from "../../domain/auth/permissions.js";
-import { formatAmount, isCurrency, toAmountMinor, type Currency } from "../../domain/payments/money.js";
+import { formatAmount, isCurrency, toAmountMajor, toAmountMinor, type Currency } from "../../domain/payments/money.js";
 import { ProviderError, type ProviderKey } from "../../lib/payments/provider.js";
 import { PROVIDERS, PROVIDER_ENUM, getActiveProvider } from "../../lib/payments/registry.js";
 import { receiptPdf } from "../../lib/payments/receipt.js";
@@ -203,6 +203,76 @@ export async function startCheckout(principal: Principal, orderId: string) {
   return { paymentId: payment.id, provider: provider.key, paymentUrl: checkout.paymentUrl, instructions: checkout.instructions ?? null };
 }
 
+/** Page-pont InTouch (TouchPay) : HTML minimal aux couleurs de la charte qui
+ *  charge le script officiel TouchPay et lance sendPaymentInfos(...) avec les
+ *  paramètres injectés côté serveur — l'intégration web documentée d'InTouch
+ *  est un widget, pas une URL hébergée ; cette page fait le pont avec notre
+ *  contrat fournisseur (paymentUrl). Servie SANS session : l'identifiant de
+ *  paiement (cuid non devinable) est la capacité, et la page n'expose que le
+ *  libellé et le montant. Un paiement déjà terminé renvoie au suivi. */
+export async function intouchBridgePage(paymentId: string): Promise<string> {
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+  const payment = await prisma.payment.findUnique({ where: { id: paymentId }, include: { order: { include: { product: true } } } });
+  if (!payment || payment.provider !== "INTOUCH") throw new PaymentError(404, "payment_not_found", "Paiement introuvable");
+  const order = payment.order;
+  const returnUrl = `${env.APP_BASE_URL ?? env.PUBLIC_BASE_URL}/#/order/${order.id}`;
+  if (payment.status !== "INITIATED" || order.status !== "PENDING") {
+    return `<!doctype html><html lang="fr"><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${esc(returnUrl)}"><body><a href="${esc(returnUrl)}">Retour au suivi de commande…</a></body></html>`;
+  }
+  const buyer = order.buyerUserId ? await prisma.user.findUnique({ where: { id: order.buyerUserId } }) : null;
+  const [firstName, ...restName] = (buyer?.name ?? "Client DECLICK").trim().split(/\s+/);
+  const p = {
+    orderNumber: payment.id,
+    agency: env.INTOUCH_AGENCY_CODE ?? "",
+    secure: env.INTOUCH_SECURE_CODE ?? "",
+    domain: env.INTOUCH_DOMAIN ?? "",
+    // Le secret d'URL est notre « signature » de notification (voir intouch.ts) ;
+    // order_number garantit la corrélation quel que soit le payload InTouch.
+    notify: `${env.PUBLIC_BASE_URL}/api/v1/payments/webhooks/intouch?s=${encodeURIComponent(env.INTOUCH_NOTIFY_SECRET ?? "")}&order_number=${encodeURIComponent(payment.id)}`,
+    returnUrl,
+    amount: toAmountMajor(payment.amountMinor, payment.currency as Currency),
+    city: "Abidjan",
+    email: buyer?.email ?? "client@declick.digital",
+    firstName: firstName ?? "Client",
+    lastName: restName.join(" ") || "DECLICK",
+    phone: "",
+  };
+  // JSON injecté en <script> : « < » échappé pour interdire toute sortie de balise.
+  const json = JSON.stringify(p).replace(/</g, "\\u003c");
+  return `<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Paiement sécurisé — DECLICK DIGITAL</title>
+<style>
+  body{font-family:Poppins,system-ui,sans-serif;background:#F7F8FB;color:#182B56;display:grid;place-items:center;min-height:100vh;margin:0}
+  .card{background:#fff;border:1px solid #E4E8EF;border-radius:20px;box-shadow:0 8px 20px rgba(24,43,86,.10);padding:28px;max-width:380px;text-align:center}
+  .amount{font-size:26px;font-weight:800;margin:6px 0}
+  .muted{color:#7C8AA3;font-size:13.5px}
+  button{background:#E8650A;color:#fff;border:0;border-radius:999px;padding:12px 22px;font-weight:700;font-size:15px;cursor:pointer;margin-top:14px}
+</style></head>
+<body><div class="card">
+  <p class="muted">Paiement sécurisé par InTouch (TouchPay)</p>
+  <h1 style="font-size:18px;margin:4px 0">${esc(order.product.title)}</h1>
+  <p class="amount">${esc(formatAmount(payment.amountMinor, payment.currency as Currency))}</p>
+  <p class="muted" id="msg">Ouverture de la fenêtre de paiement…</p>
+  <button id="pay">Payer maintenant</button>
+  <p class="muted" style="margin-top:14px"><a href="${esc(returnUrl)}" style="color:#E8650A">← Retour au suivi de commande</a></p>
+</div>
+<script src="${esc(env.INTOUCH_SCRIPT_URL)}"></script>
+<script>
+  var P = ${json};
+  function launch(){
+    try {
+      /* Signature documentée du widget TouchPay v2. */
+      sendPaymentInfos(P.orderNumber, P.agency, P.secure, P.domain, P.notify, P.returnUrl, P.amount, P.city, P.email, P.firstName, P.lastName, P.phone);
+    } catch (e) {
+      document.getElementById("msg").textContent = "Le module de paiement n'a pas pu démarrer — réessayez ou revenez au suivi de commande.";
+    }
+  }
+  document.getElementById("pay").addEventListener("click", launch);
+  window.addEventListener("load", launch);
+</script></body></html>`;
+}
+
 // --- règlement -----------------------------------------------------------------
 
 /** Transition PENDING → PAID + émission du droit d'accès, atomique et
@@ -322,8 +392,10 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
     throw e;
   }
 
+  // La référence du webhook est notre id (CinetPay, Flutterwave, InTouch) OU la
+  // référence fournisseur stockée au checkout (PayDunya : token de facture).
   const payment = v.providerRef
-    ? await prisma.payment.findFirst({ where: { id: v.providerRef, provider: providerId }, include: { order: true } })
+    ? await prisma.payment.findFirst({ where: { provider: providerId, OR: [{ id: v.providerRef }, { providerRef: v.providerRef }] }, include: { order: true } })
     : null;
   if (!payment) {
     await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { processedAt: new Date() } });
@@ -340,7 +412,9 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
 
   // Contre-vérification systématique auprès du fournisseur (le webhook n'est
   // qu'un réveil — pour CinetPay, /v2/payment/check est la seule vérité).
-  const check = await provider.fetchStatus(payment.id).catch((e) => {
+  // On interroge par la référence FOURNISSEUR stockée (pour PayDunya c'est le
+  // token de facture, différent de notre id) ; repli sur notre id sinon.
+  const check = await provider.fetchStatus(payment.providerRef ?? payment.id).catch((e) => {
     if (e instanceof ProviderError) return { status: "UNKNOWN" as const, raw: e.message };
     throw e;
   });
@@ -547,7 +621,9 @@ const nameFromEmail = (email: string) => {
  *  Le numéro mobile n'est jamais demandé ici : il est saisi sur la page de
  *  paiement de l'agrégateur (Mobile Money), par l'agrégateur. */
 export async function guestCheckout(input: { courseId: string; currency: string; email: string }, ip?: string) {
-  const paywall = await coursePaywall(input.courseId);
+  // :courseId accepte le slug lisible (liens vitrine) comme la fiche cours.
+  const courseId = await resolveCourseId(input.courseId);
+  const paywall = await coursePaywall(courseId);
   if (!paywall.paid || !paywall.product) {
     throw new PaymentError(409, "course_free", "Ce parcours est en accès libre — créez simplement un compte pour vous y inscrire");
   }
@@ -555,14 +631,14 @@ export async function guestCheckout(input: { courseId: string; currency: string;
   const user = await prisma.user.findUnique({ where: { email } })
     ?? await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
 
-  if (await hasCourseEntitlement(user.id, input.courseId)) {
+  if (await hasCourseEntitlement(user.id, courseId)) {
     // Déjà titulaire : pas de double vente — on (re)envoie un lien de connexion.
     if (!user.passwordHash) {
       const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
       await sendEmail(user.email, "Votre accès à votre parcours",
         `Bonjour ${user.name},\n\nVous avez déjà accès à ce parcours. Connectez-vous en un clic (lien valable 72 h) : ${appUrl}/#/magic/${await magicLinkFor(user.id)}\n— ${env.BRAND_NAME}`);
     }
-    await audit({ actorId: user.id, action: "payment.guest.already_entitled", targetType: "Course", targetId: input.courseId, ip });
+    await audit({ actorId: user.id, action: "payment.guest.already_entitled", targetType: "Course", targetId: courseId, ip });
     return { alreadyEntitled: true as const };
   }
 
@@ -614,7 +690,7 @@ export async function recheckOrder(principal: Principal, orderId: string) {
     if (key === "manual") { results.push({ paymentId: p.id, provider: key, check: "—", action: "manual_constat_requis" }); continue; }
     if (p.status !== "INITIATED") { results.push({ paymentId: p.id, provider: key, check: "—", action: `deja_${p.status.toLowerCase()}` }); continue; }
 
-    const check = await PROVIDERS[key].fetchStatus(p.id).catch((e: unknown) => ({
+    const check = await PROVIDERS[key].fetchStatus(p.providerRef ?? p.id).catch((e: unknown) => ({
       status: "UNKNOWN" as const, raw: e instanceof Error ? e.message : String(e),
     }));
     let action: string;
