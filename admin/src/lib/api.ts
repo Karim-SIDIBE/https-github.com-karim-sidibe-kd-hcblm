@@ -230,6 +230,12 @@ export type RubricSuggestion = {
   feedback?: string; criteria?: SuggestedCriterion[]; suggestedScore?: number | null;
   aiGenerated?: boolean; provider?: string; gridVersion?: string; blocked?: boolean;
 };
+/** Aide à la preuve pré-notation : citations vérifiées par critère, SANS
+ *  aucun score (dérogation §8.6 encadrée — le serveur ne les envoie pas). */
+export type EvidenceAssist = {
+  id?: string; provider?: string | null; aiGenerated?: boolean;
+  criteria: { label: string; citations?: string[]; absence?: string; verified: boolean }[];
+};
 /** Calibration de la suggestion (§8.8) — clé (parcours, modèle, version de grille). */
 export type AiCalibrationStatus = {
   active: boolean; provider: string; gridVersion: string | null;
@@ -494,6 +500,7 @@ export const api = {
     return res.blob();
   },
   rubricSuggestion: (enrollmentId: string) => req<RubricSuggestion>("POST", `/enrollments/${enrollmentId}/rubric-suggestion`, {}),
+  evidenceAssist: (enrollmentId: string) => req<EvidenceAssist>("POST", `/enrollments/${enrollmentId}/evidence-assist`, {}),
   saveEvaluationDraft: (enrollmentId: string, criteria: { index: number; points: number; evidence?: string }[]) =>
     req<{ draft: unknown; draftAt: string }>("PUT", `/enrollments/${enrollmentId}/evaluation/draft`, { criteria }),
   aiCalibrationStatus: (courseId: string) => req<AiCalibrationStatus>("GET", `/ai-calibration/${courseId}`),

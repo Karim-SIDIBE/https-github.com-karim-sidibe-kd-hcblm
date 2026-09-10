@@ -13,7 +13,7 @@ import { hasPermission } from "../../domain/auth/permissions.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { env } from "../../config/env.js";
 import { aiAvailable } from "../../lib/ai/client.js";
-import { generateFormativeFeedback, gradingModel, suggestRubricScores } from "../../lib/ai/feedback.js";
+import { generateFormativeFeedback, gradingModel, suggestRubricScores, toEvidenceAssist } from "../../lib/ai/feedback.js";
 import type { Principal } from "../../lib/auth.js";
 
 export class FeedbackError extends Error {
@@ -135,17 +135,14 @@ export function currentAiProvider(): string {
 
 const gridVersionOf = (v: { version: number; id: string }) => `v${v.version} (${v.id})`;
 
-/**
- * Suggestion de notation (socle §8). Gardes, DANS L'ORDRE :
+/** Gardes COMMUNES de l'assistance IA sur le projet Bloc 4, dans l'ordre :
  *   §8.2 — réservée à l'évaluateur ASSIGNÉ au dossier ou à un administrateur ;
  *   §8.7 — indisponible en procédure de recours (notation à l'aveugle) ;
  *   §8.8 — indisponible tant que la calibration (parcours + modèle + version
- *          de grille) n'est pas passée ;
- *   §8.6 — ne s'affiche qu'APRÈS saisie et enregistrement du score humain ;
- *   §8.4/§8.5 — preuve vérifiée par la plateforme, tout-ou-rien : un critère
- *          en échec → aucune suggestion (l'échec est journalisé, §8.10).
- */
-export async function requestRubricSuggestion(enrollmentId: string, principal?: Principal) {
+ *          de grille) n'est pas passée.
+ *  §8.6 (score humain d'abord) n'est PAS ici : il ne s'applique qu'à la
+ *  suggestion CHIFFRÉE, pas à l'aide à la preuve. */
+async function loadProjectAiContext(enrollmentId: string, principal?: Principal) {
   const { enrollment, content } = await load(enrollmentId);
   const cert = content.blocks.find((b) => b.type === "CERTIFICATION");
   if (cert?.type !== "CERTIFICATION") throw new FeedbackError(409, "no_block", "Bloc 4 absent");
@@ -158,11 +155,11 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
   if (principal) {
     const isAdmin = hasPermission(principal.role, "user:manage");
     if (!isAdmin && submission?.evaluatorId !== principal.id) {
-      throw new FeedbackError(403, "not_assigned", "Suggestion réservée à l'évaluateur assigné au dossier ou à un administrateur (§8.2)");
+      throw new FeedbackError(403, "not_assigned", "Assistance réservée à l'évaluateur assigné au dossier ou à un administrateur (§8.2)");
     }
   }
   if ((submission?.appealStage ?? 0) > 0) {
-    throw new FeedbackError(409, "ai_unavailable_recours", "Suggestion indisponible en procédure de recours : la notation du 2e/3e évaluateur est à l'aveugle (§8.7)");
+    throw new FeedbackError(409, "ai_unavailable_recours", "Assistance indisponible en procédure de recours : la notation du 2e/3e évaluateur est à l'aveugle (§8.7)");
   }
 
   const rubric = cert.payload.rubric;
@@ -173,19 +170,32 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
     orderBy: { createdAt: "desc" },
   });
   if (!calibration?.passed) {
-    throw new FeedbackError(409, "ai_not_calibrated", `Suggestion désactivée sur ce parcours : calibration non passée pour ${provider} / ${gridVersion} (5 dossiers de référence, écart ≤ 8 pts, ≤ 1 bande — §8.8)`);
-  }
-
-  // §8.6 — prévention de l'ancrage : le score humain d'ABORD.
-  const draft = (submission?.draftScores ?? null) as { points?: unknown }[] | null;
-  const draftComplete = Array.isArray(draft) && draft.length === rubric.criteria.length
-    && draft.every((d) => typeof d?.points === "number");
-  if (!draftComplete) {
-    throw new FeedbackError(409, "human_score_required", "La suggestion ne s'affiche qu'après saisie et enregistrement du score humain pour chaque critère (§8.6)");
+    throw new FeedbackError(409, "ai_not_calibrated", `Assistance désactivée sur ce parcours : calibration non passée pour ${provider} / ${gridVersion} (5 dossiers de référence, écart ≤ 8 pts, ≤ 1 bande — §8.8)`);
   }
 
   const text = submissionText(submission?.content ?? project?.data);
   if (!text) throw new FeedbackError(422, "empty_submission", "Le projet ne contient pas de texte à évaluer");
+
+  return { enrollment, cert, rubric, gridVersion, provider, submission, text };
+}
+
+/** UN SEUL appel modèle par dossier : l'aide à la preuve et la suggestion
+ *  chiffrée partagent le même enregistrement. La dernière suggestion stockée
+ *  pour le même (modèle, version de grille) est réutilisée si sa preuve se
+ *  vérifie ENCORE contre le texte courant du dossier (une re-soumission après
+ *  demande de remise change le texte → nouvel appel) ; les enregistrements
+ *  bloqués (§8.5) ne sont jamais réutilisés. Déterminisme assuré : les deux
+ *  vues montrent les mêmes citations et les mêmes scores. */
+async function getOrCreateRubricAssessment(ctx: Awaited<ReturnType<typeof loadProjectAiContext>>) {
+  const { enrollment, cert, rubric, gridVersion, provider, text } = ctx;
+  const existing = await prisma.aiAssessment.findFirst({
+    where: { enrollmentId: enrollment.id, kind: "RUBRIC_SUGGESTION", provider, gridVersion, blocked: false },
+    orderBy: { createdAt: "desc" },
+  });
+  if (Array.isArray(existing?.criteria)) {
+    const stored = existing.criteria as unknown as Parameters<typeof verifyEvidence>[1];
+    if (stored.length === rubric.criteria.length && verifyEvidence(rubric.criteria, stored, text).ok) return existing;
+  }
 
   // §8.3 : grille complète + livrable intégral — rien d'autre.
   const suggestion = await suggestRubricScores({ projectText: text, criteria: rubric.criteria, threshold: rubric.threshold });
@@ -196,9 +206,9 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
     ...c, verification: verdict.perCriterion[i] ?? { label: c.label, ok: false, issues: ["missing"] },
   }));
 
-  const stored = await prisma.aiAssessment.create({
+  return prisma.aiAssessment.create({
     data: {
-      enrollmentId, blockIndex: cert.index, itemKey: "project", kind: "RUBRIC_SUGGESTION",
+      enrollmentId: enrollment.id, blockIndex: cert.index, itemKey: "project", kind: "RUBRIC_SUGGESTION",
       feedback: verdict.ok ? suggestion.summary : "Suggestion bloquée (§8.5) : la preuve d'au moins un critère n'a pas pu être vérifiée. L'évaluateur note sans assistance.",
       criteria: criteriaWithVerification as unknown as Prisma.InputJsonValue,
       suggestedScore: verdict.ok ? suggestion.suggestedTotal : null,
@@ -206,12 +216,48 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
       gridVersion, blocked: !verdict.ok,
     },
   });
-  if (!verdict.ok) {
+}
+
+/**
+ * Suggestion de notation (socle §8) : gardes communes (§8.2/§8.7/§8.8), puis
+ *   §8.6 — ne s'affiche qu'APRÈS saisie et enregistrement du score humain ;
+ *   §8.4/§8.5 — preuve vérifiée par la plateforme, tout-ou-rien : un critère
+ *          en échec → aucune suggestion (l'échec est journalisé, §8.10).
+ */
+export async function requestRubricSuggestion(enrollmentId: string, principal?: Principal) {
+  const ctx = await loadProjectAiContext(enrollmentId, principal);
+
+  // §8.6 — prévention de l'ancrage : le score humain d'ABORD.
+  const draft = (ctx.submission?.draftScores ?? null) as { points?: unknown }[] | null;
+  const draftComplete = Array.isArray(draft) && draft.length === ctx.rubric.criteria.length
+    && draft.every((d) => typeof d?.points === "number");
+  if (!draftComplete) {
+    throw new FeedbackError(409, "human_score_required", "La suggestion ne s'affiche qu'après saisie et enregistrement du score humain pour chaque critère (§8.6)");
+  }
+
+  const stored = await getOrCreateRubricAssessment(ctx);
+  if (stored.blocked) {
     // §8.5 tout-ou-rien : rien ne s'affiche ; l'enregistrement bloqué reste
     // pour le taux de blocage par critère (§8.10).
     throw new FeedbackError(409, "suggestion_blocked", "Aucune suggestion pour ce dossier : preuve non vérifiable sur au moins un critère (§8.5). Notez sans assistance.");
   }
   return stored;
+}
+
+/**
+ * Aide à la preuve (pré-notation, décision produit 09/2026) : mêmes gardes
+ * §8.2/§8.7/§8.8 que la suggestion, mais SANS le verrou §8.6 — en retour,
+ * AUCUN score, bande ni commentaire ne transite : uniquement les citations
+ * (ou déclarations d'absence) VÉRIFIÉES par la plateforme, par critère, comme
+ * surligneur du dossier. Par-critère (pas tout-ou-rien) : un critère dont la
+ * preuve échoue s'affiche « non vérifié » sans priver l'évaluateur des autres.
+ * La suggestion chiffrée du même enregistrement reste verrouillée par §8.6.
+ */
+export async function requestEvidenceAssist(enrollmentId: string, principal?: Principal) {
+  const ctx = await loadProjectAiContext(enrollmentId, principal);
+  const stored = await getOrCreateRubricAssessment(ctx);
+  const criteria = toEvidenceAssist((Array.isArray(stored.criteria) ? stored.criteria : []) as unknown as Parameters<typeof toEvidenceAssist>[0]);
+  return { id: stored.id, createdAt: stored.createdAt, provider: stored.provider, aiGenerated: stored.aiGenerated, criteria };
 }
 
 // ---------------------------------------------------------------------------

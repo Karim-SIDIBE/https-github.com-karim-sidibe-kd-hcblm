@@ -493,8 +493,8 @@ export async function completeItem(
     }, ctx.enrollment.course.organizationId);
     // 1re notification admin : la Section 5 n'étant ouverte qu'après la dernière
     // micro-entrée du journal, sa soumission = dépôt COMPLET du dossier — c'est
-    // elle qui démarre l'engagement de délai (les rappels J+3/J+5/J+7 ouvrés
-    // suivent via le job SLA).
+    // elle qui démarre l'engagement de délai (les rappels J+2/J+4/J+6/J+7
+    // ouvrés suivent via le job SLA).
     await enqueueNotification({
       enrollmentId, recipientKind: "ADMIN", recipient: PROJECT_ADMIN_EMAIL,
       subject: `Projet complet à évaluer — ${ctx.enrollment.user.name}`,
