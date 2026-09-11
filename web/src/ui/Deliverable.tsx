@@ -197,6 +197,11 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
 
       <div className="hf-card hf-card--stripe-orange stack">
         <div className="hf-pam"><span className="tag">{t("mission")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
+        {/* Le journal est NOTÉ (critère S1) : rappeler ici ce que la grille
+            attend (charge de travail, signal de surcharge, ajustement) —
+            l'apprenant qui suit seulement la consigne ne doit plus pouvoir
+            échouer S1 sans avoir été prévenu au moment d'écrire. */}
+        {spec.kind === "journal" && <p className="meta" style={{ margin: 0 }}>{t("dl.journalNote")}</p>}
 
         {structured ? (
           <>
