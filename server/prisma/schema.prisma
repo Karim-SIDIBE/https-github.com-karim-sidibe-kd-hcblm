@@ -1267,8 +1267,15 @@ model AiAssessment {
   /// §8.5 : la preuve d'au moins un critère a échoué → AUCUNE suggestion
   /// affichée ; l'enregistrement reste pour le taux de blocage (§8.10).
   blocked        Boolean          @default(false)
+  /// Instant où les SCORES de la suggestion ont été montrés à l'évaluateur
+  /// (§8.6). Null = jamais révélés — cas de l'aide à la preuve seule, qui
+  /// n'affiche que les citations : la concordance §8.10 ne doit alors pas
+  /// compter ce dossier (l'évaluateur ne peut pas « valider sans évaluer »
+  /// des notes qu'il n'a jamais vues).
+  revealedAt     DateTime?
   /// §8.9 : score humain final par critère ([{label, points}]), lié à la
-  /// notation. §8.10 : concordance IA/humain.
+  /// notation SEULEMENT si la suggestion avait été révélée avant elle.
+  /// §8.10 : concordance IA/humain.
   finalScores    Json?
   /// §8.9 : indicateur de copie de la preuve par critère ([bool]), calculé
   /// côté serveur (preuve humaine ≡ preuve IA après normalisation).

@@ -725,6 +725,13 @@ export async function aiComplianceIndicators(courseId?: string) {
   }
 
   const pct = (n: number, d: number) => (d === 0 ? null : Math.round((n / d) * 100));
+  // Plancher statistique des alertes comportementales (concordance, identité
+  // des preuves) : sur 1 ou 2 dossiers, une coïncidence donne 100 % et
+  // accusait l'évaluateur de « valider sans évaluer » (retour terrain). Le
+  // pourcentage s'affiche dès le premier dossier ; l'ALERTE attend un
+  // échantillon. Le taux de blocage, lui, mesure le descripteur, pas
+  // l'évaluateur : il alerte sans plancher.
+  const ALERT_MIN_SAMPLE = 5;
   const criteria = [...byCriterion.entries()].map(([label, a]) => {
     const blockRatePct = pct(a.evidenceFailed, a.requests);
     const concordancePct = pct(a.concordant, a.graded);
@@ -733,8 +740,8 @@ export async function aiComplianceIndicators(courseId?: string) {
       label,
       requests: a.requests,
       blockRatePct, blockAlert: blockRatePct != null && blockRatePct > 20,
-      concordancePct, concordanceAlert: concordancePct != null && concordancePct > 90,
-      evidenceIdentityPct, identityAlert: evidenceIdentityPct === 100,
+      concordancePct, concordanceAlert: concordancePct != null && concordancePct > 90 && a.graded >= ALERT_MIN_SAMPLE,
+      evidenceIdentityPct, identityAlert: evidenceIdentityPct === 100 && a.copyTotal >= ALERT_MIN_SAMPLE,
     };
   });
 

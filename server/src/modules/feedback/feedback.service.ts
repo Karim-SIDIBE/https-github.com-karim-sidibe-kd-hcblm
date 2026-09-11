@@ -264,9 +264,15 @@ async function getOrCreateRubricAssessment(ctx: Awaited<ReturnType<typeof loadPr
 
 /**
  * Suggestion de notation (socle §8) : gardes communes (§8.2/§8.7/§8.8), puis
- *   §8.6 — ne s'affiche qu'APRÈS saisie et enregistrement du score humain ;
+ *   §8.6 — ne s'affiche qu'APRÈS le score humain : brouillon complet par
+ *          critère, OU notation finale déjà enregistrée (relire un dossier
+ *          évalué avec la suggestion en regard est légitime — la décision
+ *          humaine est prise et scellée) ;
  *   §8.4/§8.5 — preuve vérifiée par la plateforme, tout-ou-rien : un critère
  *          en échec → aucune suggestion (l'échec est journalisé, §8.10).
+ * La PREMIÈRE révélation des scores est horodatée (`revealedAt`) : la
+ * concordance §8.10 ne compte que les dossiers où l'évaluateur a réellement
+ * vu la suggestion AVANT de figer sa note.
  */
 export async function requestRubricSuggestion(enrollmentId: string, principal?: Principal) {
   const ctx = await loadProjectAiContext(enrollmentId, principal);
@@ -275,7 +281,7 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
   const draft = (ctx.submission?.draftScores ?? null) as { points?: unknown }[] | null;
   const draftComplete = Array.isArray(draft) && draft.length === ctx.rubric.criteria.length
     && draft.every((d) => typeof d?.points === "number");
-  if (!draftComplete) {
+  if (!draftComplete && !ctx.submission?.evaluatedAt) {
     throw new FeedbackError(409, "human_score_required", "La suggestion ne s'affiche qu'après saisie et enregistrement du score humain pour chaque critère (§8.6)");
   }
 
@@ -284,6 +290,9 @@ export async function requestRubricSuggestion(enrollmentId: string, principal?: 
     // §8.5 tout-ou-rien : rien ne s'affiche ; l'enregistrement bloqué reste
     // pour le taux de blocage par critère (§8.10).
     throw new FeedbackError(409, "suggestion_blocked", "Aucune suggestion pour ce dossier : preuve non vérifiable sur au moins un critère (§8.5). Notez sans assistance.");
+  }
+  if (!stored.revealedAt) {
+    return prisma.aiAssessment.update({ where: { id: stored.id }, data: { revealedAt: new Date() } });
   }
   return stored;
 }

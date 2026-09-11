@@ -126,18 +126,25 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
     setPoints(crit.map((c) => ai.criteria!.find((s) => s.label === c.label)?.suggested ?? 0));
   }
   /** §8.6 : le champ de preuve démarre vide — toute copie depuis la suggestion
-   *  est une ACTION EXPLICITE ; le serveur journalise l'identité des preuves. */
+   *  est une ACTION EXPLICITE ; le serveur journalise l'identité des preuves.
+   *  CUMULATIVE : un critère peut réunir plusieurs extraits — chaque insertion
+   *  s'ajoute à la ligne, elle n'écrase pas la précédente. */
   function copyEvidence(i: number, text: string) {
-    setEvidence((ev) => ev.map((v, j) => (j === i ? text : v)));
+    setEvidence((ev) => ev.map((v, j) => (j === i ? (v.trim() ? `${v.trimEnd()}\n${text}` : text) : v)));
   }
+  const [gradedNow, setGradedNow] = useState(false);
   async function grade() {
     if (banded && evidence.some((e) => !e.trim())) { setMsg("Preuve manquante : chaque critère exige une citation exacte ou une déclaration d'absence (règle 3 du socle)."); return; }
     setBusy("grade"); setMsg(null);
     try {
       await api.gradeProject(item.enrollmentId, { criteria: points.map((p, i) => ({ index: i, points: p, evidence: evidence[i]?.trim() || undefined })), notes: notes.trim() || undefined });
       const label = decision === "CERTIFIED" ? "certifié" : decision === "RESUBMIT" ? "remise demandée" : "non certifié";
-      setMsg(`Décision enregistrée : ${total}/100 — ${label}.`);
+      setGradedNow(true);
       onDone();
+      // La note humaine est scellée → la suggestion IA se dévoile maintenant
+      // d'elle-même, en regard (§8.6 satisfait par la notation finale).
+      try { setAi(await api.rubricSuggestion(item.enrollmentId)); } catch { /* indisponible : la décision est enregistrée quand même */ }
+      setMsg(`Décision enregistrée : ${total}/100 — ${label}. La suggestion IA s'affiche ci-dessus pour comparaison.`);
     } catch (e: any) { setMsg(e?.message || "Erreur"); } finally { setBusy(""); }
   }
 
@@ -236,10 +243,10 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                 onClick={evidenceHelp}>
                 {busy === "helper" ? "Recherche des preuves…" : helper ? "🔎 Preuves affichées sous chaque critère" : "🔎 Aide à la preuve (IA, sans note)"}
               </button>
-              <button className="btn btn--sm btn--ghost" disabled={busy === "ai" || !calib?.active || !draftSaved || item.appealStage > 0}
+              <button className="btn btn--sm btn--ghost" disabled={busy === "ai" || !calib?.active || (!draftSaved && item.scoreTotal == null) || item.appealStage > 0}
                 title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
                   : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8) — panneau « Suggestion automatisée » ci-dessous"
-                  : !draftSaved ? "Enregistrez d'abord vos scores : la suggestion ne s'affiche qu'après le score humain (§8.6)" : undefined}
+                  : !draftSaved && item.scoreTotal == null ? "Enregistrez d'abord vos scores : la suggestion ne s'affiche qu'après le score humain (§8.6)" : undefined}
                 onClick={suggest}>
                 {busy === "ai" ? "Analyse du dossier…" : "✨ Suggestion de note (IA, indicative)"}
               </button>
@@ -263,20 +270,26 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
                       {(s.citations ?? []).map((c, k) => (
                         <div key={k} className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
                           <span className="muted" style={{ fontSize: 12, fontStyle: "italic", flex: 1 }}>« {c} » <span style={{ fontStyle: "normal" }}>✓ vérifiée dans le dossier</span></span>
-                          <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — l'identité des preuves est journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, c)}>Reprendre</button>
+                          {!gradedNow && item.scoreTotal == null && <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — l'identité des preuves est journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, c)}>Reprendre</button>}
                         </div>
                       ))}
                       {s.absence && (
                         <div className="row" style={{ gap: 6, alignItems: "flex-start", marginTop: 3 }}>
                           <span className="muted" style={{ fontSize: 12, fontStyle: "italic", flex: 1 }}>Déclaration d'absence : {s.absence}</span>
-                          <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, s.absence!)}>Reprendre</button>
+                          {!gradedNow && item.scoreTotal == null && <button className="btn btn--sm btn--ghost" style={{ flexShrink: 0 }} title="Copie explicite — journalisée (§8.6/§8.9)" onClick={() => copyEvidence(i, s.absence!)}>Reprendre</button>}
                         </div>
                       )}
                     </div>
                   ))}
                 </div>
-                <button className="btn btn--sm" onClick={applySuggestion}>Préremplir la grille avec ces notes</button>
-                <span className="muted" style={{ marginLeft: 8 }}>La décision reste humaine : ajustez avant d'enregistrer. Votre preuve doit démontrer VOTRE lecture du dossier.</span>
+                {/* Dossier déjà noté (à l'instant ou avant l'ouverture) : la
+                    suggestion est une COMPARAISON — plus rien à préremplir. */}
+                {gradedNow || item.scoreTotal != null
+                  ? <span className="muted">Notation humaine déjà enregistrée — suggestion affichée pour comparaison uniquement.</span>
+                  : <>
+                    <button className="btn btn--sm" onClick={applySuggestion}>Préremplir la grille avec ces notes</button>
+                    <span className="muted" style={{ marginLeft: 8 }}>La décision reste humaine : ajustez avant d'enregistrer. Votre preuve doit démontrer VOTRE lecture du dossier.</span>
+                  </>}
               </div>
             </div>
           )}
