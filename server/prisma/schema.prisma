@@ -1267,6 +1267,12 @@ model AiAssessment {
   /// §8.5 : la preuve d'au moins un critère a échoué → AUCUNE suggestion
   /// affichée ; l'enregistrement reste pour le taux de blocage (§8.10).
   blocked        Boolean          @default(false)
+  /// Empreinte (sha256) du texte EXACT du dossier analysé. La réutilisation
+  /// d'une suggestion exige l'empreinte identique : tout changement du
+  /// contenu (p. ex. journal complété après coup) déclenche une réanalyse —
+  /// une citation encore vérifiable ne suffit pas, un AJOUT n'invalide
+  /// aucune citation. Null (historique) = jamais réutilisé.
+  textHash       String?
   /// Instant où les SCORES de la suggestion ont été montrés à l'évaluateur
   /// (§8.6). Null = jamais révélés — cas de l'aide à la preuve seule, qui
   /// n'affiche que les citations : la concordance §8.10 ne doit alors pas

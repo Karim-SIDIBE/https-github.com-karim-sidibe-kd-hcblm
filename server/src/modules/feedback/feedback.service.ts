@@ -5,12 +5,15 @@
  * feedback module, and persists an AiAssessment (auditable, advisory). Never
  * writes a RUBRIC_EVALUATION — the human evaluator endpoint remains the gate.
  */
+import { createHash } from "node:crypto";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { CourseContent, type Block, type CourseContent as CourseContentT } from "../../domain/content-model.js";
 import { checkCalibration, rubricFingerprint, verifyEvidence } from "../../domain/engine/ai-compliance.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
+import { composeJournalChapter } from "../../domain/engine/project.js";
+import { projectSectionKey } from "../../domain/engine/progress.js";
 import { env } from "../../config/env.js";
 import { aiAvailable } from "../../lib/ai/client.js";
 import { generateFormativeFeedback, gradingModel, suggestRubricScores, toEvidenceAssist } from "../../lib/ai/feedback.js";
@@ -217,29 +220,57 @@ async function loadProjectAiContext(enrollmentId: string, principal?: Principal)
     throw new FeedbackError(409, "ai_not_calibrated", `Assistance désactivée sur ce parcours : calibration non passée pour ${provider} / ${gridVersion} (5 dossiers de référence, écart ≤ 8 pts, ≤ 1 bande — §8.8)`);
   }
 
-  const text = submissionText(submission?.content ?? project?.data);
+  // L'IA lit le dossier RECOMPOSÉ EN DIRECT depuis les complétions — le même
+  // que celui affiché à l'évaluateur — jamais le texte figé à la soumission :
+  // sur un dossier historique (Section 5 déposée avant la fin du journal), le
+  // texte figé a une Section 4 vide et l'IA « ne voyait pas les journaux »
+  // (retour terrain 11/09). Repli sur le texte figé si la recomposition est
+  // impossible (contenu de cours illisible).
+  const text = liveProjectText(cert, enrollment.completions)
+    ?? submissionText(submission?.content ?? project?.data);
   if (!text) throw new FeedbackError(422, "empty_submission", "Le projet ne contient pas de texte à évaluer");
 
   return { enrollment, cert, rubric, gridVersion, provider, submission, text };
 }
 
+/** Texte intégral du projet recomposé depuis les complétions figées (sections
+ *  1-3 et 5 + chapitre journal auto-composé en Section 4) — miroir de
+ *  l'assemblage servi à la console (`getProjectSubmission`). */
+function liveProjectText(
+  cert: Extract<CourseContentT["blocks"][number], { type: "CERTIFICATION" }>,
+  completions: { blockIndex: number; itemKey: string; data: unknown }[],
+): string | null {
+  const byKey = new Map(completions.filter((c) => c.blockIndex === cert.index).map((c) => [c.itemKey, c] as const));
+  const journalTexts = cert.payload.journal.entries
+    .map((e) => ({ day: e.day, text: submissionText(byKey.get(`J+${e.day}`)?.data ?? null) }))
+    .filter((e) => e.text);
+  const parts = cert.payload.sections.map((sec, i) => ({
+    title: sec.title,
+    text: i === 3 ? composeJournalChapter(journalTexts) : submissionText(byKey.get(projectSectionKey(i))?.data ?? null),
+  }));
+  const text = parts.map((p) => `${p.title}\n${p.text}`).join("\n\n").trim();
+  return text || null;
+}
+
 /** UN SEUL appel modèle par dossier : l'aide à la preuve et la suggestion
  *  chiffrée partagent le même enregistrement. La dernière suggestion stockée
- *  pour le même (modèle, version de grille) est réutilisée si sa preuve se
- *  vérifie ENCORE contre le texte courant du dossier (une re-soumission après
- *  demande de remise change le texte → nouvel appel) ; les enregistrements
- *  bloqués (§8.5) ne sont jamais réutilisés. Déterminisme assuré : les deux
- *  vues montrent les mêmes citations et les mêmes scores. */
+ *  pour le même (modèle, version de grille) n'est réutilisée que si le texte
+ *  du dossier est STRICTEMENT identique (empreinte sha256) : toute évolution
+ *  du contenu — journal complété après coup, re-soumission après remise —
+ *  déclenche une réanalyse. (L'ancien critère « les citations se vérifient
+ *  encore » laissait passer les AJOUTS : une citation existante reste
+ *  vérifiable quand du contenu apparaît — l'IA restait sur sa première
+ *  impression, retour terrain 11/09.) Les enregistrements bloqués (§8.5) ne
+ *  sont jamais réutilisés. Déterminisme : mêmes citations et mêmes scores
+ *  dans les deux vues. */
 async function getOrCreateRubricAssessment(ctx: Awaited<ReturnType<typeof loadProjectAiContext>>) {
   const { enrollment, cert, rubric, gridVersion, provider, text } = ctx;
+  const textHash = createHash("sha256").update(text).digest("hex");
   const existing = await prisma.aiAssessment.findFirst({
-    where: { enrollmentId: enrollment.id, kind: "RUBRIC_SUGGESTION", provider, gridVersion, blocked: false },
+    where: { enrollmentId: enrollment.id, kind: "RUBRIC_SUGGESTION", provider, gridVersion, textHash, blocked: false },
     orderBy: { createdAt: "desc" },
   });
-  if (Array.isArray(existing?.criteria)) {
-    const stored = existing.criteria as unknown as Parameters<typeof verifyEvidence>[1];
-    if (stored.length === rubric.criteria.length && verifyEvidence(rubric.criteria, stored, text).ok) return existing;
-  }
+  if (Array.isArray(existing?.criteria) && existing.criteria.length === rubric.criteria.length) return existing;
 
   // §8.3 : grille complète + livrable intégral — rien d'autre.
   const suggestion = await suggestRubricScores({ projectText: text, criteria: rubric.criteria, threshold: rubric.threshold });
@@ -257,7 +288,7 @@ async function getOrCreateRubricAssessment(ctx: Awaited<ReturnType<typeof loadPr
       criteria: criteriaWithVerification as unknown as Prisma.InputJsonValue,
       suggestedScore: verdict.ok ? suggestion.suggestedTotal : null,
       aiGenerated: suggestion.aiGenerated, provider: suggestion.provider,
-      gridVersion, blocked: !verdict.ok,
+      gridVersion, textHash, blocked: !verdict.ok,
     },
   });
 }
