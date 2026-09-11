@@ -329,7 +329,10 @@ export type QcRegister = {
 export type ProjectDetail = {
   content: { sections?: Record<string, string> } | null;
   revisionStatus: string; scoreTotal: number | null; feedback: string | null;
-  criteria: { label?: string; points: number }[] | null;
+  /** Fiche de notation archivée (socle §6) : points, bande et preuve par
+   *  critère tels qu'enregistrés par l'évaluateur. */
+  criteria: { label?: string; weightPoints?: number; points: number; band?: number | null; evidence?: string | null }[] | null;
+  decision?: string | null; evaluatedAt?: string | null;
   evaluator: { id: string; name: string } | null; submittedAt: string;
   /** Ordre du parcours + date de dépôt de chaque section (le jsonb ne
    *  préserve pas l'ordre des clés de `content.sections`). */
