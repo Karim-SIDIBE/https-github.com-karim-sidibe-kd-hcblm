@@ -91,6 +91,19 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const decision = minimumsMissed.length >= 2 || total < 55 ? "NOT_CERTIFIED"
     : total >= threshold && minimumsMissed.length === 0 ? "CERTIFIED" : "RESUBMIT";
 
+  // Dossier déjà noté à l'ouverture → FICHE DE NOTATION en lecture (points,
+  // bande, preuve par critère + note IA en regard) à la place de la grille de
+  // saisie vierge. `renote` rouvre la grille pour la seconde notation d'une
+  // remise (REVISION_REQUESTED) — seule re-notation légitime hors recours.
+  const [renote, setRenote] = useState(false);
+  const [gradedNow, setGradedNow] = useState(false);
+  const sealed = item.scoreTotal != null && !gradedNow && !renote;
+  const fiche = sealed ? (detail?.criteria ?? null) : null;
+  const aiPointsOf = (label: string) => (ai?.criteria ?? []).find((s) => s.label === label)?.suggested ?? null;
+  const DECISION_LABEL: Record<string, { label: string; cls: string }> = {
+    CERTIFIED: { label: "Certifié", cls: "pill--green" }, RESUBMIT: { label: "Remise demandée", cls: "pill--warn" }, NOT_CERTIFIED: { label: "Non certifié", cls: "pill--red" },
+  };
+
   const [f2f, setF2f] = useState(false);
   async function assign(evaluatorId: string) {
     setBusy("assign"); setMsg(null);
@@ -132,7 +145,6 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   function copyEvidence(i: number, text: string) {
     setEvidence((ev) => ev.map((v, j) => (j === i ? (v.trim() ? `${v.trimEnd()}\n${text}` : text) : v)));
   }
-  const [gradedNow, setGradedNow] = useState(false);
   async function grade() {
     if (banded && evidence.some((e) => !e.trim())) { setMsg("Preuve manquante : chaque critère exige une citation exacte ou une déclaration d'absence (règle 3 du socle)."); return; }
     setBusy("grade"); setMsg(null);
@@ -233,26 +245,26 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
           <div className="eyebrow" style={{ margin: "20px 0 6px" }}>Grille d'évaluation</div>
           {crit.length > 0 && !ai && (
             <div className="row" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 8 }}>
-              <button className="btn btn--sm" disabled={busy === "draft"} onClick={saveDraft}>
+              {!sealed && <button className="btn btn--sm" disabled={busy === "draft"} onClick={saveDraft}>
                 {busy === "draft" ? "…" : draftSaved ? "Ré-enregistrer mes scores" : "Enregistrer mes scores (brouillon)"}
-              </button>
-              <button className="btn btn--sm btn--ghost" disabled={busy === "helper" || Boolean(helper) || !calib?.active || item.appealStage > 0}
+              </button>}
+              {!sealed && <button className="btn btn--sm btn--ghost" disabled={busy === "helper" || Boolean(helper) || !calib?.active || item.appealStage > 0}
                 title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
                   : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8)"
                   : "Affiche sous chaque critère les extraits du dossier vérifiés mot pour mot — sans aucune note"}
                 onClick={evidenceHelp}>
                 {busy === "helper" ? "Recherche des preuves…" : helper ? "🔎 Preuves affichées sous chaque critère" : "🔎 Aide à la preuve (IA, sans note)"}
-              </button>
+              </button>}
               <button className="btn btn--sm btn--ghost" disabled={busy === "ai" || !calib?.active || (!draftSaved && item.scoreTotal == null) || item.appealStage > 0}
                 title={item.appealStage > 0 ? "Indisponible en recours : notation à l'aveugle (§8.7)"
                   : !calib?.active ? "Calibration IA non passée sur ce parcours (§8.8) — panneau « Suggestion automatisée » ci-dessous"
                   : !draftSaved && item.scoreTotal == null ? "Enregistrez d'abord vos scores : la suggestion ne s'affiche qu'après le score humain (§8.6)" : undefined}
                 onClick={suggest}>
-                {busy === "ai" ? "Analyse du dossier…" : "✨ Suggestion de note (IA, indicative)"}
+                {busy === "ai" ? "Analyse du dossier…" : sealed ? "✨ Afficher la note IA en regard (comparaison)" : "✨ Suggestion de note (IA, indicative)"}
               </button>
               {helper && <span className="muted" style={{ fontSize: 11.5 }}>Extraits vérifiés mot pour mot par la plateforme, sans note — la suggestion chiffrée reste soumise à l'enregistrement de vos scores (§8.6).</span>}
               {!calib?.active && <span className="muted" style={{ fontSize: 11.5 }}>Suggestion désactivée : calibration §8.8 non passée{calib ? ` (${calib.provider})` : ""}.</span>}
-              {calib?.active && !draftSaved && <span className="muted" style={{ fontSize: 11.5 }}>Saisissez et enregistrez VOS scores avant de consulter la suggestion (§8.6).</span>}
+              {calib?.active && !sealed && !draftSaved && item.scoreTotal == null && <span className="muted" style={{ fontSize: 11.5 }}>Saisissez et enregistrez VOS scores avant de consulter la suggestion (§8.6).</span>}
             </div>
           )}
           {/* Les refus serveur (calibration §8.8, recours §8.7…) doivent se lire
@@ -293,7 +305,62 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
               </div>
             </div>
           )}
-          {crit.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>Grille indisponible.</p> : (<>
+          {crit.length === 0 ? <p className="muted" style={{ fontSize: 13 }}>Grille indisponible.</p> : sealed ? (
+            // FICHE DE NOTATION (lecture) : le dossier est déjà évalué — points,
+            // bande et preuve par critère tels qu'archivés (socle §6), avec la
+            // note IA en regard quand elle est affichée.
+            <div>
+              <div className="row between" style={{ gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 10 }}>
+                <span className="row" style={{ gap: 8, alignItems: "center" }}>
+                  {detail?.decision && DECISION_LABEL[detail.decision] && (
+                    <span className={`pill ${DECISION_LABEL[detail.decision]!.cls}`}>{DECISION_LABEL[detail.decision]!.label}</span>
+                  )}
+                  <b style={{ fontSize: 15 }}>{item.scoreTotal}/{maxTotal}</b>
+                  <span className="muted" style={{ fontSize: 12 }}>seuil {threshold}</span>
+                </span>
+                <span className="muted" style={{ fontSize: 12 }}>
+                  Notée{detail?.evaluatedAt ? ` le ${frDate(detail.evaluatedAt)}` : ""}{item.evaluator ? ` par ${item.evaluator.name}` : ""}
+                </span>
+              </div>
+              {!fiche?.length ? <p className="muted" style={{ fontSize: 13 }}>{detail ? "Détail par critère indisponible pour cette notation." : "Chargement de la fiche…"}</p>
+                : crit.map((c, i) => {
+                  const f = fiche.find((x) => x.label === c.label) ?? fiche[i];
+                  if (!f) return null;
+                  const aiPts = aiPointsOf(c.label);
+                  return (
+                    <div className="crit" key={c.label} style={{ display: "block" }}>
+                      <div className="row between" style={{ gap: 8 }}>
+                        <div className="lab">
+                          {c.label}
+                          <small>sur {c.weightPoints} pts{c.minPoints != null ? ` · minimum ${c.minPoints}` : ""}{c.origin ? ` · ${c.origin}` : ""}</small>
+                        </div>
+                        <div style={{ textAlign: "right", flexShrink: 0 }}>
+                          <div><b className="num" style={{ fontSize: 15 }}>{f.points}</b>/{c.weightPoints}{f.band != null ? <span className="muted" style={{ fontSize: 12 }}> · Bande {f.band}</span> : null}</div>
+                          {aiPts != null && (
+                            <div className="muted" style={{ fontSize: 12 }}>
+                              ✨ IA : {aiPts}/{c.weightPoints}
+                              <span style={{ marginLeft: 6, color: aiPts === f.points ? "var(--success)" : undefined }}>
+                                ({aiPts === f.points ? "identique" : `écart ${aiPts > f.points ? "+" : ""}${aiPts - f.points}`})
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      {f.evidence && <p className="muted" style={{ margin: "6px 0 0", fontSize: 12.5, fontStyle: "italic", borderLeft: "3px solid var(--line)", paddingLeft: 10 }}>Preuve : {f.evidence}</p>}
+                    </div>
+                  );
+                })}
+              {detail?.feedback && (
+                <div style={{ marginTop: 12 }}>
+                  <div className="eyebrow" style={{ marginBottom: 4 }}>Retour écrit à l'apprenant</div>
+                  <p style={{ margin: 0, fontSize: 13, whiteSpace: "pre-wrap" }}>{detail.feedback}</p>
+                </div>
+              )}
+              {!ai && calib?.active && item.appealStage === 0 && (
+                <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>Cliquez « ✨ Afficher la note IA en regard » ci-dessus pour comparer critère par critère.</p>
+              )}
+            </div>
+          ) : (<>
             {banded && <p className="muted" style={{ fontSize: 12, margin: "0 0 8px" }}>Notation PAR BANDE (socle §5) : bandes de la plus faible (à gauche) à la plus forte (à droite) — choisissez la bande la plus haute dont <b>tous</b> les éléments sont satisfaits, milieu de bande par défaut. La preuve (citation exacte ou déclaration d'absence) est obligatoire pour chaque critère.</p>}
             {crit.map((c, i) => (
               <div className="crit" key={c.label} style={{ display: "block" }}>
@@ -382,7 +449,14 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
         </div>
         <div className="df">
           <button className="btn" onClick={onClose}>Fermer</button>
-          <button className="btn btn--primary" disabled={busy === "grade" || crit.length === 0} onClick={grade}>{busy === "grade" ? "…" : "Enregistrer la note"}</button>
+          {/* Fiche scellée : pas de re-notation sauf remise (REVISION_REQUESTED,
+              seconde notation prévue par le socle §6) — le recours suit son
+              propre circuit à l'aveugle. */}
+          {sealed
+            ? (item.revisionStatus === "REVISION_REQUESTED" && (
+              <button className="btn btn--primary" onClick={() => setRenote(true)}>Noter la remise (nouvelle grille)</button>
+            ))
+            : <button className="btn btn--primary" disabled={busy === "grade" || crit.length === 0 || gradedNow} onClick={grade}>{busy === "grade" ? "…" : "Enregistrer la note"}</button>}
         </div>
       </aside>
     </>
