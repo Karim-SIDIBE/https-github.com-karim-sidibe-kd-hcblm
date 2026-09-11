@@ -681,6 +681,9 @@ export async function getProjectSubmission(enrollmentId: string) {
     content: {
       ...(typeof record.content === "object" && record.content !== null ? record.content as Record<string, unknown> : {}),
       sections: Object.fromEntries(parts.map((p) => [p.title, p.text])),
+      // `text` aussi recomposé en direct : le texte figé d'un dossier
+      // historique (Section 4 vide) ne doit plus être servi à personne.
+      text: parts.map((p) => `${p.title}\n${p.text}`).join("\n\n"),
     },
     sectionMeta: parts.map((p) => ({ title: p.title, submittedAt: p.submittedAt ? p.submittedAt.toISOString() : null, journal: p.journal })),
     journalEntries,
