@@ -1040,7 +1040,15 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
       await prisma.aiAssessment.update({
         where: { id: lastSuggestion.id },
         data: {
-          finalScores: breakdown.map((b) => ({ label: b.label, points: b.points })) as unknown as Prisma.InputJsonValue,
+          // Concordance (§8.10) SEULEMENT si les scores IA avaient été révélés
+          // AVANT cette note : un enregistrement issu de la seule aide à la
+          // preuve n'a jamais montré ses chiffres — l'évaluateur ne peut pas
+          // « valider sans évaluer » des notes qu'il n'a pas vues.
+          ...(lastSuggestion.revealedAt
+            ? { finalScores: breakdown.map((b) => ({ label: b.label, points: b.points })) as unknown as Prisma.InputJsonValue }
+            : {}),
+          // L'identité des preuves, elle, compte toujours : les CITATIONS de
+          // l'aide à la preuve étaient bien visibles et copiables.
           copyFlags: breakdown.map((b, i) => evidenceCopied(b.evidence ?? "", suggested[i])) as unknown as Prisma.InputJsonValue,
         },
       });
