@@ -224,6 +224,29 @@ export async function holdSession(sessionId: string, attendance: { participantId
   return prisma.f2fSession.findUnique({ where: { id: sessionId }, include: { attendance: true } });
 }
 
+/** Supprime un module (groupe) créé par erreur — réservé au SUPER ADMIN.
+ *  Refusé dès qu'un Open Badge a été émis dans le groupe : les liens de
+ *  vérification publics ne doivent jamais mourir. Sinon, tout le contenu du
+ *  groupe part en cascade (sessions, émargements, ancrages, journaux,
+ *  missions, auto-évaluations, décisions non certifiées). */
+export async function deleteModule(moduleId: string, principal: Principal) {
+  if (principal.role !== "SUPER_ADMIN") {
+    throw new F2fError(403, "forbidden", "La suppression d'un groupe est réservée au Super Admin");
+  }
+  const module = await prisma.f2fModule.findUnique({
+    where: { id: moduleId },
+    include: { _count: { select: { participants: true } } },
+  });
+  if (!module) throw new F2fError(404, "module_not_found", "Module FACE2FACE introuvable");
+  const credential = await prisma.f2fCredential.findFirst({ where: { participant: { moduleId } }, select: { id: true } });
+  if (credential) {
+    throw new F2fError(409, "credentials_issued",
+      "Des Open Badges ont été émis dans ce groupe — il ne peut plus être supprimé (les liens de vérification doivent rester valides). Archivez-le plutôt.");
+  }
+  await prisma.f2fModule.delete({ where: { id: moduleId } });
+  return { id: moduleId, title: module.title, participants: module._count.participants };
+}
+
 /** Annule une tenue de session saisie PAR ERREUR — réservé au SUPER ADMIN,
  *  dans les 24 h suivant la tenue. Efface l'émargement et rouvre ce que la
  *  tenue avait fermé (fiche d'ancrage si Session 1, créneaux du journal…).

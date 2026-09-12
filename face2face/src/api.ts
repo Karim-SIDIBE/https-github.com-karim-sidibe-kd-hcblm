@@ -205,6 +205,7 @@ export const api = {
   holdSession: (sessionId: string, attendance: { participantId: string; present: boolean; note?: string }[]) =>
     req<ModuleSession>("POST", `/f2f/sessions/${sessionId}/hold`, { attendance }),
   cancelHold: (sessionId: string) => req<ModuleSession>("DELETE", `/f2f/sessions/${sessionId}/hold`),
+  deleteModule: (moduleId: string) => req<{ id: string; title: string }>("DELETE", `/f2f/modules/${moduleId}`),
   certify: (pid: string, b: { criteria: { points: number; evidence?: string }[]; feedback?: string }) =>
     req<CertifyResult>("POST", `/f2f/participants/${pid}/certify`, b),
 
