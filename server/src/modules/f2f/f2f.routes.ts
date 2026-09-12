@@ -50,6 +50,7 @@ const anchorBody = z.object({
 
 const journalBody = z.object({
   periodIndex: z.number().int(),
+  entryIndex: z.number().int(),
   entryDate: z.string(),
   situation: z.string(),
   action: z.string(),

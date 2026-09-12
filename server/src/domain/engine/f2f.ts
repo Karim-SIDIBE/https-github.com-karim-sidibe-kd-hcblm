@@ -72,6 +72,14 @@ export function entriesPerPeriod(level: number): number {
   return Math.ceil(s.journalMin / s.periods);
 }
 
+/** Ouverture des entrées du Journal de Bord : l'entrée k (1..3) d'une période
+ *  s'ouvre à J+7·k après la tenue de la session qui ouvre la période — le
+ *  rythme hebdomadaire des déclencheurs DECLICK, adapté aux périodes terrain
+ *  de 4 semaines. Une entrée fermée est refusée par le service (423). */
+export function journalSlotOpensAt(sessionHeldAt: Date, entryIndex: number): Date {
+  return new Date(sessionHeldAt.getTime() + 7 * entryIndex * DAY_MS);
+}
+
 /** Relance journal « bienveillante » à mi-période : due quand la moitié de la
  *  période est écoulée et que le participant reste sous 2 entrées. */
 export function journalNudgeDue(input: { periodStart: Date; periodEnd: Date; now: Date; entries: number }): boolean {

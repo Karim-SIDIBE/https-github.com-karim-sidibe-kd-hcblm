@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { F2F_SHAPE, certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue } from "./f2f.js";
+import { F2F_SHAPE, certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue, journalSlotOpensAt } from "./f2f.js";
 
 test("formes K-SPEM v2.0 : 3/2/6 · 4/3/9 · 5/4/12", () => {
   assert.deepEqual(F2F_SHAPE[1], { sessions: 3, periods: 2, journalMin: 6, label: "Fondamentaux" });
@@ -79,6 +79,13 @@ test("rythme du journal : 3 entrées attendues par période à chaque niveau (V2
   assert.equal(entriesPerPeriod(1), 3);
   assert.equal(entriesPerPeriod(2), 3);
   assert.equal(entriesPerPeriod(3), 3);
+});
+
+test("créneaux du journal : J+7, J+14, J+21 après la session de la période", () => {
+  const held = new Date("2026-10-01T09:00:00Z");
+  assert.equal(journalSlotOpensAt(held, 1).toISOString(), "2026-10-08T09:00:00.000Z");
+  assert.equal(journalSlotOpensAt(held, 2).toISOString(), "2026-10-15T09:00:00.000Z");
+  assert.equal(journalSlotOpensAt(held, 3).toISOString(), "2026-10-22T09:00:00.000Z");
 });
 
 test("relance mi-période : due sous 2 entrées après la moitié, jamais avant ni au rythme", () => {

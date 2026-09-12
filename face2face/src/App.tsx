@@ -4,6 +4,7 @@ import {
   rubricFromCourseContent, fmtDate,
   type Principal, type MyModule, type Overview, type CertState, type ModuleRow, type ModuleDetail,
   type ModuleSession, type ParticipantRow, type Rubric, type CourseSummary, type UserRow, type Kpis,
+  type Cycle, type JournalSlot,
 } from "./api";
 
 /* ------------------------------------------------------------------ Marque - */
@@ -110,7 +111,7 @@ function AnchorCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
 
   return (
     <form className="card" onSubmit={save}>
-      <span className="eyebrow">Moment d'ancrage · Pilier 1</span>
+      <span className="eyebrow">Moment d'ancrage</span>
       <h2>Ma fiche d'ancrage</h2>
       {ov.anchor === null && frozen
         ? <p className="muted" style={{ fontSize: 12.5 }}>Aucune fiche déposée avant la fin de la Session 1.</p>
@@ -177,7 +178,7 @@ function SelfAssessmentCard({ ov, onSaved }: { ov: Overview; onSaved: () => void
   return (
     <div className="card">
       <div className="row between">
-        <div><span className="eyebrow">Auto-évaluation K-SPEM</span><h2>Ma confiance sur la compétence</h2></div>
+        <div><span className="eyebrow">Auto-évaluation</span><h2>Ma confiance sur la compétence</h2></div>
         {sa.delta != null && <span className={`pill ${sa.delta > 0 ? "ok" : "soft"}`}>{sa.delta > 0 ? `+${sa.delta}` : sa.delta} point{Math.abs(sa.delta) > 1 ? "s" : ""}</span>}
       </div>
       <Phase phase="ENTRY" label="À l'entrée (Session 1)" value={sa.entry} open={sa.entryOpen}
@@ -189,10 +190,58 @@ function SelfAssessmentCard({ ov, onSaved }: { ov: Overview; onSaved: () => void
   );
 }
 
-/** Journal de Bord : entrées figées à la soumission, 5 champs structurés. */
-function JournalCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
+/** Un cycle du parcours : la Mission Terrain engagée en fin de session, puis
+ *  les 3 entrées à créneaux du Journal de Bord de la période (J+7/14/21). */
+function MissionCard({ ov, cycle, onSaved }: { ov: Overview; cycle: Cycle; onSaved: () => void }) {
   const [open, setOpen] = useState(false);
-  const [periodIndex, setPeriodIndex] = useState(1);
+  const [text, setText] = useState("");
+  const [peerName, setPeerName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await api.addMission(ov.id, { sessionIndex: cycle.index, text, peerName: peerName || undefined }); setText(""); setPeerName(""); setOpen(false); onSaved(); }
+    catch (err) { setError(errMsg(err, "Enregistrement impossible")); }
+    finally { setBusy(false); }
+  }
+
+  const m = cycle.mission;
+  return (
+    <div className="card">
+      <span className="eyebrow">Ma mission terrain {cycle.index} — Engagement public</span>
+      <div className="step" style={{ borderBottom: "none" }}>
+        <div className={`dot ${m ? "done" : cycle.sessionHeldAt ? "cur" : "next"}`}>{m ? "✓" : cycle.index}</div>
+        <div style={{ flex: 1 }}>
+          <b className="t">Mission de la Session {cycle.index}</b>
+          {m ? (
+            <>
+              <p style={{ margin: "3px 0 0", fontSize: 12.5 }}>« {m.text} »</p>
+              <div className="meta">Engagée le {fmtDate(m.engagedAt)}{m.peerName ? ` · partagée avec votre pair ${m.peerName}` : ""}</div>
+            </>
+          ) : open ? (
+            <form onSubmit={save} style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 7 }}>
+              <textarea className="field" placeholder="La mission que je m'engage à réaliser avant la prochaine session…" value={text} onChange={(e) => setText(e.target.value)} required />
+              <input className="field" placeholder="Pair de suivi (optionnel)" value={peerName} onChange={(e) => setPeerName(e.target.value)} />
+              {error && <p className="ko">{error}</p>}
+              <div className="row">
+                <button className="btn btn--sm" disabled={busy}>{busy ? "…" : "Consigner la mission"}</button>
+                <button type="button" className="btn ghost btn--sm" onClick={() => { setOpen(false); setError(null); }}>Annuler</button>
+              </div>
+            </form>
+          ) : (
+            <div style={{ marginTop: 4 }}>
+              <button className="btn ghost btn--sm" onClick={() => setOpen(true)}>Consigner ma mission</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function JournalSlotForm({ ov, cycle, slot, onSaved, onCancel }: { ov: Overview; cycle: Cycle; slot: JournalSlot; onSaved: () => void; onCancel: () => void }) {
   const [entryDate, setEntryDate] = useState(new Date().toISOString().slice(0, 10));
   const [situation, setSituation] = useState("");
   const [action, setAction] = useState("");
@@ -205,116 +254,63 @@ function JournalCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
-      await api.addJournal(ov.id, { periodIndex, entryDate, situation, action, observation, learning });
-      setSituation(""); setAction(""); setObservation(""); setLearning(""); setOpen(false);
+      await api.addJournal(ov.id, { periodIndex: cycle.index, entryIndex: slot.entryIndex, entryDate, situation, action, observation, learning });
       onSaved();
     } catch (err) { setError(errMsg(err, "Enregistrement impossible")); }
     finally { setBusy(false); }
   }
 
-  const j = ov.journal;
-  const done = j.count >= j.target;
   return (
-    <div className="card">
-      <div className="row between">
-        <div><span className="eyebrow">Pilier 4 · pratique terrain</span><h2>Journal de bord</h2></div>
-        <span className={`pill ${done ? "ok" : "warn"}`}>{j.count}/{j.target} entrées</span>
+    <form onSubmit={save} style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 7 }}>
+      <label className="lbl" style={{ marginBottom: 0 }}>Date
+        <input className="field" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
+      </label>
+      <label className="lbl" style={{ marginBottom: 0 }}>Situation rencontrée<textarea className="field" value={situation} onChange={(e) => setSituation(e.target.value)} required /></label>
+      <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'ai fait délibérément<textarea className="field" value={action} onChange={(e) => setAction(e.target.value)} required /></label>
+      <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'ai observé<textarea className="field" value={observation} onChange={(e) => setObservation(e.target.value)} required /></label>
+      <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'en apprends<textarea className="field" value={learning} onChange={(e) => setLearning(e.target.value)} required /></label>
+      {error && <p className="ko">{error}</p>}
+      <div className="row">
+        <button className="btn btn--sm" disabled={busy}>{busy ? "…" : "Enregistrer l'entrée →"}</button>
+        <button type="button" className="btn ghost btn--sm" onClick={onCancel}>Annuler</button>
       </div>
-      {j.entries.length === 0 && <p className="muted" style={{ fontSize: 12.5 }}>Aucune entrée pour l'instant — la qualité d'observation compte plus que la quantité.</p>}
-      {j.entries.map((e) => (
-        <div className="step" key={e.id}>
-          <div className="dot done">✓</div>
-          <div>
-            <b className="t">{fmtDate(e.entryDate)} · Période {e.periodIndex}</b>
-            <div className="meta">{e.situation}</div>
-            <div className="meta"><b>Fait :</b> {e.action} · <b>Observé :</b> {e.observation} · <b>Appris :</b> {e.learning}</div>
-          </div>
-        </div>
-      ))}
-      {open ? (
-        <form onSubmit={save} style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
-          <div className="row">
-            <label className="lbl" style={{ flex: 1, marginBottom: 0 }}>Période
-              <select className="field" value={periodIndex} onChange={(e) => setPeriodIndex(Number(e.target.value))}>
-                {Array.from({ length: ov.module.shape.periods }, (_, i) => <option key={i + 1} value={i + 1}>Pratique terrain {i + 1}</option>)}
-              </select>
-            </label>
-            <label className="lbl" style={{ flex: 1, marginBottom: 0 }}>Date
-              <input className="field" type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} required />
-            </label>
-          </div>
-          <label className="lbl" style={{ marginBottom: 0 }}>Situation rencontrée<textarea className="field" value={situation} onChange={(e) => setSituation(e.target.value)} required /></label>
-          <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'ai fait délibérément<textarea className="field" value={action} onChange={(e) => setAction(e.target.value)} required /></label>
-          <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'ai observé<textarea className="field" value={observation} onChange={(e) => setObservation(e.target.value)} required /></label>
-          <label className="lbl" style={{ marginBottom: 0 }}>Ce que j'en apprends<textarea className="field" value={learning} onChange={(e) => setLearning(e.target.value)} required /></label>
-          {error && <p className="ko">{error}</p>}
-          <div className="row">
-            <button className="btn" disabled={busy}>{busy ? "…" : "Enregistrer l'entrée →"}</button>
-            <button type="button" className="btn ghost" onClick={() => { setOpen(false); setError(null); }}>Annuler</button>
-          </div>
-          <p className="meta">Une entrée est figée à la soumission. Décrivez des faits observables — l'entrée est refusée sous 25 mots.</p>
-        </form>
-      ) : (
-        <button className="btn btn--block" style={{ marginTop: 10 }} onClick={() => setOpen(true)}>Nouvelle entrée</button>
-      )}
-    </div>
+      <p className="meta">L'entrée est figée à la soumission. Décrivez des faits observables — elle est refusée sous 25 mots.</p>
+    </form>
   );
 }
 
-/** Missions Terrain : une par session, sauf la certifiante. */
-function MissionsCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
-  const [openFor, setOpenFor] = useState<number | null>(null);
-  const [text, setText] = useState("");
-  const [peerName, setPeerName] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function save(e: React.FormEvent) {
-    e.preventDefault();
-    if (openFor == null) return;
-    setBusy(true); setError(null);
-    try { await api.addMission(ov.id, { sessionIndex: openFor, text, peerName: peerName || undefined }); setText(""); setPeerName(""); setOpenFor(null); onSaved(); }
-    catch (err) { setError(errMsg(err, "Enregistrement impossible")); }
-    finally { setBusy(false); }
-  }
-
-  const slots = Array.from({ length: ov.module.shape.sessions - 1 }, (_, i) => i + 1);
+function JournalCycleCard({ ov, cycle, onSaved }: { ov: Overview; cycle: Cycle; onSaved: () => void }) {
+  const [openSlot, setOpenSlot] = useState<number | null>(null);
+  const doneCount = cycle.journal.filter((s) => s.entry).length;
   return (
     <div className="card">
-      <span className="eyebrow">Pilier 5 · engagement public</span>
-      <h2>Mes missions terrain</h2>
-      {slots.map((idx) => {
-        const m = ov.missions.find((x) => x.sessionIndex === idx);
-        const session = ov.module.sessions.find((s) => s.index === idx);
-        return (
-          <div className="step" key={idx}>
-            <div className={`dot ${m ? "done" : session?.heldAt ? "cur" : "next"}`}>{m ? "✓" : idx}</div>
-            <div style={{ flex: 1 }}>
-              <b className="t">Mission de la Session {idx}</b>
-              {m ? (
-                <>
-                  <p style={{ margin: "3px 0 0", fontSize: 12.5 }}>« {m.text} »</p>
-                  <div className="meta">Engagée le {fmtDate(m.engagedAt)}{m.peerName ? ` · partagée avec votre pair ${m.peerName}` : ""}</div>
-                </>
-              ) : openFor === idx ? (
-                <form onSubmit={save} style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 7 }}>
-                  <textarea className="field" placeholder="La mission que je m'engage à réaliser avant la prochaine session…" value={text} onChange={(e) => setText(e.target.value)} required />
-                  <input className="field" placeholder="Pair de suivi (optionnel)" value={peerName} onChange={(e) => setPeerName(e.target.value)} />
-                  {error && <p className="ko">{error}</p>}
-                  <div className="row">
-                    <button className="btn btn--sm" disabled={busy}>{busy ? "…" : "Consigner la mission"}</button>
-                    <button type="button" className="btn ghost btn--sm" onClick={() => { setOpenFor(null); setError(null); }}>Annuler</button>
-                  </div>
-                </form>
-              ) : (
-                <div style={{ marginTop: 4 }}>
-                  <button className="btn ghost btn--sm" onClick={() => setOpenFor(idx)}>Consigner ma mission</button>
-                </div>
-              )}
-            </div>
+      <div className="row between">
+        <span className="eyebrow">Journal de bord {cycle.index} — Pratique terrain</span>
+        <span className={`pill ${doneCount >= cycle.journal.length ? "ok" : doneCount > 0 ? "warn" : "soft"}`}>{doneCount}/{cycle.journal.length}</span>
+      </div>
+      {cycle.journal.map((slot) => (
+        <div className="step" key={slot.entryIndex}>
+          <div className={`dot ${slot.entry ? "done" : slot.open ? "cur" : "next"}`}>{slot.entry ? "✓" : slot.open ? "●" : "🔒"}</div>
+          <div style={{ flex: 1 }}>
+            <b className="t">Entrée n°{slot.entryIndex}</b>{" "}
+            {slot.entry
+              ? <span className="pill ok">déposée · {fmtDate(slot.entry.entryDate)}</span>
+              : slot.open
+                ? <span className="pill warn">ouverte{slot.opensAt ? ` depuis le ${fmtDate(slot.opensAt)}` : ""}</span>
+                : <span className="pill soft">{slot.opensAt ? `s'ouvre le ${fmtDate(slot.opensAt)}` : `s'ouvre après la Session ${cycle.index}`}</span>}
+            {slot.entry && (
+              <>
+                <div className="meta">{slot.entry.situation}</div>
+                <div className="meta"><b>Fait :</b> {slot.entry.action} · <b>Observé :</b> {slot.entry.observation} · <b>Appris :</b> {slot.entry.learning}</div>
+              </>
+            )}
+            {!slot.entry && slot.open && (openSlot === slot.entryIndex
+              ? <JournalSlotForm ov={ov} cycle={cycle} slot={slot} onSaved={() => { setOpenSlot(null); onSaved(); }} onCancel={() => setOpenSlot(null)} />
+              : <div style={{ marginTop: 4 }}><button className="btn btn--sm" onClick={() => setOpenSlot(slot.entryIndex)}>Écrire cette entrée</button></div>)}
+            {!slot.entry && !slot.open && !slot.opensAt && <div className="meta">Une entrée par semaine après la session — vous serez prévenu·e à chaque ouverture.</div>}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }
@@ -358,7 +354,7 @@ function CertificationCard({ ov, cs }: { ov: Overview; cs: CertState | null }) {
       )}
       {cs && (
         <div style={{ marginTop: cert ? 10 : 4 }}>
-          {!cert && <p className="meta" style={{ marginTop: 0 }}>La décision certifiante exige <b>l'ensemble des conditions</b> (K-SPEM §6) — pas seulement la grille de l'évaluateur.</p>}
+          {!cert && <p className="meta" style={{ marginTop: 0 }}>La décision certifiante exige <b>l'ensemble des conditions</b> — pas seulement la grille de l'évaluateur.</p>}
           {cs.prereqs.map((p) => (
             <div className="prereq" key={p.code}>
               <span className={p.ok ? "ok-i" : "ko-i"}>{p.ok ? "✓" : "✗"}</span> {p.label}
@@ -396,7 +392,7 @@ function ParticipantModule({ pid }: { pid: string }) {
       </div>
 
       <div className="card">
-        <div className="row between"><h2 style={{ margin: 0 }}>Mon parcours</h2><span className="pill mint">Journal : {ov.journal.count}/{ov.journal.target}</span></div>
+        <h2 style={{ margin: 0 }}>Mon parcours</h2>
         {m.sessions.map((s) => (
           <div className={`step${s.heldAt ? "" : " off"}`} key={s.index}>
             <div className={`dot ${s.heldAt ? (s.present ? "done" : "cur") : "next"}`}>{s.heldAt && s.present ? "✓" : s.index}</div>
@@ -413,8 +409,12 @@ function ParticipantModule({ pid }: { pid: string }) {
 
       <AnchorCard ov={ov} onSaved={reload} />
       <SelfAssessmentCard ov={ov} onSaved={reload} />
-      <JournalCard ov={ov} onSaved={reload} />
-      <MissionsCard ov={ov} onSaved={reload} />
+      {ov.cycles.map((c) => (
+        <div key={c.index} style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          <MissionCard ov={ov} cycle={c} onSaved={reload} />
+          <JournalCycleCard ov={ov} cycle={c} onSaved={reload} />
+        </div>
+      ))}
       <CertificationCard ov={ov} cs={cs} />
     </div>
   );
@@ -452,16 +452,28 @@ function ParticipantSpace({ user, onLogout }: { user: Principal; onLogout: () =>
 
 /** Création de module : la grille du SOCLE COMMUN est reprise du parcours
  *  DECLICK publié correspondant (un seul contrat d'évaluation, zéro resaisie). */
+const LEVEL_SESSIONS: Record<number, string[]> = {
+  1: ["Session 1 — Fondation", "Session 2", "Session 3 — Démonstration & certification"],
+  2: ["Session 1 — Fondation", "Session 2", "Session 3", "Session 4 — Démonstration & certification"],
+  3: ["Session 1 — Fondation", "Session 2", "Session 3", "Session 4", "Session 5 — Démonstration & certification"],
+};
+
 function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCancel: () => void }) {
   const [title, setTitle] = useState("");
   const [level, setLevel] = useState(1);
   const [location, setLocation] = useState("");
+  const [dates, setDates] = useState<string[]>(["", "", ""]);
   const [courses, setCourses] = useState<CourseSummary[]>([]);
   const [courseId, setCourseId] = useState("");
   const [trainers, setTrainers] = useState<UserRow[]>([]);
   const [trainerId, setTrainerId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  function pickLevel(l: number) {
+    setLevel(l);
+    setDates(LEVEL_SESSIONS[l]!.map((_, i) => dates[i] ?? ""));
+  }
 
   useEffect(() => {
     api.courses().then((all) => setCourses(all.filter((c) => c.versions.some((v) => v.status === "PUBLISHED")))).catch(() => setCourses([]));
@@ -477,7 +489,10 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
       const published = course.versions.find((v) => v.status === "PUBLISHED");
       const rubric: Rubric | null = published ? rubricFromCourseContent(published.content) : null;
       if (!rubric) throw new Error("Grille du socle introuvable dans ce parcours");
-      await api.createModule({ title, level, location: location || undefined, trainerId: trainerId || undefined, rubric });
+      const sessions = dates
+        .map((d, i) => ({ index: i + 1, scheduledAt: d ? new Date(d).toISOString() : undefined }))
+        .filter((s): s is { index: number; scheduledAt: string } => Boolean(s.scheduledAt));
+      await api.createModule({ title, level, location: location || undefined, trainerId: trainerId || undefined, rubric, sessions: sessions.length ? sessions : undefined });
       onCreated();
     } catch (err) { setError(errMsg(err, "Création impossible")); }
     finally { setBusy(false); }
@@ -489,8 +504,8 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
       <h2>Créer un module FACE2FACE</h2>
       <div className="grid2">
         <label className="lbl">Intitulé<input className="field" value={title} onChange={(e) => setTitle(e.target.value)} required /></label>
-        <label className="lbl">Niveau K-SPEM
-          <select className="field" value={level} onChange={(e) => setLevel(Number(e.target.value))}>
+        <label className="lbl">Niveau
+          <select className="field" value={level} onChange={(e) => pickLevel(Number(e.target.value))}>
             <option value={1}>Niveau 1 — Fondamentaux (3 sessions · 2 périodes · journal 6)</option>
             <option value={2}>Niveau 2 — Avancé (4 sessions · 3 périodes · journal 9)</option>
             <option value={3}>Niveau 3 — Expert (5 sessions · 4 périodes · journal 12)</option>
@@ -503,6 +518,18 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
             {trainers.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.role})</option>)}
           </select>
         </label>
+      </div>
+      <div style={{ margin: "2px 0 10px" }}>
+        <span className="eyebrow">Calendrier des sessions</span>
+        <div className="grid2" style={{ marginTop: 6 }}>
+          {LEVEL_SESSIONS[level]!.map((label, i) => (
+            <label className="lbl" key={i} style={{ marginBottom: 0 }}>{label}
+              <input className="field" type="datetime-local" value={dates[i] ?? ""}
+                onChange={(e) => setDates(dates.map((d, j) => j === i ? e.target.value : d))} />
+            </label>
+          ))}
+        </div>
+        <p className="meta" style={{ marginTop: 6 }}>Les dates déclenchent les convocations automatiques (J-7 et J-1) et bornent les périodes terrain. Modifiables plus tard si besoin.</p>
       </div>
       <label className="lbl">Grille du socle commun — reprise du parcours publié
         <select className="field" value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
@@ -803,6 +830,7 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
   const [addEmail, setAddEmail] = useState("");
   const [addName, setAddName] = useState("");
   const [addErr, setAddErr] = useState<string | null>(null);
+  const [addOk, setAddOk] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const reload = useCallback(() => { api.module(id).then(setM).catch((e) => setError(errMsg(e, "Chargement impossible"))); }, [id]);
@@ -810,8 +838,14 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
 
   async function addParticipant(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true); setAddErr(null);
-    try { await api.addParticipant(id, { email: addEmail, name: addName || undefined }); setAddEmail(""); setAddName(""); reload(); }
+    setBusy(true); setAddErr(null); setAddOk(null);
+    try {
+      const r = await api.addParticipant(id, { email: addEmail, name: addName || undefined });
+      setAddOk(r.accountCreated
+        ? `Compte créé pour ${r.user.email} — invitation envoyée avec un mot de passe provisoire.`
+        : `${r.user.name} inscrit·e — notification envoyée sur son compte existant.`);
+      setAddEmail(""); setAddName(""); reload();
+    }
     catch (err) { setAddErr(errMsg(err, "Inscription impossible")); }
     finally { setBusy(false); }
   }
@@ -845,6 +879,7 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
             <button className="btn btn--sm" disabled={busy}>{busy ? "…" : "Inscrire"}</button>
           </form>
           {addErr && <p className="ko" style={{ marginTop: -4, marginBottom: 8 }}>{addErr}</p>}
+          {addOk && <p className="okmsg" style={{ marginTop: -4, marginBottom: 8 }}>{addOk}</p>}
           <table className="table">
             <thead><tr><th>Participant</th><th>Présence</th><th>Journal</th><th>Missions</th><th>Ancrage</th><th>Certification</th><th></th></tr></thead>
             <tbody>
@@ -853,7 +888,7 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
                 return (
                   <tr key={p.id}>
                     <td><b>{p.user.name}</b><div className="meta">{p.user.email}</div></td>
-                    <td><span className={`pill ${p.presentAt.length >= held ? "ok" : "red"}`}>{p.presentAt.length}/{held || 0}</span></td>
+                    <td><span className={`pill ${held === 0 ? "soft" : p.presentAt.length >= held ? "ok" : "red"}`}>{p.presentAt.length}/{m.shape.sessions}</span></td>
                     <td><span className={`pill ${p.journalCount >= p.journalTarget ? "ok" : p.journalCount > 0 ? "warn" : "soft"}`}>{p.journalCount}/{p.journalTarget}</span></td>
                     <td><span className={`pill ${p.missionCount >= m.shape.sessions - 1 ? "ok" : "soft"}`}>{p.missionCount}/{m.shape.sessions - 1}</span></td>
                     <td>{p.anchor.deposited ? <span className="pill mint">déposée</span> : <span className="pill soft">—</span>}</td>

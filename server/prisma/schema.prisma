@@ -1653,6 +1653,9 @@ model F2fJournalEntry {
   participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
   /// Période terrain 1..4 (selon le niveau).
   periodIndex   Int
+  /// Entrée 1..3 de la période — chaque entrée s'ouvre à date fixe après la
+  /// session (J+7/J+14/J+21), comme les déclencheurs du journal DECLICK.
+  entryIndex    Int
   entryDate     DateTime
   situation     String
   action        String
@@ -1660,6 +1663,7 @@ model F2fJournalEntry {
   learning      String
   createdAt     DateTime       @default(now())
 
+  @@unique([participantId, periodIndex, entryIndex])
   @@index([participantId])
 }
 

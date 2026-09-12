@@ -162,6 +162,23 @@ docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
 > administrateurs d'organisation (membership OWNER/ADMIN) ; un compte sans rôle
 > admin verra un message « réservé aux administrateurs ».
 
+### Front FACE2FACE (`face2face.declick.digital`)
+
+Caddy sert `face2face.declick.digital` depuis `face2face/dist`. C'est le front
+du **département présentiel** (espace participant + console formateur). Même
+principe :
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w face2face run build"
+```
+
+> Ajoutez le DNS `face2face A 185.98.136.230`, et vérifiez que `CORS_ORIGINS`
+> inclut **`https://face2face.declick.digital`** — sans quoi la connexion
+> échoue avec « Failed to fetch » (l'API refuse l'origine). `F2F_APP_URL`
+> (défaut `https://face2face.declick.digital`) est l'URL utilisée dans les
+> e-mails d'invitation et de rappel du département.
+
 ## 6. Vérifier
 
 ```bash

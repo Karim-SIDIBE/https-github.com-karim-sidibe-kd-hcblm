@@ -50,6 +50,8 @@ const EnvSchema = z.object({
   BRAND_NAME: z.string().default("DECLICK DIGITAL"),
   /// Operating department shown as attribution (« Opéré par … ») on public pages.
   BRAND_OPERATOR: z.string().default("KOMPETENCES DECLICK"),
+  /// Front dédié FACE2FACE — lien des invitations du département présentiel.
+  F2F_APP_URL: z.string().url().default("https://face2face.declick.digital"),
 
   // --- Moment d'Ancrage (PAM) capture policy (§6.1). ---
   /// Minimum PAM length enforced server-side (badge condition floor is 50;
