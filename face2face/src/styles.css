@@ -1,0 +1,118 @@
+/* ============================================================================
+   KOMPETENCES FACE2FACE — charte graphique v4.1 (département présentiel).
+   Bleu institutionnel #003366 / médian #1A4F8A, orange #E8650A, fonds bleutés
+   #EBF3FC / #F4F8FD. Poppins 600/700 pour les TITRES uniquement (option C) ;
+   police système pour le texte. Ombres de boutons colorées par leur couleur.
+   Lockup texte « KOMPETENCES FACE2FACE » (version validée, sans logo).
+   ========================================================================== */
+:root {
+  --navy:#003366; --navy2:#1A4F8A; --navy-air:#9CC3F0;
+  --orange:#E8650A; --orange2:#FF8C00; --orange-tint:#FEF3EB;
+  --ink:#0D1B2A; --grey:#5A6478; --grey-soft:#AEB8CA;
+  --mint:#EBF3FC; --mintfg:#1A4F8A;
+  --bg:#F4F8FD; --bg-page:#EBF3FC; --line:#dbe6f2; --line-strong:#c3d3e6;
+  --ok:#1E7A46; --ok-tint:#E7F6EC; --warn:#E8650A; --warn-tint:#FEF3EB;
+  --danger:#B91C1C; --danger-tint:#FDECEC;
+  --font-display:"Poppins",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-body:system-ui,-apple-system,"Segoe UI",sans-serif;
+  --r-sm:9px; --r-md:11px; --r-lg:14px; --r-pill:999px;
+}
+* { box-sizing:border-box; }
+html, body, #root { height:100%; margin:0; }
+body { font-family:var(--font-body); color:var(--ink); background:var(--bg); font-size:13.5px; line-height:1.5; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4 { font-family:var(--font-display); font-weight:700; color:var(--navy); margin:0; letter-spacing:-.01em; }
+a { color:inherit; text-decoration:none; }
+button { font-family:inherit; cursor:pointer; }
+::selection { background:#f9d9bd; }
+.eyebrow { font-family:var(--font-display); font-weight:700; font-size:10.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--orange); }
+.muted { color:var(--grey); }
+.meta { font-size:11.5px; color:var(--grey); line-height:1.45; }
+.num { font-family:var(--font-display); font-weight:700; font-variant-numeric:tabular-nums; }
+
+/* ---- Lockup texte (version validée sans logo) ---------------------------- */
+.lockup { font-family:var(--font-display); font-weight:700; letter-spacing:.14em; text-transform:uppercase; line-height:1.25; }
+.lockup .k { color:#fff; }
+.lockup .f2f { color:var(--navy-air); }
+.lockup--dark .k { color:var(--navy); }
+.lockup--dark .f2f { color:var(--navy2); }
+.tagline { font-size:10px; color:#9fb4d2; letter-spacing:.02em; }
+
+/* ---- Coques : topbar participant / sidebar formateur --------------------- */
+.shell { min-height:100vh; display:flex; flex-direction:column; }
+.topbar { position:sticky; top:0; z-index:10; background:linear-gradient(160deg,var(--navy),var(--navy2)); color:#fff; display:flex; align-items:center; justify-content:space-between; gap:14px; padding:12px 20px; }
+.content { padding:22px 20px 48px; max-width:760px; width:100%; margin:0 auto; display:flex; flex-direction:column; gap:13px; }
+.console { min-height:100vh; display:flex; }
+.side { width:232px; background:var(--navy); color:#c6d6ea; padding:18px 0; flex-shrink:0; }
+.side .nav a { display:block; padding:9px 18px; font-size:12.5px; cursor:pointer; }
+.side .nav a.on { background:var(--orange); color:#fff; border-radius:0 var(--r-pill) var(--r-pill) 0; margin-right:14px; font-family:var(--font-display); font-weight:600; }
+.main { flex:1; padding:20px 24px 48px; max-width:1160px; }
+.crumb { font-size:12px; color:var(--grey); margin-bottom:4px; }
+.pagehead h1 { font-size:21px; }
+.pagehead .sub { font-size:12.5px; color:var(--grey); margin:2px 0 14px; }
+@media (max-width: 900px){ .console { flex-direction:column; } .side { width:100%; padding:10px 0; } }
+
+/* ---- Cartes / tableaux ---------------------------------------------------- */
+.card { background:#fff; border:1px solid var(--line); border-radius:var(--r-lg); padding:14px 16px; }
+.card h2 { font-size:15px; margin:2px 0 8px; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:13px; align-items:start; }
+@media (max-width: 980px){ .grid2 { grid-template-columns:1fr; } }
+.table { width:100%; border-collapse:collapse; font-size:12.5px; color:var(--ink); }
+.table th { text-align:left; font-size:10.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--grey); padding:7px 8px; border-bottom:1px solid var(--line); white-space:nowrap; }
+.table td { padding:8px; border-bottom:1px solid #eef1f6; vertical-align:middle; }
+.table tbody tr:last-child td { border-bottom:0; }
+
+/* ---- Pastilles / boutons -------------------------------------------------- */
+.pill { display:inline-block; font-family:var(--font-display); font-weight:600; font-size:10.5px; padding:3px 10px; border-radius:var(--r-pill); white-space:nowrap; }
+.pill.mint { background:var(--mint); color:var(--mintfg); }
+.pill.ok { background:var(--ok-tint); color:var(--ok); }
+.pill.warn { background:var(--warn-tint); color:var(--warn); }
+.pill.red { background:var(--danger-tint); color:var(--danger); }
+.pill.soft { background:#eef1f7; color:#5a6584; }
+.btn { display:inline-flex; align-items:center; justify-content:center; gap:7px; background:var(--orange); color:#fff; border:none; font-family:var(--font-display); font-weight:600; font-size:12.5px; padding:9px 16px; border-radius:var(--r-sm); box-shadow:0 5px 12px rgba(232,101,10,.35); transition:.12s; }
+.btn:hover { background:#cb5607; }
+.btn.ghost { background:#fff; color:var(--navy); border:1.5px solid var(--navy); box-shadow:0 4px 10px rgba(0,51,102,.18); }
+.btn.ghost:hover { background:var(--mint); }
+.btn.dis, .btn:disabled { background:#d7dbe6; color:var(--grey); box-shadow:none; cursor:not-allowed; border:none; }
+.btn--block { display:flex; width:100%; padding:11px; }
+.btn--sm { padding:5px 11px; font-size:12px; }
+
+/* ---- Formulaires ----------------------------------------------------------- */
+.field, textarea.field, select.field { width:100%; padding:9px 11px; border:1px solid var(--line-strong); border-radius:var(--r-sm); font-family:inherit; font-size:13px; background:#fff; color:var(--ink); }
+textarea.field { min-height:64px; resize:vertical; line-height:1.45; }
+.field:focus { outline:none; border-color:var(--navy2); }
+.lbl { display:block; font-size:12px; font-weight:600; color:var(--ink); margin-bottom:9px; }
+.ko { color:var(--danger); font-size:12.5px; margin:6px 0 0; }
+.okmsg { color:var(--ok); font-size:12.5px; margin:6px 0 0; }
+
+/* ---- Parcours (étapes), verrous, prérequis -------------------------------- */
+.step { display:flex; gap:10px; align-items:flex-start; padding:9px 0; border-bottom:1px dashed var(--line); }
+.step:last-child { border-bottom:none; }
+.dot { width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-family:var(--font-display); font-weight:700; flex-shrink:0; }
+.dot.done { background:var(--mint); color:var(--mintfg); }
+.dot.cur { background:var(--orange); color:#fff; }
+.dot.next { background:#eef1f7; color:var(--grey); }
+.step b.t { font-family:var(--font-display); font-weight:600; font-size:12.5px; color:var(--navy); }
+.step.off b.t { color:var(--grey); }
+.lock { background:#fff8f2; border:1px solid #f2d9c4; border-radius:10px; padding:8px 10px; font-size:11.5px; color:#8a5a2e; line-height:1.45; }
+.prereq { display:flex; gap:9px; align-items:center; padding:7px 0; border-bottom:1px dashed var(--line); font-size:12.5px; }
+.prereq:last-child { border:none; }
+.prereq .ok-i { color:var(--mintfg); font-weight:800; }
+.prereq .ko-i { color:var(--danger); font-weight:800; }
+
+/* ---- Grille de notation (bandes) ------------------------------------------ */
+.bands { display:grid; grid-template-columns:repeat(4,1fr); gap:7px; margin:7px 0; }
+@media (max-width: 980px){ .bands { grid-template-columns:repeat(2,1fr); } }
+.band { border:1px solid var(--line); border-radius:8px; padding:7px 9px; font-size:10.8px; line-height:1.4; }
+.band b { display:block; font-family:var(--font-display); font-weight:600; color:var(--navy); }
+.band.sel { border-color:var(--orange); background:#fdf1e8; }
+
+/* ---- Login / divers -------------------------------------------------------- */
+.login-wrap { min-height:100vh; display:grid; place-items:center; background:linear-gradient(160deg,var(--navy),var(--navy2)); padding:20px; }
+.login-card { width:100%; max-width:370px; padding:24px; border-radius:var(--r-lg); background:#fff; border:1px solid var(--line); }
+.row { display:flex; align-items:center; gap:10px; }
+.between { justify-content:space-between; }
+.wrap { flex-wrap:wrap; }
+.medal { width:92px; height:92px; margin:0 auto 8px; border-radius:50%; background:radial-gradient(circle at 35% 30%, #4d6db3, #1e2a4a); color:#fff; display:flex; flex-direction:column; align-items:center; justify-content:center; box-shadow:0 6px 16px rgba(30,42,74,.35); border:4px solid #E8722A; text-align:center; }
+.medal b { font-family:var(--font-display); font-size:22px; font-weight:700; }
+.medal span { font-size:8.5px; letter-spacing:.8px; }
+.spin { color:var(--grey); padding:30px; text-align:center; }

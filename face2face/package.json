@@ -1,0 +1,24 @@
+{
+  "name": "kd-hcblm-face2face",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "KOMPETENCES FACE2FACE — front dédié du département présentiel (K-SPEM). Espace participant (fiche d'ancrage, journal de bord, missions, certificat) + console formateur (cohortes, émargement, certification). Servi sur face2face.declick.digital.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --port 4176 --host",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.1"
+  }
+}

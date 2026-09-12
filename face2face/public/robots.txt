@@ -1,0 +1,3 @@
+# Espace FACE2FACE — aucune indexation, aucun robot.
+User-agent: *
+Disallow: /

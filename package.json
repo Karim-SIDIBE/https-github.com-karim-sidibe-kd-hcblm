@@ -9,7 +9,8 @@
     "web",
     "mobile",
     "admin",
-    "entreprise"
+    "entreprise",
+    "face2face"
   ],
   "scripts": {
     "typecheck": "npm run typecheck --workspaces --if-present",
