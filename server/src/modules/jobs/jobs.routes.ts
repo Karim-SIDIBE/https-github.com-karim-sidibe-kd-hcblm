@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts, recordRun, jobsOverview, listJobRuns, type JobKey } from "./jobs.service.js";
+import { runF2fReminders } from "../f2f/f2f.service.js";
 import { runDueReports } from "../reports/reports.service.js";
 import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
@@ -52,6 +53,12 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/project-sla/run", { preHandler: guard("job:run") }, async (req) => {
     const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
     return { data: await record(req, "project-sla", () => runProjectSlaAlerts(now ? new Date(now) : new Date())) };
+  });
+
+  // Rappels FACE2FACE : convocations J-7/J-1 + relance journal à mi-période.
+  app.post("/jobs/f2f-reminders/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now } = z.object({ now: z.string().datetime().optional() }).parse(req.body ?? {});
+    return { data: await record(req, "f2f-reminders", () => runF2fReminders(now ? new Date(now) : new Date())) };
   });
 
   // Send due scheduled e-mail reports (weekly/monthly course report attachments).

@@ -13,7 +13,11 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { RubricSchema, type Rubric } from "../../domain/content-model.js";
 import { decideCertification } from "../../domain/engine/certification.js";
-import { certificationPrereqs, f2fShape, F2F_JOURNAL_MIN_WORDS } from "../../domain/engine/f2f.js";
+import {
+  certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue,
+  F2F_JOURNAL_MIN_WORDS, F2F_SELF_SCORE_MAX, F2F_SELF_SCORE_MIN,
+} from "../../domain/engine/f2f.js";
+import { enqueueNotification } from "../notifications/notifications.service.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { hostedAssertion, verifiableCredential, credentialUrl, type AchievementInput } from "../../lib/credentials/openbadge.js";
 import { signVcJwt } from "../credentials/credentials.service.js";
@@ -301,13 +305,14 @@ export async function participantOverview(participantId: string, principal: Prin
   const participant = await loadParticipant(participantId);
   assertReadAccess(participant, principal);
   const shape = f2fShape(participant.module.level);
-  const [anchor, journal, missions, attendance, certification, credential] = await Promise.all([
+  const [anchor, journal, missions, attendance, certification, credential, selfAssessments] = await Promise.all([
     prisma.f2fAnchor.findUnique({ where: { participantId } }),
     prisma.f2fJournalEntry.findMany({ where: { participantId }, orderBy: [{ periodIndex: "asc" }, { entryDate: "asc" }] }),
     prisma.f2fMission.findMany({ where: { participantId }, orderBy: { sessionIndex: "asc" } }),
     prisma.f2fAttendance.findMany({ where: { participantId }, include: { session: { select: { index: true } } } }),
     prisma.f2fCertification.findUnique({ where: { participantId } }),
     prisma.f2fCredential.findUnique({ where: { participantId }, select: { id: true, issuedAt: true } }),
+    prisma.f2fSelfAssessment.findMany({ where: { participantId } }),
   ]);
   const presentAt = attendance.filter((a) => a.present).map((a) => a.session.index).sort((a, b) => a - b);
   return {
@@ -324,6 +329,7 @@ export async function participantOverview(participantId: string, principal: Prin
     journal: { entries: journal, count: journal.length, target: shape.journalMin },
     missions,
     certification, credential,
+    selfAssessment: selfAssessmentView(selfAssessments, participant, Boolean(certification)),
   };
 }
 
@@ -472,6 +478,251 @@ async function issueF2fCredential(
     where: { id: row.id },
     data: { assertion: assertion as unknown as Prisma.InputJsonValue, vcJwt, issuedAt },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Palier 2 — auto-évaluation d'entrée/sortie (K-SPEM)
+// ---------------------------------------------------------------------------
+
+type SelfRow = { phase: string; score: number; comment: string | null; updatedAt: Date };
+
+const lastSessionHeld = (participant: { module: { level: number; sessions: { index: number; heldAt: Date | null }[] } }) => {
+  const shape = f2fShape(participant.module.level);
+  return Boolean(participant.module.sessions.find((s) => s.index === shape.sessions)?.heldAt);
+};
+
+function selfAssessmentView(rows: SelfRow[], participant: Parameters<typeof session1Held>[0] & Parameters<typeof lastSessionHeld>[0], sealed: boolean) {
+  const entry = rows.find((r) => r.phase === "ENTRY") ?? null;
+  const exit = rows.find((r) => r.phase === "EXIT") ?? null;
+  return {
+    entry: entry ? { score: entry.score, comment: entry.comment, updatedAt: entry.updatedAt, frozen: session1Held(participant) } : null,
+    exit: exit ? { score: exit.score, comment: exit.comment, updatedAt: exit.updatedAt, frozen: sealed } : null,
+    delta: entry && exit ? exit.score - entry.score : null,
+    entryOpen: !session1Held(participant),
+    exitOpen: lastSessionHeld(participant) && !sealed,
+  };
+}
+
+/** Auto-évaluation K-SPEM : ENTRY saisie en Session 1 (figée dès la session
+ *  tenue, même règle que la fiche d'ancrage) ; EXIT saisie en session finale
+ *  (ouverte une fois la dernière session tenue, figée par la décision
+ *  certifiante). Score 1..10 = confiance déclarée sur la compétence visée. */
+export async function upsertSelfAssessment(
+  participantId: string,
+  input: { phase: "ENTRY" | "EXIT"; score: number; comment?: string },
+  principal: Principal,
+) {
+  const participant = await loadParticipant(participantId);
+  assertSelf(participant, principal);
+  if (!Number.isInteger(input.score) || input.score < F2F_SELF_SCORE_MIN || input.score > F2F_SELF_SCORE_MAX) {
+    throw new F2fError(422, "bad_score", `Score attendu entre ${F2F_SELF_SCORE_MIN} et ${F2F_SELF_SCORE_MAX}`);
+  }
+  if (input.phase === "ENTRY" && session1Held(participant)) {
+    throw new F2fError(423, "entry_frozen", "L'auto-évaluation d'entrée est figée depuis la fin de la Session 1.");
+  }
+  if (input.phase === "EXIT") {
+    if (!lastSessionHeld(participant)) {
+      throw new F2fError(423, "exit_locked", "L'auto-évaluation de sortie se remplit en session finale — la dernière session n'est pas encore tenue.");
+    }
+    const sealed = await prisma.f2fCertification.findUnique({ where: { participantId }, select: { id: true } });
+    if (sealed) throw new F2fError(423, "exit_frozen", "L'auto-évaluation de sortie est figée : la décision certifiante est prononcée.");
+  }
+  return prisma.f2fSelfAssessment.upsert({
+    where: { participantId_phase: { participantId, phase: input.phase } },
+    update: { score: input.score, comment: input.comment?.trim() || null },
+    create: { participantId, phase: input.phase, score: input.score, comment: input.comment?.trim() || null },
+  });
+}
+
+export async function getSelfAssessments(participantId: string, principal: Principal) {
+  const participant = await loadParticipant(participantId);
+  assertReadAccess(participant, principal);
+  const [rows, certification] = await Promise.all([
+    prisma.f2fSelfAssessment.findMany({ where: { participantId } }),
+    prisma.f2fCertification.findUnique({ where: { participantId }, select: { id: true } }),
+  ]);
+  return selfAssessmentView(rows, participant, Boolean(certification));
+}
+
+// ---------------------------------------------------------------------------
+// Palier 2 — indicateurs K-SPEM (console)
+// ---------------------------------------------------------------------------
+
+const avg = (xs: number[]) => (xs.length ? Math.round((xs.reduce((a, b) => a + b, 0) / xs.length) * 10) / 10 : null);
+
+/** Indicateurs K-SPEM agrégés : vue globale + une ligne par module. Staff. */
+export async function f2fKpis(principal: Principal) {
+  if (!isStaff(principal)) throw new F2fError(403, "forbidden", "Réservé au personnel");
+  const modules = await prisma.f2fModule.findMany({
+    orderBy: { createdAt: "desc" },
+    include: {
+      sessions: { orderBy: { index: "asc" }, include: { attendance: { where: { present: true }, select: { participantId: true } } } },
+      participants: {
+        include: {
+          anchor: { select: { id: true } },
+          certification: { select: { decision: true, scoreTotal: true } },
+          selfAssessments: true,
+          _count: { select: { journal: true, missions: true } },
+        },
+      },
+    },
+  });
+
+  const rows = modules.map((m) => {
+    const shape = f2fShape(m.level);
+    const active = m.participants.filter((p) => p.status !== "WITHDRAWN");
+    const held = m.sessions.filter((s) => s.heldAt);
+    const expectedAttendance = held.length * active.length;
+    const presentTotal = held.reduce((sum, s) => sum + s.attendance.length, 0);
+    const decided = active.filter((p) => p.certification);
+    const certified = decided.filter((p) => p.certification!.decision === "CERTIFIED");
+    const entries = active.map((p) => {
+      const e = p.selfAssessments.find((x) => x.phase === "ENTRY");
+      const x = p.selfAssessments.find((y) => y.phase === "EXIT");
+      return { entry: e?.score ?? null, exit: x?.score ?? null };
+    });
+    const deltas = entries.filter((e) => e.entry != null && e.exit != null).map((e) => e.exit! - e.entry!);
+    return {
+      id: m.id, title: m.title, level: m.level, status: m.status, shape,
+      participants: active.length,
+      sessionsHeld: held.length,
+      presenceRatePct: expectedAttendance ? Math.round((presentTotal / expectedAttendance) * 100) : null,
+      journal: {
+        total: active.reduce((sum, p) => sum + p._count.journal, 0),
+        avgPerParticipant: avg(active.map((p) => p._count.journal)),
+        target: shape.journalMin,
+        onTrack: active.filter((p) => p._count.journal >= entriesPerPeriod(m.level) * Math.max(0, Math.min(held.length - 1, shape.periods))).length,
+      },
+      missions: {
+        engaged: active.reduce((sum, p) => sum + p._count.missions, 0),
+        expected: Math.min(held.length, shape.sessions - 1) * active.length,
+      },
+      anchors: active.filter((p) => p.anchor).length,
+      certification: {
+        decided: decided.length,
+        certified: certified.length,
+        resubmit: decided.filter((p) => p.certification!.decision === "RESUBMIT").length,
+        notCertified: decided.filter((p) => p.certification!.decision === "NOT_CERTIFIED").length,
+        avgScore: avg(decided.map((p) => p.certification!.scoreTotal)),
+      },
+      selfAssessment: {
+        avgEntry: avg(entries.filter((e) => e.entry != null).map((e) => e.entry!)),
+        avgExit: avg(entries.filter((e) => e.exit != null).map((e) => e.exit!)),
+        avgDelta: avg(deltas),
+        pairs: deltas.length,
+      },
+    };
+  });
+
+  const decidedAll = rows.reduce((s, r) => s + r.certification.decided, 0);
+  const certifiedAll = rows.reduce((s, r) => s + r.certification.certified, 0);
+  return {
+    global: {
+      modules: rows.length,
+      activeModules: rows.filter((r) => r.status === "ACTIVE").length,
+      participants: rows.reduce((s, r) => s + r.participants, 0),
+      certified: certifiedAll,
+      certificationRatePct: decidedAll ? Math.round((certifiedAll / decidedAll) * 100) : null,
+      journalEntries: rows.reduce((s, r) => s + r.journal.total, 0),
+      avgDelta: avg(rows.filter((r) => r.selfAssessment.avgDelta != null).map((r) => r.selfAssessment.avgDelta!)),
+    },
+    modules: rows,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Palier 2 — rappels programmés (convocations J-7/J-1, relance journal)
+// ---------------------------------------------------------------------------
+
+/** Réserve une clé de rappel — false si ce rappel est déjà parti (dédup). */
+async function claimReminder(key: string): Promise<boolean> {
+  try { await prisma.f2fReminder.create({ data: { key } }); return true; }
+  catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") return false;
+    throw e;
+  }
+}
+
+const fmtFr = (d: Date) => d.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+
+/**
+ * Job horaire des rappels FACE2FACE (K-SPEM, palier 2) :
+ *  - convocation J-7 puis rappel J-1 avant chaque session planifiée non tenue,
+ *    à chaque participant actif de la cohorte ;
+ *  - relance journal « bienveillante » à mi-période aux participants sous
+ *    2 entrées (période courante = dernière session tenue → prochaine
+ *    planifiée, 4 semaines par défaut).
+ * Idempotent : chaque envoi est dédupliqué par clé (F2fReminder).
+ */
+export async function runF2fReminders(now: Date = new Date()) {
+  const modules = await prisma.f2fModule.findMany({
+    where: { status: "ACTIVE" },
+    include: {
+      sessions: { orderBy: { index: "asc" } },
+      participants: { where: { status: "ACTIVE" }, include: { user: { select: { name: true, email: true } } } },
+    },
+  });
+  let convocations = 0, nudges = 0;
+
+  for (const m of modules) {
+    const shape = f2fShape(m.level);
+
+    // --- convocations J-7 / J-1 ---
+    for (const s of m.sessions) {
+      if (!s.scheduledAt || s.heldAt) continue;
+      const stage = convocationStage(s.scheduledAt, now);
+      if (stage === 0) continue;
+      const label = stage === 1 ? "J7" : "J1";
+      const where = s.location ?? m.location;
+      for (const p of m.participants) {
+        if (!(await claimReminder(`f2f:convoke:${s.id}:${p.id}:${label}`))) continue;
+        const subject = stage === 1
+          ? `Convocation — ${s.title} · ${m.title}`
+          : `Rappel — votre session a lieu demain (${s.title})`;
+        const body =
+          `Bonjour ${p.user.name},\n\n` +
+          (stage === 1
+            ? `Votre prochaine session présentielle approche :\n\n`
+            : `Dernier rappel — votre session présentielle a lieu demain :\n\n`) +
+          `  ${s.title} — ${m.title} (Niveau ${m.level} · ${shape.label})\n` +
+          `  ${fmtFr(s.scheduledAt)}${where ? `\n  Lieu : ${where}` : ""}\n  Durée : ${Math.round(s.durationMin / 60)} h\n\n` +
+          `La présence à chaque session complète est une condition de certification (K-SPEM §6). ` +
+          `Pensez à apporter vos situations terrain : le Partage terrain ouvre la session.\n\n` +
+          `KOMPETENCES FACE2FACE — L'apprentissage par l'échange et l'immersion totale`;
+        await enqueueNotification({ recipientKind: "LEARNER", recipient: p.user.email, subject, body, provider: "f2f-reminder" });
+        convocations++;
+      }
+    }
+
+    // --- relance journal à mi-période ---
+    const held = m.sessions.filter((s) => s.heldAt);
+    const period = Math.min(held.length, shape.periods);
+    if (period >= 1 && held.length < shape.sessions) {
+      const start = m.sessions.find((s) => s.index === period)?.heldAt ?? null;
+      const next = m.sessions.find((s) => s.index === period + 1);
+      const end = next?.scheduledAt ?? (start ? new Date(start.getTime() + 28 * 864e5) : null);
+      if (start && end) {
+        for (const p of m.participants) {
+          const entries = await prisma.f2fJournalEntry.count({ where: { participantId: p.id, periodIndex: period } });
+          if (!journalNudgeDue({ periodStart: start, periodEnd: end, now, entries })) continue;
+          if (!(await claimReminder(`f2f:journal:${m.id}:${p.id}:p${period}`))) continue;
+          const target = entriesPerPeriod(m.level);
+          const subject = `Votre Journal de Bord — période ${period} (${entries}/${target} entrées)`;
+          const body =
+            `Bonjour ${p.user.name},\n\n` +
+            `Nous sommes à mi-parcours de la période terrain ${period} de « ${m.title} » et votre Journal de Bord ` +
+            `compte ${entries} entrée${entries > 1 ? "s" : ""} sur les ${target} attendues avant la prochaine session.\n\n` +
+            `Quelques minutes suffisent : une situation vécue, ce que vous avez fait délibérément, ce que vous avez ` +
+            `observé, ce que vous en apprenez. La qualité d'observation compte plus que la quantité — et le Partage ` +
+            `terrain s'ouvre sur vos entrées.\n\n` +
+            `KOMPETENCES FACE2FACE — L'apprentissage par l'échange et l'immersion totale`;
+          await enqueueNotification({ recipientKind: "LEARNER", recipient: p.user.email, subject, body, provider: "f2f-reminder" });
+          nudges++;
+        }
+      }
+    }
+  }
+  return { modules: modules.length, convocations, nudges };
 }
 
 /** Certificat PDF FACE2FACE. Gabarits dédiés (assets/certificates/face2face)
