@@ -304,6 +304,7 @@ export const JOB_CATALOG = [
   { key: "re-engagement", label: "Relances J+3/7/14", description: "Détection des apprenants inactifs et envoi des relances personnalisées.", cadence: "toutes les heures" },
   { key: "journal-triggers", label: "Déclencheurs du journal", description: "Invitations au journal de bord (J+2 à J+15) + rappel bienveillant 24 h après pour les entrées restées vides.", cadence: "toutes les heures" },
   { key: "project-sla", label: "SLA projets Bloc 4", description: "Alerte l'admin quand un projet soumis attend une évaluation depuis 5 jours ouvrés.", cadence: "toutes les heures" },
+  { key: "f2f-reminders", label: "Rappels FACE2FACE", description: "Convocations J-7 et rappels J-1 avant chaque session présentielle + relance journal à mi-période (participants sous 2 entrées).", cadence: "toutes les heures" },
   { key: "insights-alerts", label: "Alertes pédagogiques", description: "Digest hebdomadaire : questions sous seuil, ruptures d'entonnoir, vidéos désertées.", cadence: "hebdomadaire (lundi)" },
   { key: "scheduled-reports", label: "Rapports programmés", description: "Envoi des rapports de parcours programmés (hebdo/mensuel).", cadence: "toutes les heures" },
   { key: "retention", label: "Purge RGPD", description: "Exécute les effacements arrivés à échéance, purge tokens/journaux/codes expirés.", cadence: "toutes les heures" },

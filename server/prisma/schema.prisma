@@ -1626,6 +1626,7 @@ model F2fParticipant {
   certification  F2fCertification?
   credential     F2fCredential?
   f2Fattendances F2fAttendance[]
+  selfAssessments F2fSelfAssessment[]
 
   @@unique([moduleId, userId])
 }
@@ -1708,4 +1709,30 @@ model F2fCredential {
   issuedAt         DateTime       @default(now())
   revokedAt        DateTime?
   revocationReason String?
+}
+
+/// Auto-évaluation K-SPEM (palier 2) : confiance déclarée (1..10) sur la
+/// compétence visée, à l'ENTRÉE (Session 1 — figée dès la session tenue,
+/// même règle que la fiche d'ancrage) et à la SORTIE (session finale —
+/// saisissable une fois la dernière session tenue, figée par la décision
+/// certifiante). Le delta entrée→sortie nourrit les indicateurs K-SPEM.
+model F2fSelfAssessment {
+  id            String         @id @default(cuid())
+  participantId String
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  phase         String // ENTRY | EXIT
+  score         Int // 1..10
+  comment       String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@unique([participantId, phase])
+}
+
+/// Déduplication des rappels programmés FACE2FACE (convocations J-7/J-1,
+/// relance journal à mi-période) : une clé = un envoi, jamais deux.
+model F2fReminder {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  createdAt DateTime @default(now())
 }

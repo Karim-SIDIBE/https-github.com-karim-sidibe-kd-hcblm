@@ -45,6 +45,42 @@ export type F2fPrereqInput = {
 
 export type F2fPrereq = { code: string; label: string; ok: boolean };
 
+// ---------------------------------------------------------------------------
+// Palier 2 — rappels programmés & auto-évaluation
+// ---------------------------------------------------------------------------
+
+const DAY_MS = 864e5;
+
+/** Bornes de l'auto-évaluation K-SPEM (confiance déclarée sur la compétence). */
+export const F2F_SELF_SCORE_MIN = 1;
+export const F2F_SELF_SCORE_MAX = 10;
+
+/** Étape de convocation due pour une session à venir : 0 = rien encore,
+ *  1 = convocation J-7, 2 = rappel J-1. Une session passée ne convoque plus. */
+export function convocationStage(scheduledAt: Date, now: Date): 0 | 1 | 2 {
+  const ms = scheduledAt.getTime() - now.getTime();
+  if (ms <= 0) return 0;
+  if (ms <= DAY_MS) return 2;
+  if (ms <= 7 * DAY_MS) return 1;
+  return 0;
+}
+
+/** Entrées de journal attendues par période terrain — identique à tous les
+ *  niveaux du modèle V2.0 (6/2 · 9/3 · 12/4 = 3 par période). */
+export function entriesPerPeriod(level: number): number {
+  const s = f2fShape(level);
+  return Math.ceil(s.journalMin / s.periods);
+}
+
+/** Relance journal « bienveillante » à mi-période : due quand la moitié de la
+ *  période est écoulée et que le participant reste sous 2 entrées. */
+export function journalNudgeDue(input: { periodStart: Date; periodEnd: Date; now: Date; entries: number }): boolean {
+  if (input.entries >= 2) return false;
+  if (input.periodEnd.getTime() <= input.periodStart.getTime()) return false;
+  const mid = input.periodStart.getTime() + (input.periodEnd.getTime() - input.periodStart.getTime()) / 2;
+  return input.now.getTime() >= mid && input.now.getTime() < input.periodEnd.getTime();
+}
+
 /** Conditions de certification K-SPEM §6, TOUTES requises. Retourne l'état
  *  détaillé (pour le panneau de l'évaluateur) et le verdict global. */
 export function certificationPrereqs(input: F2fPrereqInput): { ok: boolean; prereqs: F2fPrereq[] } {

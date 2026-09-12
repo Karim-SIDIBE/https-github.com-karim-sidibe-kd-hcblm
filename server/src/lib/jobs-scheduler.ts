@@ -22,6 +22,7 @@ import { env } from "../config/env.js";
 import { dispatchPending } from "../modules/notifications/notifications.service.js";
 import { runReEngagement, runJournalTriggers, runProjectSlaAlerts, runInsightsAlerts, recordRun, type JobKey } from "../modules/jobs/jobs.service.js";
 import { runDueReports } from "../modules/reports/reports.service.js";
+import { runF2fReminders } from "../modules/f2f/f2f.service.js";
 import { runRetentionPurge } from "../modules/rgpd/rgpd.service.js";
 import { forwardPending } from "./lrs/forwarder.js";
 import { archiveGranularStatements } from "./lrs/retention.js";
@@ -65,6 +66,8 @@ export function startJobsScheduler(log: Logger = { info: console.log, error: con
     const j = await safe("journal-triggers", () => runJournalTriggers(now));
     if (j && j.created.length > 0) log.info(`[jobs] journal : ${j.created.length} déclencheur(s)`);
     await safe("project-sla", () => runProjectSlaAlerts(now));
+    const f2f = await safe("f2f-reminders", () => runF2fReminders(now));
+    if (f2f && f2f.convocations + f2f.nudges > 0) log.info(`[jobs] FACE2FACE : ${f2f.convocations} convocation(s), ${f2f.nudges} relance(s) journal`);
     const ia = await safe("insights-alerts", () => runInsightsAlerts(now));
     if (ia && !ia.skipped && ia.alerts > 0) log.info(`[jobs] pilotage pédagogique : ${ia.alerts} signal(aux) notifié(s)`);
     await safe("scheduled-reports", () => runDueReports(now));

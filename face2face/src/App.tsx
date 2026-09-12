@@ -3,7 +3,7 @@ import {
   api, auth, login as apiLogin, verify2fa, isStaffRole, canCreateModule, canGrade,
   rubricFromCourseContent, fmtDate,
   type Principal, type MyModule, type Overview, type CertState, type ModuleRow, type ModuleDetail,
-  type ModuleSession, type ParticipantRow, type Rubric, type CourseSummary, type UserRow,
+  type ModuleSession, type ParticipantRow, type Rubric, type CourseSummary, type UserRow, type Kpis,
 } from "./api";
 
 /* ------------------------------------------------------------------ Marque - */
@@ -127,6 +127,65 @@ function AnchorCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
       {!frozen && <button className="btn btn--block" disabled={busy}>{busy ? "…" : "Enregistrer ma fiche d'ancrage"}</button>}
       {frozen && ov.anchor && <p className="meta">Figée depuis la fin de la Session 1 · dernière révision le {fmtDate(ov.anchor.updatedAt)}.</p>}
     </form>
+  );
+}
+
+/** Auto-évaluation K-SPEM : confiance 1..10 à l'entrée (Session 1, figée
+ *  ensuite) et à la sortie (session finale) — le delta mesure le chemin. */
+function SelfAssessmentCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
+  const sa = ov.selfAssessment;
+  const [scores, setScores] = useState<Record<string, string>>({
+    ENTRY: sa.entry ? String(sa.entry.score) : "",
+    EXIT: sa.exit ? String(sa.exit.score) : "",
+  });
+  const [comments, setComments] = useState<Record<string, string>>({
+    ENTRY: sa.entry?.comment ?? "", EXIT: sa.exit?.comment ?? "",
+  });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(phase: "ENTRY" | "EXIT") {
+    setBusy(true); setError(null);
+    try { await api.saveSelfAssessment(ov.id, { phase, score: Number(scores[phase]), comment: comments[phase] || undefined }); onSaved(); }
+    catch (err) { setError(errMsg(err, "Enregistrement impossible")); }
+    finally { setBusy(false); }
+  }
+
+  const Phase = ({ phase, label, value, open, hint }: { phase: "ENTRY" | "EXIT"; label: string; value: Overview["selfAssessment"]["entry"]; open: boolean; hint: string }) => (
+    <div className="step">
+      <div className={`dot ${value ? "done" : open ? "cur" : "next"}`}>{value ? value.score : phase === "ENTRY" ? "→" : "←"}</div>
+      <div style={{ flex: 1 }}>
+        <b className="t">{label}</b>
+        {value && !open && <div className="meta">Confiance déclarée : <b>{value.score}/10</b>{value.comment ? ` — « ${value.comment} »` : ""} · {fmtDate(value.updatedAt)}{value.frozen ? " · figée" : ""}</div>}
+        {open ? (
+          <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 7 }}>
+            <div className="row">
+              <select className="field" style={{ width: 110 }} value={scores[phase]} onChange={(e) => setScores({ ...scores, [phase]: e.target.value })}>
+                <option value="">Note…</option>
+                {Array.from({ length: 10 }, (_, i) => <option key={i + 1} value={i + 1}>{i + 1}/10</option>)}
+              </select>
+              <input className="field" style={{ flex: 1 }} placeholder="Commentaire (optionnel)" value={comments[phase]} onChange={(e) => setComments({ ...comments, [phase]: e.target.value })} />
+              <button className="btn btn--sm" disabled={busy || !scores[phase]} onClick={() => save(phase)}>{busy ? "…" : "Enregistrer"}</button>
+            </div>
+            <p className="meta" style={{ margin: 0 }}>{hint}</p>
+          </div>
+        ) : !value && <div className="meta">{hint}</div>}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="card">
+      <div className="row between">
+        <div><span className="eyebrow">Auto-évaluation K-SPEM</span><h2>Ma confiance sur la compétence</h2></div>
+        {sa.delta != null && <span className={`pill ${sa.delta > 0 ? "ok" : "soft"}`}>{sa.delta > 0 ? `+${sa.delta}` : sa.delta} point{Math.abs(sa.delta) > 1 ? "s" : ""}</span>}
+      </div>
+      <Phase phase="ENTRY" label="À l'entrée (Session 1)" value={sa.entry} open={sa.entryOpen}
+        hint={sa.entryOpen ? "Où vous situez-vous aujourd'hui, avant de commencer ? Figée à la fin de la Session 1." : "Figée depuis la fin de la Session 1."} />
+      <Phase phase="EXIT" label="À la sortie (session finale)" value={sa.exit} open={sa.exitOpen}
+        hint={sa.exitOpen ? "Où vous situez-vous après le parcours ? Figée par la décision certifiante." : sa.exit ? "" : "S'ouvre une fois la dernière session tenue."} />
+      {error && <p className="ko">{error}</p>}
+    </div>
   );
 }
 
@@ -353,6 +412,7 @@ function ParticipantModule({ pid }: { pid: string }) {
       </div>
 
       <AnchorCard ov={ov} onSaved={reload} />
+      <SelfAssessmentCard ov={ov} onSaved={reload} />
       <JournalCard ov={ov} onSaved={reload} />
       <MissionsCard ov={ov} onSaved={reload} />
       <CertificationCard ov={ov} cs={cs} />
@@ -698,6 +758,20 @@ function Dossier({ p, rubric, user, onBack, onChanged }: { p: ParticipantRow; ru
               : cs.ok ? <p className="okmsg">✅ Grille déverrouillée — la décision certifiante peut être saisie.</p>
               : <p className="meta" style={{ marginTop: 8 }}>🔒 Grille verrouillée — le participant voit les mêmes conditions.</p>}
           </div>
+          <div className="card">
+            <span className="eyebrow">Auto-évaluation K-SPEM (1..10)</span>
+            <div className="row wrap" style={{ marginTop: 6, gap: 8 }}>
+              <span className="pill mint">Entrée : {ov.selfAssessment.entry ? `${ov.selfAssessment.entry.score}/10` : "—"}</span>
+              <span className="pill mint">Sortie : {ov.selfAssessment.exit ? `${ov.selfAssessment.exit.score}/10` : "—"}</span>
+              {ov.selfAssessment.delta != null && <span className={`pill ${ov.selfAssessment.delta > 0 ? "ok" : "soft"}`}>Δ {ov.selfAssessment.delta > 0 ? `+${ov.selfAssessment.delta}` : ov.selfAssessment.delta} pts</span>}
+            </div>
+            {(ov.selfAssessment.entry?.comment || ov.selfAssessment.exit?.comment) && (
+              <p className="meta" style={{ marginTop: 8 }}>
+                {ov.selfAssessment.entry?.comment && <>Entrée : « {ov.selfAssessment.entry.comment} »<br /></>}
+                {ov.selfAssessment.exit?.comment && <>Sortie : « {ov.selfAssessment.exit.comment} »</>}
+              </p>
+            )}
+          </div>
           {ov.certification ? (
             <div className="card">
               <span className="eyebrow">Décision</span>
@@ -798,8 +872,70 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
   );
 }
 
+/** Indicateurs K-SPEM (palier 2) : vue globale + une ligne par module. */
+function KpisPage() {
+  const [kpis, setKpis] = useState<Kpis | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => { api.kpis().then(setKpis).catch((e) => setError(errMsg(e, "Chargement impossible"))); }, []);
+  if (error) return <p className="ko">{error}</p>;
+  if (!kpis) return <div className="spin">Chargement…</div>;
+
+  const g = kpis.global;
+  const Tile = ({ label, value, sub }: { label: string; value: string; sub?: string }) => (
+    <div className="card" style={{ flex: 1, minWidth: 150 }}>
+      <span className="eyebrow">{label}</span>
+      <div className="num" style={{ fontSize: 24, color: "var(--navy)" }}>{value}</div>
+      {sub && <div className="meta">{sub}</div>}
+    </div>
+  );
+  const pct = (v: number | null) => (v == null ? "—" : `${v} %`);
+  const num = (v: number | null) => (v == null ? "—" : String(v));
+
+  return (
+    <>
+      <div className="crumb">FACE2FACE / Indicateurs K-SPEM</div>
+      <div className="pagehead"><h1>Indicateurs K-SPEM</h1><div className="sub">Présence, journal, missions, certification et progression auto-déclarée — par module et en global</div></div>
+      <div className="row wrap" style={{ alignItems: "stretch", marginBottom: 13 }}>
+        <Tile label="Modules actifs" value={`${g.activeModules}/${g.modules}`} />
+        <Tile label="Participants" value={String(g.participants)} />
+        <Tile label="Certifiés" value={String(g.certified)} sub={g.certificationRatePct != null ? `taux ${g.certificationRatePct} % des décisions` : "aucune décision"} />
+        <Tile label="Entrées de journal" value={String(g.journalEntries)} />
+        <Tile label="Progression déclarée" value={g.avgDelta != null ? `+${g.avgDelta} pts` : "—"} sub="delta moyen entrée → sortie (1..10)" />
+      </div>
+      <div className="card" style={{ padding: 0, overflowX: "auto" }}>
+        <table className="table">
+          <thead><tr><th>Module</th><th>Effectif</th><th>Sessions</th><th>Présence</th><th>Journal</th><th>Au rythme</th><th>Missions</th><th>Ancrages</th><th>Certification</th><th>Auto-éval Δ</th></tr></thead>
+          <tbody>
+            {kpis.modules.length === 0 && <tr><td colSpan={10} className="muted" style={{ padding: 16 }}>Aucun module.</td></tr>}
+            {kpis.modules.map((m) => (
+              <tr key={m.id}>
+                <td><b>{m.title}</b><div className="meta">N{m.level} · {m.shape.label}{m.status !== "ACTIVE" ? " · archivé" : ""}</div></td>
+                <td className="num">{m.participants}</td>
+                <td className="num">{m.sessionsHeld}/{m.shape.sessions}</td>
+                <td><span className={`pill ${m.presenceRatePct == null ? "soft" : m.presenceRatePct >= 90 ? "ok" : m.presenceRatePct >= 75 ? "warn" : "red"}`}>{pct(m.presenceRatePct)}</span></td>
+                <td className="num">{m.journal.total} <span className="meta">(moy. {num(m.journal.avgPerParticipant)}/{m.journal.target})</span></td>
+                <td><span className={`pill ${m.participants > 0 && m.journal.onTrack === m.participants ? "ok" : "warn"}`}>{m.journal.onTrack}/{m.participants}</span></td>
+                <td className="num">{m.missions.engaged}/{m.missions.expected}</td>
+                <td className="num">{m.anchors}/{m.participants}</td>
+                <td>{m.certification.decided
+                  ? <span className="pill mint">{m.certification.certified} certifié{m.certification.certified > 1 ? "s" : ""} · moy. {num(m.certification.avgScore)}/100</span>
+                  : <span className="pill soft">à venir</span>}</td>
+                <td>{m.selfAssessment.avgDelta != null
+                  ? <span className={`pill ${m.selfAssessment.avgDelta > 0 ? "ok" : "soft"}`}>+{m.selfAssessment.avgDelta} pts ({m.selfAssessment.pairs})</span>
+                  : <span className="pill soft">{m.selfAssessment.avgEntry != null ? `entrée moy. ${m.selfAssessment.avgEntry}` : "—"}</span>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="meta" style={{ marginTop: 10 }}>« Au rythme » : participants ayant au moins 3 entrées de journal par période terrain écoulée. Les convocations J-7/J-1 et la relance journal à mi-période partent automatiquement (job horaire « Rappels FACE2FACE »).</p>
+    </>
+  );
+}
+
 function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) {
   const [moduleId, setModuleId] = useState<string | null>(null);
+  const [page, setPage] = useState<"modules" | "kpis">("modules");
   return (
     <div className="console">
       <div className="side">
@@ -807,16 +943,19 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
           <Lockup tagline size={13} />
         </div>
         <div className="nav">
-          <a className="on" onClick={() => setModuleId(null)}>Cohortes & sessions</a>
+          <a className={page === "modules" ? "on" : ""} onClick={() => { setPage("modules"); setModuleId(null); }}>Cohortes & sessions</a>
+          <a className={page === "kpis" ? "on" : ""} onClick={() => { setPage("kpis"); setModuleId(null); }}>Indicateurs K-SPEM</a>
         </div>
         <div style={{ padding: "18px 18px 0", fontSize: 11.5, color: "#9fb4d2" }}>
           {user.name}<br /><a style={{ textDecoration: "underline", cursor: "pointer" }} onClick={onLogout}>Déconnexion</a>
         </div>
       </div>
       <div className="main">
-        {moduleId
-          ? <ModuleView id={moduleId} user={user} onBack={() => setModuleId(null)} />
-          : <ModulesList user={user} onOpen={setModuleId} />}
+        {page === "kpis"
+          ? <KpisPage />
+          : moduleId
+            ? <ModuleView id={moduleId} user={user} onBack={() => setModuleId(null)} />
+            : <ModulesList user={user} onOpen={setModuleId} />}
       </div>
     </div>
   );

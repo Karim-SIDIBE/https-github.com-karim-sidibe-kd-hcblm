@@ -12,8 +12,9 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
   F2fError, addJournalEntry, addMission, addParticipant, certificationState, certify,
-  createModule, getAnchor, getModule, holdSession, listJournal, listModules,
-  myModules, participantCertificatePdf, participantOverview, upsertAnchor,
+  createModule, f2fKpis, getAnchor, getModule, getSelfAssessments, holdSession,
+  listJournal, listModules, myModules, participantCertificatePdf, participantOverview,
+  upsertAnchor, upsertSelfAssessment,
 } from "./f2f.service.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
@@ -150,6 +151,29 @@ export async function f2fRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     const body = missionBody.parse(req.body ?? {});
     try { return reply.status(201).send({ data: await addMission(id, body, req.principal!) }); } catch (err) { return handle(reply, err); }
+  });
+
+  // --- Auto-évaluation K-SPEM (palier 2) ---
+
+  app.put("/f2f/participants/:id/self-assessment", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const body = z.object({
+      phase: z.enum(["ENTRY", "EXIT"]),
+      score: z.number().int(),
+      comment: z.string().optional(),
+    }).parse(req.body ?? {});
+    try { return { data: await upsertSelfAssessment(id, body, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.get("/f2f/participants/:id/self-assessment", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try { return { data: await getSelfAssessments(id, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // --- Indicateurs K-SPEM (palier 2, staff) ---
+
+  app.get("/f2f/kpis", { preHandler: authenticate }, async (req, reply) => {
+    try { return { data: await f2fKpis(req.principal!) }; } catch (err) { return handle(reply, err); }
   });
 
   // --- Certification (verrou K-SPEM §6 + socle commun) ---

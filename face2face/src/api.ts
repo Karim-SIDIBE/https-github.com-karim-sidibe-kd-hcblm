@@ -65,6 +65,9 @@ export type JournalEntry = { id: string; periodIndex: number; entryDate: string;
 export type Mission = { id: string; sessionIndex: number; text: string; peerName: string | null; engagedAt: string };
 export type Certification = { decision: string; scoreTotal: number; feedback: string | null; evaluatedAt: string; scores?: { label: string; weightPoints: number; points: number; evidence: string | null }[] };
 
+export type SelfPhase = { score: number; comment: string | null; updatedAt: string; frozen: boolean } | null;
+export type SelfAssessment = { entry: SelfPhase; exit: SelfPhase; delta: number | null; entryOpen: boolean; exitOpen: boolean };
+
 export type Overview = {
   id: string; status: string; user: UserRef;
   module: { id: string; title: string; level: number; location: string | null; shape: Shape; sessions: SessionView[] };
@@ -73,6 +76,7 @@ export type Overview = {
   missions: Mission[];
   certification: Certification | null;
   credential: { id: string; issuedAt: string } | null;
+  selfAssessment: SelfAssessment;
 };
 
 export type Prereq = { code: string; label: string; ok: boolean };
@@ -117,6 +121,20 @@ export type CertifyResult = {
   credential: { id: string } | null;
 };
 
+export type ModuleKpis = {
+  id: string; title: string; level: number; status: string; shape: Shape;
+  participants: number; sessionsHeld: number; presenceRatePct: number | null;
+  journal: { total: number; avgPerParticipant: number | null; target: number; onTrack: number };
+  missions: { engaged: number; expected: number };
+  anchors: number;
+  certification: { decided: number; certified: number; resubmit: number; notCertified: number; avgScore: number | null };
+  selfAssessment: { avgEntry: number | null; avgExit: number | null; avgDelta: number | null; pairs: number };
+};
+export type Kpis = {
+  global: { modules: number; activeModules: number; participants: number; certified: number; certificationRatePct: number | null; journalEntries: number; avgDelta: number | null };
+  modules: ModuleKpis[];
+};
+
 export type CourseSummary = { id: string; slug: string; versions: { version: number; status: string; title: string; level: string }[] };
 export type UserRow = { id: string; name: string; email: string; role: string };
 
@@ -131,6 +149,9 @@ export const api = {
   addMission: (pid: string, b: { sessionIndex: number; text: string; peerName?: string }) =>
     req<Mission>("POST", `/f2f/participants/${pid}/missions`, b),
   certState: (pid: string) => req<CertState>("GET", `/f2f/participants/${pid}/certification-state`),
+  saveSelfAssessment: (pid: string, b: { phase: "ENTRY" | "EXIT"; score: number; comment?: string }) =>
+    req<{ score: number }>("PUT", `/f2f/participants/${pid}/self-assessment`, b),
+  kpis: () => req<Kpis>("GET", "/f2f/kpis"),
   async certificatePdf(pid: string): Promise<Blob> {
     const t = auth.token();
     const res = await fetch(`${BASE}/f2f/participants/${pid}/certificate.pdf`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
