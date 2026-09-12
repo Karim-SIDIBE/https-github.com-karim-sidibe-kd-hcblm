@@ -15,7 +15,7 @@ import { RubricSchema, type Rubric } from "../../domain/content-model.js";
 import { decideCertification } from "../../domain/engine/certification.js";
 import {
   certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue, journalSlotOpensAt,
-  F2F_JOURNAL_MIN_WORDS, F2F_SELF_SCORE_MAX, F2F_SELF_SCORE_MIN,
+  F2F_HOLD_UNDO_MS, F2F_JOURNAL_MIN_WORDS, F2F_SELF_SCORE_MAX, F2F_SELF_SCORE_MIN,
 } from "../../domain/engine/f2f.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { env } from "../../config/env.js";
@@ -220,6 +220,31 @@ export async function holdSession(sessionId: string, attendance: { participantId
       update: { present: a.present, note: a.note ?? null },
       create: { sessionId, participantId: a.participantId, present: a.present, note: a.note ?? null },
     })),
+  ]);
+  return prisma.f2fSession.findUnique({ where: { id: sessionId }, include: { attendance: true } });
+}
+
+/** Annule une tenue de session saisie PAR ERREUR — réservé au SUPER ADMIN,
+ *  dans les 24 h suivant la tenue. Efface l'émargement et rouvre ce que la
+ *  tenue avait fermé (fiche d'ancrage si Session 1, créneaux du journal…).
+ *  Refusé si une décision certifiante s'est appuyée sur cette tenue. */
+export async function cancelHold(sessionId: string, principal: Principal) {
+  if (principal.role !== "SUPER_ADMIN") {
+    throw new F2fError(403, "forbidden", "L'annulation d'une tenue de session est réservée au Super Admin");
+  }
+  const session = await prisma.f2fSession.findUnique({ where: { id: sessionId }, include: { module: true } });
+  if (!session) throw new F2fError(404, "session_not_found", "Session introuvable");
+  if (!session.heldAt) throw new F2fError(409, "not_held", "Cette session n'est pas marquée tenue");
+  if (Date.now() - session.heldAt.getTime() > F2F_HOLD_UNDO_MS) {
+    throw new F2fError(423, "too_late", "La tenue date de plus de 24 h — elle ne peut plus être annulée");
+  }
+  const sealed = await prisma.f2fCertification.findFirst({
+    where: { participant: { moduleId: session.moduleId }, evaluatedAt: { gte: session.heldAt } },
+  });
+  if (sealed) throw new F2fError(409, "sealed", "Une décision certifiante a été prononcée depuis cette tenue — annulation impossible");
+  await prisma.$transaction([
+    prisma.f2fAttendance.deleteMany({ where: { sessionId } }),
+    prisma.f2fSession.update({ where: { id: sessionId }, data: { heldAt: null } }),
   ]);
   return prisma.f2fSession.findUnique({ where: { id: sessionId }, include: { attendance: true } });
 }
@@ -751,23 +776,27 @@ export async function runF2fReminders(now: Date = new Date()) {
   for (const m of modules) {
     const shape = f2fShape(m.level);
 
-    // --- convocations J-7 / J-1 ---
+    // --- convocations J-14, puis rappels J-7 et J-1 ---
     for (const s of m.sessions) {
       if (!s.scheduledAt || s.heldAt) continue;
       const stage = convocationStage(s.scheduledAt, now);
       if (stage === 0) continue;
-      const label = stage === 1 ? "J7" : "J1";
+      const label = (["J14", "J7", "J1"] as const)[stage - 1]!;
       const where = s.location ?? m.location;
       for (const p of m.participants) {
         if (!(await claimReminder(`f2f:convoke:${s.id}:${p.id}:${label}`))) continue;
         const subject = stage === 1
           ? `Convocation — ${s.title} · ${m.title}`
-          : `Rappel — votre session a lieu demain (${s.title})`;
+          : stage === 2
+            ? `Rappel — votre session approche (${s.title})`
+            : `Rappel — votre session a lieu demain (${s.title})`;
         const body =
           `Bonjour ${p.user.name},\n\n` +
           (stage === 1
-            ? `Votre prochaine session présentielle approche :\n\n`
-            : `Dernier rappel — votre session présentielle a lieu demain :\n\n`) +
+            ? `Vous êtes convoqué·e à votre prochaine session présentielle :\n\n`
+            : stage === 2
+              ? `Votre session présentielle a lieu dans une semaine :\n\n`
+              : `Dernier rappel — votre session présentielle a lieu demain :\n\n`) +
           `  ${s.title} — ${m.title} (Niveau ${m.level} · ${shape.label})\n` +
           `  ${fmtFr(s.scheduledAt)}${where ? `\n  Lieu : ${where}` : ""}\n  Durée : ${Math.round(s.durationMin / 60)} h\n\n` +
           `La présence à chaque session complète est une condition de certification (K-SPEM §6). ` +

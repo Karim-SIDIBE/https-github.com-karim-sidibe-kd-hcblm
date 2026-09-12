@@ -66,12 +66,14 @@ test("verrou §6 : fiche d'ancrage absente", () => {
 
 const DAY = 864e5;
 
-test("convocations : rien avant J-7, convocation à J-7, rappel à J-1, plus rien après", () => {
+test("convocations : rien avant J-14, convocation à J-14, rappels à J-7 et J-1, plus rien après", () => {
   const at = new Date("2026-10-10T09:00:00Z");
-  assert.equal(convocationStage(at, new Date(at.getTime() - 8 * DAY)), 0);
-  assert.equal(convocationStage(at, new Date(at.getTime() - 7 * DAY + 3600e3)), 1);
-  assert.equal(convocationStage(at, new Date(at.getTime() - 2 * DAY)), 1);
-  assert.equal(convocationStage(at, new Date(at.getTime() - 12 * 3600e3)), 2);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 15 * DAY)), 0);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 14 * DAY + 3600e3)), 1);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 9 * DAY)), 1);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 7 * DAY + 3600e3)), 2);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 2 * DAY)), 2);
+  assert.equal(convocationStage(at, new Date(at.getTime() - 12 * 3600e3)), 3);
   assert.equal(convocationStage(at, new Date(at.getTime() + 3600e3)), 0);
 });
 

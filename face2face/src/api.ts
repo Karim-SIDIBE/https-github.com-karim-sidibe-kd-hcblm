@@ -6,27 +6,58 @@
  */
 const BASE = (import.meta.env.VITE_API_URL as string | undefined)?.trim() || "http://localhost:4000/api/v1";
 const TOKEN_KEY = "kd_f2f_token";
+const REFRESH_KEY = "kd_f2f_refresh";
 const USER_KEY = "kd_f2f_user";
 
 export type Principal = { id: string; name: string; email: string; role: string };
 
 export const auth = {
   token: () => localStorage.getItem(TOKEN_KEY),
+  refreshToken: () => localStorage.getItem(REFRESH_KEY),
   user: (): Principal | null => { try { return JSON.parse(localStorage.getItem(USER_KEY) || "null"); } catch { return null; } },
-  set: (token: string, user: Principal) => { localStorage.setItem(TOKEN_KEY, token); localStorage.setItem(USER_KEY, JSON.stringify(user)); },
-  clear: () => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); },
+  set: (token: string, refresh: string | null, user: Principal) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
+  },
+  clear: () => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(REFRESH_KEY); localStorage.removeItem(USER_KEY); },
 };
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
+// Rafraîchissement silencieux : l'accès expire vite (15 min), le refresh token
+// prolonge la session sans reconnexion — même mécanique que la PWA. Une seule
+// tentative en vol à la fois (les 401 simultanés partagent la même promesse).
+let refreshing: Promise<boolean> | null = null;
+function refreshAccess(): Promise<boolean> {
+  refreshing ??= (async () => {
+    try {
+      const r = auth.refreshToken();
+      if (!r) return false;
+      const res = await fetch(`${BASE}/auth/refresh`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ refreshToken: r }) });
+      if (!res.ok) return false;
+      const j = await res.json();
+      const user = auth.user();
+      if (user) auth.set(j.accessToken, j.refreshToken ?? null, user);
+      return true;
+    } catch { return false; }
+    finally { setTimeout(() => { refreshing = null; }, 0); }
+  })();
+  return refreshing;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const headers: Record<string, string> = {};
-  const t = auth.token();
-  if (t) headers["authorization"] = `Bearer ${t}`;
-  if (body !== undefined) headers["content-type"] = "application/json";
-  const res = await fetch(BASE + path, { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined });
+  const build = (): RequestInit => {
+    const headers: Record<string, string> = {};
+    const t = auth.token();
+    if (t) headers["authorization"] = `Bearer ${t}`;
+    if (body !== undefined) headers["content-type"] = "application/json";
+    return { method, headers, body: body !== undefined ? JSON.stringify(body) : undefined };
+  };
+  let res = await fetch(BASE + path, build());
+  if (res.status === 401 && (await refreshAccess())) res = await fetch(BASE + path, build());
   if (res.status === 401) { auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée"); }
   const json = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, json.error || "error", json.message || "Erreur serveur");
@@ -34,7 +65,7 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 export type LoginResult =
-  | { accessToken: string; user: Principal }
+  | { accessToken: string; refreshToken: string | null; user: Principal }
   | { twoFactorRequired: true; challenge: string };
 
 export async function login(email: string, password: string): Promise<LoginResult> {
@@ -42,14 +73,14 @@ export async function login(email: string, password: string): Promise<LoginResul
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Identifiants invalides");
   if (j.twoFactorRequired) return { twoFactorRequired: true, challenge: j.challenge };
-  return { accessToken: j.accessToken, user: j.user };
+  return { accessToken: j.accessToken, refreshToken: j.refreshToken ?? null, user: j.user };
 }
 
-export async function verify2fa(challenge: string, code: string): Promise<{ accessToken: string; user: Principal }> {
-  const res = await fetch(`${BASE}/auth/2fa/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ challenge, code }) });
+export async function verify2fa(challenge: string, code: string): Promise<{ accessToken: string; refreshToken: string | null; user: Principal }> {
+  const res = await fetch(`${BASE}/auth/2fa/verify`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code: code, challenge }) });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Code invalide");
-  return { accessToken: j.accessToken, user: j.user };
+  return { accessToken: j.accessToken, refreshToken: j.refreshToken ?? null, user: j.user };
 }
 
 // --- types (miroir de server/src/modules/f2f) ---
@@ -173,6 +204,7 @@ export const api = {
     req<{ id: string; user: UserRef; invited: boolean; accountCreated: boolean }>("POST", `/f2f/modules/${moduleId}/participants`, b),
   holdSession: (sessionId: string, attendance: { participantId: string; present: boolean; note?: string }[]) =>
     req<ModuleSession>("POST", `/f2f/sessions/${sessionId}/hold`, { attendance }),
+  cancelHold: (sessionId: string) => req<ModuleSession>("DELETE", `/f2f/sessions/${sessionId}/hold`),
   certify: (pid: string, b: { criteria: { points: number; evidence?: string }[]; feedback?: string }) =>
     req<CertifyResult>("POST", `/f2f/participants/${pid}/certify`, b),
 

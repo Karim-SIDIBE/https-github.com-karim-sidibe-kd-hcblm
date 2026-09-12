@@ -11,7 +11,7 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
-  F2fError, addJournalEntry, addMission, addParticipant, certificationState, certify,
+  F2fError, addJournalEntry, addMission, addParticipant, cancelHold, certificationState, certify,
   createModule, f2fKpis, getAnchor, getModule, getSelfAssessments, holdSession,
   listJournal, listModules, myModules, participantCertificatePdf, participantOverview,
   upsertAnchor, upsertSelfAssessment,
@@ -111,6 +111,16 @@ export async function f2fRoutes(app: FastifyInstance) {
     try {
       const session = await holdSession(id, attendance, req.principal!);
       await audit({ actorId: req.principal?.id, action: "f2f.session.hold", targetType: "f2fSession", targetId: id, ip: req.ip, meta: { attendance: attendance.length } });
+      return { data: session };
+    } catch (err) { return handle(reply, err); }
+  });
+
+  // Annule une tenue saisie par erreur — Super Admin, dans les 24 h.
+  app.delete("/f2f/sessions/:id/hold", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try {
+      const session = await cancelHold(id, req.principal!);
+      await audit({ actorId: req.principal?.id, action: "f2f.session.cancel_hold", targetType: "f2fSession", targetId: id, ip: req.ip });
       return { data: session };
     } catch (err) { return handle(reply, err); }
   });
