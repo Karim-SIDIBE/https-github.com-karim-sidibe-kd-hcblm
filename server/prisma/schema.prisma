@@ -148,6 +148,9 @@ model User {
   authoredThreads       ForumThread[]            @relation("ThreadAuthor")
   authoredPosts         ForumPost[]              @relation("PostAuthor")
   evaluatorAssignments  ProjectSubmission[]      @relation("EvaluatorAssignments")
+  f2fModulesLed         F2fModule[]              @relation("F2fTrainer")
+  f2fParticipations     F2fParticipant[]
+  f2fEvaluations        F2fCertification[]       @relation("F2fEvaluator")
   accreditations        EvaluatorAccreditation[] @relation("AccreditationHolder")
   accreditationsGranted EvaluatorAccreditation[] @relation("AccreditationGranter")
   verificationCodes     VerificationCode[]
@@ -1539,4 +1542,170 @@ model Refund {
   createdAt   DateTime     @default(now())
 
   @@index([paymentId])
+}
+
+// ---------------------------------------------------------------------------
+// KOMPETENCES FACE2FACE — modules présentiels (modèle K-SPEM v2.0).
+// AUCUN contenu e-learning : un module présentiel vit hors du modèle de cours
+// (Course/Enrollment). Il réutilise les briques transverses : utilisateurs,
+// grille du socle commun d'évaluation (Json validé par RubricSchema),
+// moteur de décision §6, Open Badges. Palier 1.
+// ---------------------------------------------------------------------------
+
+enum F2fModuleStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum F2fParticipantStatus {
+  ACTIVE
+  WITHDRAWN
+  CERTIFIED
+  NOT_CERTIFIED
+}
+
+/// Un module = une compétence à un niveau (N1 : 3 sessions / 2 périodes ·
+/// N2 : 4 / 3 · N3 : 5 / 4 — formes codées dans domain/engine/f2f.ts).
+model F2fModule {
+  id           String           @id @default(cuid())
+  title        String // compétence, ex. « Leadership d'équipe »
+  level        Int // 1..3
+  status       F2fModuleStatus  @default(ACTIVE)
+  location     String?
+  /// Formateur-évaluateur responsable de la cohorte.
+  trainerId    String?
+  trainer      User?            @relation("F2fTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
+  /// Grille comportementale du SOCLE COMMUN (RubricSchema : criteria + seuil).
+  rubric       Json
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  sessions     F2fSession[]
+  participants F2fParticipant[]
+}
+
+/// Session présentielle (salle). `heldAt` non nul = session tenue — c'est ce
+/// jalon qui FIGE les fiches d'ancrage (index 1) et clôt l'émargement.
+model F2fSession {
+  id          String          @id @default(cuid())
+  moduleId    String
+  module      F2fModule       @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  index       Int // 1..5 selon le niveau
+  title       String
+  scheduledAt DateTime?
+  durationMin Int             @default(360)
+  location    String?
+  heldAt      DateTime?
+  attendance  F2fAttendance[]
+
+  @@unique([moduleId, index])
+}
+
+model F2fAttendance {
+  id            String         @id @default(cuid())
+  sessionId     String
+  session       F2fSession     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  participantId String
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  present       Boolean
+  note          String?
+
+  @@unique([sessionId, participantId])
+}
+
+model F2fParticipant {
+  id             String               @id @default(cuid())
+  moduleId       String
+  module         F2fModule            @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         F2fParticipantStatus @default(ACTIVE)
+  joinedAt       DateTime             @default(now())
+  anchor         F2fAnchor?
+  journal        F2fJournalEntry[]
+  missions       F2fMission[]
+  certification  F2fCertification?
+  credential     F2fCredential?
+  f2Fattendances F2fAttendance[]
+
+  @@unique([moduleId, userId])
+}
+
+/// Fiche d'ancrage (Pilier 1) — 3 questions, saisie en Session 1.
+/// Visible participant + formateur ; FIGÉE dès que la Session 1 est tenue
+/// (décision produit : pas de réécriture à la première difficulté terrain).
+model F2fAnchor {
+  id             String         @id @default(cuid())
+  participantId  String         @unique
+  participant    F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  situation      String
+  behaviorChange String
+  beneficiary    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+/// Entrée du Journal de Bord (Pilier 4) : Date · Situation · Fait délibérément ·
+/// Observé · Appris. FIGÉE à la soumission (même philosophie que DECLICK).
+model F2fJournalEntry {
+  id            String         @id @default(cuid())
+  participantId String
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  /// Période terrain 1..4 (selon le niveau).
+  periodIndex   Int
+  entryDate     DateTime
+  situation     String
+  action        String
+  observation   String
+  learning      String
+  createdAt     DateTime       @default(now())
+
+  @@index([participantId])
+}
+
+/// Mission Terrain engagée en fin de session n (une par session, sauf la dernière).
+model F2fMission {
+  id            String         @id @default(cuid())
+  participantId String
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  sessionIndex  Int
+  text          String
+  peerName      String?
+  engagedAt     DateTime       @default(now())
+
+  @@unique([participantId, sessionIndex])
+}
+
+/// Décision certifiante (socle commun §6) sur la mise en situation finale.
+/// N'est enregistrable que si TOUTES les conditions K-SPEM §6 sont réunies
+/// (présence complète, journal au minimum du niveau, missions engagées,
+/// fiche d'ancrage) — verrou applicatif, cf. f2f.service.
+model F2fCertification {
+  id            String         @id @default(cuid())
+  participantId String         @unique
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  /// [{label, weightPoints, points, band?, evidence?}] — fiche archivée.
+  scores        Json
+  scoreTotal    Int
+  decision      String // CERTIFIED | RESUBMIT | NOT_CERTIFIED
+  feedback      String?
+  evaluatorId   String?
+  evaluator     User?          @relation("F2fEvaluator", fields: [evaluatorId], references: [id], onDelete: SetNull)
+  evaluatedAt   DateTime       @default(now())
+}
+
+/// Open Badge FACE2FACE (OB 2.0 hébergé + VC-JWT), émis à la décision
+/// CERTIFIED. Table dédiée : le Credential DECLICK est lié aux inscriptions
+/// e-learning ; la vérification publique répond sur les deux tables.
+model F2fCredential {
+  id               String         @id @default(cuid())
+  participantId    String         @unique
+  participant      F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  achievementType  String
+  recipientSalt    String
+  recipientHash    String
+  assertion        Json
+  vcJwt            String
+  issuedAt         DateTime       @default(now())
+  revokedAt        DateTime?
+  revocationReason String?
 }

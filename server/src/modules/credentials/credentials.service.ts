@@ -20,6 +20,7 @@ import { env } from "../../config/env.js";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { badgeTypeForBlock } from "../../domain/engine/badges.js";
+import { f2fShape } from "../../domain/engine/f2f.js";
 import type { CourseContent, Block } from "../../domain/content-model.js";
 
 export class CredentialError extends Error {
@@ -52,7 +53,7 @@ function achievementFor(
   };
 }
 
-async function signVcJwt(vc: object, recipientHash: string, credentialId: string): Promise<string> {
+export async function signVcJwt(vc: object, recipientHash: string, credentialId: string): Promise<string> {
   const { privateKey, kid } = await getKeys();
   return new SignJWT({ vc })
     .setProtectedHeader({ alg: JWT_ALG, kid, typ: "vc+jwt" })
@@ -108,22 +109,39 @@ export async function getCredential(id: string) {
   return c;
 }
 
+/** DECLICK d'abord, repli FACE2FACE : les credentials présentiels (F2fCredential)
+ *  partagent le même espace d'URL public — un seul QR / un seul vérificateur,
+ *  quel que soit le département qui a émis le titre. */
+async function anyCredential(id: string) {
+  const c = await prisma.credential.findUnique({ where: { id } })
+    ?? await prisma.f2fCredential.findUnique({ where: { id } });
+  if (!c) throw new CredentialError(404, "not_found", "Credential introuvable");
+  return c;
+}
+
+async function f2fCredentialRow(id: string) {
+  return prisma.f2fCredential.findUnique({
+    where: { id },
+    include: { participant: { include: { user: { select: { name: true } }, module: { select: { title: true, level: true } } } } },
+  });
+}
+
 /** OB 2.0 hosted assertion (public). Reflects revocation live. */
 export async function hostedAssertionDoc(id: string) {
-  const c = await getCredential(id);
+  const c = await anyCredential(id);
   const a = c.assertion as Record<string, unknown>;
   if (c.revokedAt) return { ...a, revoked: true, revocationReason: c.revocationReason ?? "revoked" };
   return a;
 }
 
 export async function vcJwt(id: string) {
-  return (await getCredential(id)).vcJwt;
+  return (await anyCredential(id)).vcJwt;
 }
 
 /** Verify a VC-JWT (signature + issuer + revocation). Public. */
 export async function verify(input: { jws?: string; credentialId?: string }) {
   let jws = input.jws;
-  if (!jws && input.credentialId) jws = (await getCredential(input.credentialId)).vcJwt;
+  if (!jws && input.credentialId) jws = (await anyCredential(input.credentialId)).vcJwt;
   if (!jws) throw new CredentialError(400, "missing", "Fournir jws ou credentialId");
 
   try {
@@ -131,7 +149,10 @@ export async function verify(input: { jws?: string; credentialId?: string }) {
     const { payload } = await jwtVerify(jws, verifyKey, { algorithms: [JWT_ALG], issuer: issuerId() });
     const vc = (payload as { vc?: any }).vc;
     const credId = typeof payload.jti === "string" ? payload.jti.split("/").pop()! : input.credentialId;
-    const row = credId ? await prisma.credential.findUnique({ where: { id: credId } }) : null;
+    const row = credId
+      ? (await prisma.credential.findUnique({ where: { id: credId } })
+        ?? await prisma.f2fCredential.findUnique({ where: { id: credId } }))
+      : null;
     const revoked = Boolean(row?.revokedAt);
     return {
       valid: !revoked,
@@ -148,15 +169,23 @@ export async function verify(input: { jws?: string; credentialId?: string }) {
 }
 
 export async function revoke(id: string, reason: string | undefined, actorId: string | undefined) {
-  await getCredential(id);
-  const updated = await prisma.credential.update({ where: { id }, data: { revokedAt: new Date(), revocationReason: reason ?? "revoked" } });
+  const data = { revokedAt: new Date(), revocationReason: reason ?? "revoked" };
+  const isDeclick = Boolean(await prisma.credential.findUnique({ where: { id }, select: { id: true } }));
+  if (!isDeclick) await anyCredential(id); // 404 si inconnu des deux familles
+  const updated = isDeclick
+    ? await prisma.credential.update({ where: { id }, data })
+    : await prisma.f2fCredential.update({ where: { id }, data });
   return { id: updated.id, revoked: true, revokedAt: updated.revokedAt };
 }
 
 /** Reinstate a revoked credential (admin action, audited at the route). */
 export async function unrevoke(id: string) {
-  await getCredential(id);
-  const updated = await prisma.credential.update({ where: { id }, data: { revokedAt: null, revocationReason: null } });
+  const data = { revokedAt: null, revocationReason: null };
+  const isDeclick = Boolean(await prisma.credential.findUnique({ where: { id }, select: { id: true } }));
+  if (!isDeclick) await anyCredential(id);
+  const updated = isDeclick
+    ? await prisma.credential.update({ where: { id }, data })
+    : await prisma.f2fCredential.update({ where: { id }, data });
   return { id: updated.id, revoked: false };
 }
 
@@ -238,7 +267,26 @@ export async function verificationData(id: string) {
   const c = await prisma.credential.findUnique({
     where: { id }, include: { enrollment: { include: { user: { select: { name: true } }, courseVersion: { select: { title: true, level: true, content: true } } } } },
   });
-  if (!c) throw new CredentialError(404, "not_found", "Credential introuvable");
+  if (!c) {
+    // Repli FACE2FACE : même page de vérification pour les titres présentiels.
+    const f = await f2fCredentialRow(id);
+    if (!f) throw new CredentialError(404, "not_found", "Credential introuvable");
+    const fa = f.assertion as { badge?: { name?: string } };
+    const v = await verify({ credentialId: id });
+    return {
+      id: f.id,
+      brand: pageBrand(),
+      issuerName: env.CREDENTIAL_ISSUER_NAME,
+      holderName: f.participant.user.name,
+      courseTitle: f.participant.module.title,
+      achievementName: fa.badge?.name ?? f.achievementType,
+      level: f.participant.module.level as 1 | 2 | 3,
+      issuedOn: f.issuedAt,
+      revoked: Boolean(f.revokedAt),
+      revocationReason: f.revocationReason ?? null,
+      signatureValid: !("error" in v),
+    };
+  }
   const a = c.assertion as { badge?: { name?: string } };
   const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3 } | null;
   const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
@@ -263,7 +311,23 @@ export async function certificate(id: string): Promise<Buffer> {
   const c = await prisma.credential.findUnique({
     where: { id }, include: { enrollment: { include: { user: true, courseVersion: true } } },
   });
-  if (!c) throw new CredentialError(404, "not_found", "Credential introuvable");
+  if (!c) {
+    // Repli FACE2FACE : certificat présentiel (gabarits dédiés ou secours dessiné).
+    const f = await f2fCredentialRow(id);
+    if (!f) throw new CredentialError(404, "not_found", "Credential introuvable");
+    const level = f.participant.module.level as 1 | 2 | 3;
+    return certificatePdf({
+      recipientName: f.participant.user.name,
+      achievementName: `Certification Niveau ${level} · ${f2fShape(level).label}`,
+      courseTitle: f.participant.module.title,
+      domainLabel: "KOMPETENCES FACE2FACE",
+      level,
+      licenseId: f.id,
+      issuedOn: f.issuedAt,
+      verifyUrl: credentialUrl(f.id),
+      templateDir: "assets/certificates/face2face",
+    });
+  }
   const a = c.assertion as { badge?: { name?: string } };
   // Level selects the branded template (N1/N2/N3); domain feeds the paragraph.
   const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3; domain?: { label?: string } } | null;
