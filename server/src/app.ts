@@ -30,6 +30,7 @@ import { mediaRoutes } from "./modules/media/media.routes.js";
 import { interopRoutes } from "./modules/interop/interop.routes.js";
 import { exportRoutes } from "./modules/export/export.routes.js";
 import { credentialRoutes } from "./modules/credentials/credentials.routes.js";
+import { f2fRoutes } from "./modules/f2f/f2f.routes.js";
 import { analyticsRoutes } from "./modules/analytics/analytics.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { bankRoutes } from "./modules/bank/bank.routes.js";
@@ -190,6 +191,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await interopRoutes(api);
       await exportRoutes(api);
       await credentialRoutes(api);
+      await f2fRoutes(api);
       await analyticsRoutes(api);
       await reportsRoutes(api);
       await bankRoutes(api);
