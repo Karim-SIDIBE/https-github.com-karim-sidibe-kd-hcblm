@@ -111,6 +111,22 @@ entreprise.declick.digital {
 	header /assets/* Cache-Control "public, max-age=31536000, immutable"
 }
 
+# --- FACE2FACE (département présentiel, static SPA) — built into face2face/dist ---
+# Nécessite l'enregistrement DNS : face2face.declick.digital A 185.98.136.230
+face2face.declick.digital {
+	import sec_spa
+	import accesslog face2face
+	encode zstd gzip
+	# Espace client : jamais dans les moteurs de recherche.
+	header X-Robots-Tag "noindex, nofollow"
+	root * /srv/face2face
+	try_files {path} /index.html
+	file_server
+	# Voir le commentaire du bloc PWA : no-cache par défaut, immuable sur /assets/*.
+	header Cache-Control "no-cache"
+	header /assets/* Cache-Control "public, max-age=31536000, immutable"
+}
+
 # --- Media origin (CDN pull source) — OPTIONAL, enable only when moving to a CDN ---
 # Serves the raw media volume (UUID-based keys, range-capable). A pull-CDN
 # (BunnyCDN / Cloudflare) points its origin here; learners then load videos from
