@@ -39,7 +39,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
     try {
       const r = await apiLogin(email, password);
       if ("twoFactorRequired" in r) { setChallenge(r.challenge); return; }
-      auth.set(r.accessToken, r.user); onLogin(r.user);
+      auth.set(r.accessToken, r.refreshToken, r.user); onLogin(r.user);
     } catch (err) { setError(errMsg(err, "Identifiants invalides")); }
     finally { setBusy(false); }
   }
@@ -48,7 +48,7 @@ function Login({ onLogin }: { onLogin: (u: Principal) => void }) {
     e.preventDefault();
     if (!challenge) return;
     setBusy(true); setError(null);
-    try { const r = await verify2fa(challenge, code.trim()); auth.set(r.accessToken, r.user); onLogin(r.user); }
+    try { const r = await verify2fa(challenge, code.trim()); auth.set(r.accessToken, r.refreshToken, r.user); onLogin(r.user); }
     catch (err) { setError(errMsg(err, "Code invalide")); }
     finally { setBusy(false); }
   }
@@ -529,7 +529,7 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
             </label>
           ))}
         </div>
-        <p className="meta" style={{ marginTop: 6 }}>Les dates déclenchent les convocations automatiques (J-7 et J-1) et bornent les périodes terrain. Modifiables plus tard si besoin.</p>
+        <p className="meta" style={{ marginTop: 6 }}>Les dates déclenchent les convocations automatiques (J-14, J-7 et J-1) et bornent les périodes terrain. Modifiables plus tard si besoin.</p>
       </div>
       <label className="lbl">Grille du socle commun — reprise du parcours publié
         <select className="field" value={courseId} onChange={(e) => setCourseId(e.target.value)} required>
@@ -590,11 +590,22 @@ function ModulesList({ user, onOpen }: { user: Principal; onOpen: (id: string) =
 }
 
 /** Émargement d'une session (rejouable — corrige une saisie erronée). */
-function SessionRow({ s, participants, onHeld }: { s: ModuleSession; participants: ParticipantRow[]; onHeld: () => void }) {
+function SessionRow({ s, participants, user, onHeld }: { s: ModuleSession; participants: ParticipantRow[]; user: Principal; onHeld: () => void }) {
   const [open, setOpen] = useState(false);
   const [present, setPresent] = useState<Record<string, boolean>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Super Admin : annulation d'une tenue saisie par erreur, dans les 24 h.
+  const undoable = Boolean(s.heldAt) && user.role === "SUPER_ADMIN"
+    && Date.now() - new Date(s.heldAt!).getTime() <= 24 * 3600e3;
+  async function undo() {
+    if (!window.confirm(`Annuler la tenue de « ${s.title} » ? L'émargement sera effacé et ce que la tenue avait verrouillé sera rouvert.`)) return;
+    setBusy(true); setError(null);
+    try { await api.cancelHold(s.id); onHeld(); }
+    catch (err) { setError(errMsg(err, "Annulation impossible")); }
+    finally { setBusy(false); }
+  }
 
   function start() {
     const init: Record<string, boolean> = {};
@@ -626,7 +637,10 @@ function SessionRow({ s, participants, onHeld }: { s: ModuleSession; participant
               ? <span className="pill ok">tenue · {fmtDate(s.heldAt)} · {presentCount}/{participants.length} présents</span>
               : <span className="pill soft">{s.scheduledAt ? `prévue le ${fmtDate(s.scheduledAt)}` : "à planifier"}</span>}
           </div>
-          <button className="btn ghost btn--sm" onClick={open ? () => setOpen(false) : start}>{open ? "Fermer" : s.heldAt ? "Corriger l'émargement" : "Tenir la session"}</button>
+          <div className="row">
+            <button className="btn ghost btn--sm" onClick={open ? () => setOpen(false) : start}>{open ? "Fermer" : s.heldAt ? "Corriger l'émargement" : "Tenir la session"}</button>
+            {undoable && <button className="btn ghost btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)", boxShadow: "none" }} disabled={busy} onClick={undo}>Annuler la tenue (24 h)</button>}
+          </div>
         </div>
         {s.index === 1 && !s.heldAt && <div className="meta">⚠ Tenir la Session 1 fige définitivement les fiches d'ancrage de la cohorte.</div>}
         {open && (
@@ -869,7 +883,7 @@ function ModuleView({ id, user, onBack }: { id: string; user: Principal; onBack:
         <div className="card">
           <span className="eyebrow">Calendrier du module · cycle APP</span>
           <h2>Sessions & émargement</h2>
-          {m.sessions.map((s) => <SessionRow key={s.id} s={s} participants={m.participants} onHeld={reload} />)}
+          {m.sessions.map((s) => <SessionRow key={s.id} s={s} participants={m.participants} user={user} onHeld={reload} />)}
         </div>
         <div className="card">
           <div className="row between"><div><span className="eyebrow">Cohorte</span><h2>{m.participants.length} participant{m.participants.length > 1 ? "s" : ""}</h2></div></div>

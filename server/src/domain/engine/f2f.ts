@@ -56,14 +56,20 @@ export const F2F_SELF_SCORE_MIN = 1;
 export const F2F_SELF_SCORE_MAX = 10;
 
 /** Étape de convocation due pour une session à venir : 0 = rien encore,
- *  1 = convocation J-7, 2 = rappel J-1. Une session passée ne convoque plus. */
-export function convocationStage(scheduledAt: Date, now: Date): 0 | 1 | 2 {
+ *  1 = convocation J-14, 2 = rappel J-7, 3 = rappel J-1. Une session passée
+ *  ne convoque plus. */
+export function convocationStage(scheduledAt: Date, now: Date): 0 | 1 | 2 | 3 {
   const ms = scheduledAt.getTime() - now.getTime();
   if (ms <= 0) return 0;
-  if (ms <= DAY_MS) return 2;
-  if (ms <= 7 * DAY_MS) return 1;
+  if (ms <= DAY_MS) return 3;
+  if (ms <= 7 * DAY_MS) return 2;
+  if (ms <= 14 * DAY_MS) return 1;
   return 0;
 }
+
+/** Fenêtre pendant laquelle le SUPER ADMIN peut annuler une tenue de session
+ *  saisie par erreur (émargement compris) : 24 h après la tenue. */
+export const F2F_HOLD_UNDO_MS = DAY_MS; // 24 h
 
 /** Entrées de journal attendues par période terrain — identique à tous les
  *  niveaux du modèle V2.0 (6/2 · 9/3 · 12/4 = 3 par période). */
