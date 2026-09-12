@@ -14,10 +14,11 @@ import { prisma } from "../../db/prisma.js";
 import { RubricSchema, type Rubric } from "../../domain/content-model.js";
 import { decideCertification } from "../../domain/engine/certification.js";
 import {
-  certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue,
+  certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue, journalSlotOpensAt,
   F2F_JOURNAL_MIN_WORDS, F2F_SELF_SCORE_MAX, F2F_SELF_SCORE_MIN,
 } from "../../domain/engine/f2f.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
+import { env } from "../../config/env.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { hostedAssertion, verifiableCredential, credentialUrl, type AchievementInput } from "../../lib/credentials/openbadge.js";
 import { signVcJwt } from "../credentials/credentials.service.js";
@@ -138,22 +139,59 @@ export async function getModule(moduleId: string, principal: Principal) {
   };
 }
 
+/** Inscrit un participant. Compte inconnu : créé avec un mot de passe
+ *  provisoire et INVITÉ par e-mail (lien du front FACE2FACE) — même mécanique
+ *  que la console entreprise. Compte existant : notification d'inscription. */
 export async function addParticipant(moduleId: string, input: { userId?: string; email?: string; name?: string }, principal: Principal) {
   const module = await loadModule(moduleId);
   assertModuleStaff(module, principal);
   let userId = input.userId ?? null;
+  let invitation: { created: boolean; tempPassword?: string } | null = null;
   if (!userId) {
     if (!input.email) throw new F2fError(422, "user_required", "userId ou email requis");
     const email = input.email.trim().toLowerCase();
     const existing = await prisma.user.findUnique({ where: { email } });
-    userId = existing?.id
-      ?? (await prisma.user.create({ data: { email, name: input.name?.trim() || email.split("@")[0]!, role: "LEARNER" } })).id;
+    if (existing) {
+      userId = existing.id;
+      invitation = { created: false };
+    } else {
+      const { generateTempPassword } = await import("../users/users.service.js");
+      const { hashPassword } = await import("../../lib/auth/password.js");
+      const tempPassword = generateTempPassword();
+      const created = await prisma.user.create({
+        data: {
+          email, name: input.name?.trim() || email.split("@")[0]!, role: "LEARNER",
+          passwordHash: await hashPassword(tempPassword), emailVerifiedAt: new Date(),
+        },
+      });
+      userId = created.id;
+      invitation = { created: true, tempPassword };
+    }
   }
   try {
-    return await prisma.f2fParticipant.create({
+    const participant = await prisma.f2fParticipant.create({
       data: { moduleId, userId },
       include: { user: { select: { id: true, name: true, email: true } } },
     });
+    if (invitation) {
+      const shape = f2fShape(module.level);
+      const access = invitation.created && invitation.tempPassword
+        ? `Identifiant : ${participant.user.email}\nMot de passe provisoire : ${invitation.tempPassword}\n(changez-le à votre première connexion)`
+        : `Connectez-vous avec votre compte habituel (${participant.user.email}).`;
+      await enqueueNotification({
+        recipientKind: "LEARNER", recipient: participant.user.email, provider: "f2f-invite",
+        subject: `Votre inscription — ${module.title} (KOMPETENCES FACE2FACE)`,
+        body:
+          `Bonjour ${participant.user.name},\n\n` +
+          `Vous êtes inscrit·e au module présentiel « ${module.title} » ` +
+          `(Niveau ${module.level} · ${shape.label} — ${shape.sessions} sessions).\n\n` +
+          `Votre espace participant : ${env.F2F_APP_URL}\n${access}\n\n` +
+          `Vous y trouverez votre parcours, votre fiche d'ancrage, votre Journal de Bord ` +
+          `et vos missions terrain.\n\n` +
+          `KOMPETENCES FACE2FACE — L'apprentissage par l'échange et l'immersion totale`,
+      });
+    }
+    return { ...participant, invited: Boolean(invitation), accountCreated: invitation?.created ?? false };
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
       throw new F2fError(409, "already_participant", "Cette personne est déjà dans la cohorte");
@@ -243,18 +281,32 @@ export async function getAnchor(participantId: string, principal: Principal) {
   return anchor ? { ...anchor, frozen: session1Held(participant) } : null;
 }
 
-/** Entrée du Journal de Bord (Pilier 4) — FIGÉE à la soumission, comme toute
- *  production certifiante de la plateforme. */
+/** Entrée du Journal de Bord — FIGÉE à la soumission. Chaque période compte
+ *  3 entrées à créneaux : l'entrée k s'ouvre à J+7·k après la session qui
+ *  ouvre la période (rythme hebdomadaire, comme les déclencheurs DECLICK). */
 export async function addJournalEntry(
   participantId: string,
-  input: { periodIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string },
+  input: { periodIndex: number; entryIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string },
   principal: Principal,
 ) {
   const participant = await loadParticipant(participantId);
   assertSelf(participant, principal);
   const shape = f2fShape(participant.module.level);
+  const perPeriod = entriesPerPeriod(participant.module.level);
   if (!Number.isInteger(input.periodIndex) || input.periodIndex < 1 || input.periodIndex > shape.periods) {
     throw new F2fError(422, "bad_period", `Période invalide (1..${shape.periods} pour le niveau ${participant.module.level})`);
+  }
+  if (!Number.isInteger(input.entryIndex) || input.entryIndex < 1 || input.entryIndex > perPeriod) {
+    throw new F2fError(422, "bad_entry", `Entrée invalide (1..${perPeriod} par période)`);
+  }
+  const session = participant.module.sessions.find((s) => s.index === input.periodIndex);
+  if (!session?.heldAt) {
+    throw new F2fError(423, "period_locked", `La période ${input.periodIndex} s'ouvre après la Session ${input.periodIndex}.`);
+  }
+  const opensAt = journalSlotOpensAt(session.heldAt, input.entryIndex);
+  if (opensAt.getTime() > Date.now()) {
+    throw new F2fError(423, "entry_locked",
+      `L'entrée ${input.entryIndex} de la période ${input.periodIndex} s'ouvre le ${opensAt.toLocaleDateString("fr-FR")} — une entrée par semaine, au rythme du terrain.`);
   }
   const entryDate = new Date(input.entryDate);
   if (Number.isNaN(entryDate.getTime())) throw new F2fError(422, "bad_date", "Date d'entrée invalide");
@@ -263,13 +315,20 @@ export async function addJournalEntry(
     throw new F2fError(422, "too_short",
       `Entrée trop courte (${totalWords} mots) — décrivez la situation, votre action délibérée, l'observation et l'apprentissage (${F2F_JOURNAL_MIN_WORDS} mots minimum au total)`);
   }
-  return prisma.f2fJournalEntry.create({
-    data: {
-      participantId, periodIndex: input.periodIndex, entryDate,
-      situation: input.situation.trim(), action: input.action.trim(),
-      observation: input.observation.trim(), learning: input.learning.trim(),
-    },
-  });
+  try {
+    return await prisma.f2fJournalEntry.create({
+      data: {
+        participantId, periodIndex: input.periodIndex, entryIndex: input.entryIndex, entryDate,
+        situation: input.situation.trim(), action: input.action.trim(),
+        observation: input.observation.trim(), learning: input.learning.trim(),
+      },
+    });
+  } catch (e) {
+    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+      throw new F2fError(409, "entry_done", "Cette entrée est déjà déposée — elle est figée.");
+    }
+    throw e;
+  }
 }
 
 export async function listJournal(participantId: string, principal: Principal) {
@@ -315,6 +374,30 @@ export async function participantOverview(participantId: string, principal: Prin
     prisma.f2fSelfAssessment.findMany({ where: { participantId } }),
   ]);
   const presentAt = attendance.filter((a) => a.present).map((a) => a.session.index).sort((a, b) => a - b);
+  // Cycles du parcours : après chaque session intermédiaire, une Mission
+  // Terrain (engagement public) puis les 3 entrées à créneaux du Journal.
+  const perPeriod = entriesPerPeriod(participant.module.level);
+  const now = Date.now();
+  const cycles = Array.from({ length: shape.periods }, (_, i) => {
+    const idx = i + 1;
+    const session = participant.module.sessions.find((s) => s.index === idx);
+    const heldAt = session?.heldAt ?? null;
+    return {
+      index: idx,
+      sessionHeldAt: heldAt,
+      mission: missions.find((m) => m.sessionIndex === idx) ?? null,
+      journal: Array.from({ length: perPeriod }, (_, k) => {
+        const entryIndex = k + 1;
+        const opensAt = heldAt ? journalSlotOpensAt(heldAt, entryIndex) : null;
+        return {
+          entryIndex,
+          opensAt,
+          open: Boolean(opensAt && opensAt.getTime() <= now),
+          entry: journal.find((e) => e.periodIndex === idx && e.entryIndex === entryIndex) ?? null,
+        };
+      }),
+    };
+  });
   return {
     id: participant.id, status: participant.status, user: participant.user,
     module: {
@@ -328,6 +411,7 @@ export async function participantOverview(participantId: string, principal: Prin
     anchor: anchor ? { ...anchor, frozen: session1Held(participant) } : null,
     journal: { entries: journal, count: journal.length, target: shape.journalMin },
     missions,
+    cycles,
     certification, credential,
     selfAssessment: selfAssessmentView(selfAssessments, participant, Boolean(certification)),
   };
@@ -691,6 +775,44 @@ export async function runF2fReminders(now: Date = new Date()) {
           `KOMPETENCES FACE2FACE — L'apprentissage par l'échange et l'immersion totale`;
         await enqueueNotification({ recipientKind: "LEARNER", recipient: p.user.email, subject, body, provider: "f2f-reminder" });
         convocations++;
+      }
+    }
+
+    // --- ouverture des entrées du Journal (déclencheurs hebdomadaires) ---
+    // L'entrée k s'ouvre à J+7·k après la session de la période ; le
+    // participant est prévenu une fois, comme sur les parcours DECLICK.
+    const perPeriod = entriesPerPeriod(m.level);
+    const participantIds = m.participants.map((p) => p.id);
+    const doneRows = participantIds.length
+      ? await prisma.f2fJournalEntry.findMany({
+          where: { participantId: { in: participantIds } },
+          select: { participantId: true, periodIndex: true, entryIndex: true },
+        })
+      : [];
+    const done = new Set(doneRows.map((r) => `${r.participantId}:${r.periodIndex}:${r.entryIndex}`));
+    for (const s of m.sessions) {
+      if (!s.heldAt || s.index > shape.periods) continue;
+      for (let k = 1; k <= perPeriod; k++) {
+        const opensAt = journalSlotOpensAt(s.heldAt, k);
+        if (opensAt.getTime() > now.getTime()) continue;
+        for (const p of m.participants) {
+          if (done.has(`${p.id}:${s.index}:${k}`)) continue;
+          if (!(await claimReminder(`f2f:jslot:${p.id}:p${s.index}e${k}`))) continue;
+          await enqueueNotification({
+            recipientKind: "LEARNER", recipient: p.user.email, provider: "f2f-reminder",
+            subject: `Votre entrée de Journal de Bord n°${k} est ouverte — ${m.title}`,
+            body:
+              `Bonjour ${p.user.name},\n\n` +
+              `L'entrée n°${k} de la période terrain ${s.index} de « ${m.title} » est ouverte ` +
+              `depuis le ${fmtFr(opensAt)}.\n\n` +
+              `Quelques minutes suffisent : une situation vécue cette semaine, ce que vous avez fait ` +
+              `délibérément, ce que vous avez observé, ce que vous en apprenez. L'entrée est figée à la ` +
+              `soumission — c'est votre matière pour le Partage terrain de la prochaine session.\n\n` +
+              `Votre espace : ${env.F2F_APP_URL}\n\n` +
+              `KOMPETENCES FACE2FACE — L'apprentissage par l'échange et l'immersion totale`,
+          });
+          nudges++;
+        }
       }
     }
 

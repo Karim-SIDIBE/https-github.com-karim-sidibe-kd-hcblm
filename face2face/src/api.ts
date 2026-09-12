@@ -61,12 +61,15 @@ export type MyModule = { participantId: string; status: string; module: { id: st
 
 export type SessionView = { index: number; title: string; scheduledAt: string | null; heldAt: string | null; present: boolean };
 export type Anchor = { situation: string; behaviorChange: string; beneficiary: string; updatedAt: string; frozen: boolean };
-export type JournalEntry = { id: string; periodIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string; createdAt: string };
+export type JournalEntry = { id: string; periodIndex: number; entryIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string; createdAt: string };
 export type Mission = { id: string; sessionIndex: number; text: string; peerName: string | null; engagedAt: string };
 export type Certification = { decision: string; scoreTotal: number; feedback: string | null; evaluatedAt: string; scores?: { label: string; weightPoints: number; points: number; evidence: string | null }[] };
 
 export type SelfPhase = { score: number; comment: string | null; updatedAt: string; frozen: boolean } | null;
 export type SelfAssessment = { entry: SelfPhase; exit: SelfPhase; delta: number | null; entryOpen: boolean; exitOpen: boolean };
+
+export type JournalSlot = { entryIndex: number; opensAt: string | null; open: boolean; entry: JournalEntry | null };
+export type Cycle = { index: number; sessionHeldAt: string | null; mission: Mission | null; journal: JournalSlot[] };
 
 export type Overview = {
   id: string; status: string; user: UserRef;
@@ -74,6 +77,7 @@ export type Overview = {
   anchor: Anchor | null;
   journal: { entries: JournalEntry[]; count: number; target: number };
   missions: Mission[];
+  cycles: Cycle[];
   certification: Certification | null;
   credential: { id: string; issuedAt: string } | null;
   selfAssessment: SelfAssessment;
@@ -144,7 +148,7 @@ export const api = {
   overview: (pid: string) => req<Overview>("GET", `/f2f/participants/${pid}`),
   saveAnchor: (pid: string, b: { situation: string; behaviorChange: string; beneficiary: string }) =>
     req<Anchor>("PUT", `/f2f/participants/${pid}/anchor`, b),
-  addJournal: (pid: string, b: { periodIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string }) =>
+  addJournal: (pid: string, b: { periodIndex: number; entryIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string }) =>
     req<JournalEntry>("POST", `/f2f/participants/${pid}/journal`, b),
   addMission: (pid: string, b: { sessionIndex: number; text: string; peerName?: string }) =>
     req<Mission>("POST", `/f2f/participants/${pid}/missions`, b),
@@ -163,10 +167,10 @@ export const api = {
   // --- formateur / staff ---
   modules: () => req<ModuleRow[]>("GET", "/f2f/modules"),
   module: (id: string) => req<ModuleDetail>("GET", `/f2f/modules/${id}`),
-  createModule: (b: { title: string; level: number; location?: string; trainerId?: string; rubric: Rubric }) =>
+  createModule: (b: { title: string; level: number; location?: string; trainerId?: string; rubric: Rubric; sessions?: { index: number; scheduledAt?: string }[] }) =>
     req<ModuleRow>("POST", "/f2f/modules", b),
   addParticipant: (moduleId: string, b: { email: string; name?: string }) =>
-    req<{ id: string; user: UserRef }>("POST", `/f2f/modules/${moduleId}/participants`, b),
+    req<{ id: string; user: UserRef; invited: boolean; accountCreated: boolean }>("POST", `/f2f/modules/${moduleId}/participants`, b),
   holdSession: (sessionId: string, attendance: { participantId: string; present: boolean; note?: string }[]) =>
     req<ModuleSession>("POST", `/f2f/sessions/${sessionId}/hold`, { attendance }),
   certify: (pid: string, b: { criteria: { points: number; evidence?: string }[]; feedback?: string }) =>
