@@ -12,7 +12,7 @@ import type { FastifyInstance, FastifyReply } from "fastify";
 import { z } from "zod";
 import {
   F2fError, addJournalEntry, addMission, addParticipant, cancelHold, certificationState, certify,
-  createModule, f2fKpis, getAnchor, getModule, getSelfAssessments, holdSession,
+  createModule, deleteModule, f2fKpis, getAnchor, getModule, getSelfAssessments, holdSession,
   listJournal, listModules, myModules, participantCertificatePdf, participantOverview,
   upsertAnchor, upsertSelfAssessment,
 } from "./f2f.service.js";
@@ -89,6 +89,17 @@ export async function f2fRoutes(app: FastifyInstance) {
   app.get("/f2f/modules/:id", { preHandler: authenticate }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await getModule(id, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Supprime un groupe créé par erreur — Super Admin ; refusé si des Open
+  // Badges y ont été émis (liens de vérification publics).
+  app.delete("/f2f/modules/:id", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try {
+      const r = await deleteModule(id, req.principal!);
+      await audit({ actorId: req.principal?.id, action: "f2f.module.delete", targetType: "f2fModule", targetId: id, ip: req.ip, meta: { title: r.title, participants: r.participants } });
+      return { data: r };
+    } catch (err) { return handle(reply, err); }
   });
 
   app.post("/f2f/modules/:id/participants", { preHandler: authenticate }, async (req, reply) => {

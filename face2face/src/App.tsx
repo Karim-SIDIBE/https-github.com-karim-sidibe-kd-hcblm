@@ -557,11 +557,20 @@ function ModulesList({ user, onOpen }: { user: Principal; onOpen: (id: string) =
   const reload = useCallback(() => { api.modules().then(setRows).catch((e) => setError(errMsg(e, "Chargement impossible"))); }, []);
   useEffect(reload, [reload]);
 
+  // Super Admin : suppression d'un groupe créé par erreur (refusée côté
+  // serveur dès qu'un Open Badge y a été émis).
+  async function remove(m: ModuleRow) {
+    if (!window.confirm(`Supprimer le groupe « ${m.title} » (N${m.level}) ? Sessions, émargements, journaux et missions seront définitivement effacés.`)) return;
+    setError(null);
+    try { await api.deleteModule(m.id); reload(); }
+    catch (err) { setError(errMsg(err, "Suppression impossible")); }
+  }
+
   return (
     <>
       <div className="crumb">FACE2FACE / Cohortes & sessions</div>
       <div className="pagehead row between wrap">
-        <div><h1>Modules présentiels</h1><div className="sub">Cohortes K-SPEM — sessions, émargement, journaux, certification</div></div>
+        <div><h1>Modules présentiels</h1><div className="sub">Sessions, émargement, journaux, certification</div></div>
         {canCreateModule(user.role) && !creating && <button className="btn" onClick={() => setCreating(true)}>+ Nouveau module</button>}
       </div>
       {creating && <NewModuleForm onCreated={() => { setCreating(false); reload(); }} onCancel={() => setCreating(false)} />}
@@ -579,7 +588,12 @@ function ModulesList({ user, onOpen }: { user: Principal; onOpen: (id: string) =
                 <td className="num">{m.sessions.filter((s) => s.heldAt).length}/{m.shape.sessions} tenues</td>
                 <td className="num">{m._count.participants}</td>
                 <td>{m.trainer?.name ?? <span className="muted">—</span>}</td>
-                <td><button className="btn ghost btn--sm" onClick={() => onOpen(m.id)}>Ouvrir</button></td>
+                <td>
+                  <div className="row" style={{ justifyContent: "flex-end" }}>
+                    <button className="btn ghost btn--sm" onClick={() => onOpen(m.id)}>Ouvrir</button>
+                    {user.role === "SUPER_ADMIN" && <button className="btn ghost btn--sm" style={{ color: "var(--danger)", borderColor: "var(--danger)", boxShadow: "none" }} onClick={() => remove(m)}>Supprimer</button>}
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -942,8 +956,8 @@ function KpisPage() {
 
   return (
     <>
-      <div className="crumb">FACE2FACE / Indicateurs K-SPEM</div>
-      <div className="pagehead"><h1>Indicateurs K-SPEM</h1><div className="sub">Présence, journal, missions, certification et progression auto-déclarée — par module et en global</div></div>
+      <div className="crumb">FACE2FACE / Indicateurs</div>
+      <div className="pagehead"><h1>Indicateurs</h1><div className="sub">Présence, journal, missions, certification et progression auto-déclarée — par module et en global</div></div>
       <div className="row wrap" style={{ alignItems: "stretch", marginBottom: 13 }}>
         <Tile label="Modules actifs" value={`${g.activeModules}/${g.modules}`} />
         <Tile label="Participants" value={String(g.participants)} />
@@ -993,7 +1007,7 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
         </div>
         <div className="nav">
           <a className={page === "modules" ? "on" : ""} onClick={() => { setPage("modules"); setModuleId(null); }}>Cohortes & sessions</a>
-          <a className={page === "kpis" ? "on" : ""} onClick={() => { setPage("kpis"); setModuleId(null); }}>Indicateurs K-SPEM</a>
+          <a className={page === "kpis" ? "on" : ""} onClick={() => { setPage("kpis"); setModuleId(null); }}>Indicateurs</a>
         </div>
         <div style={{ padding: "18px 18px 0", fontSize: 11.5, color: "#9fb4d2" }}>
           {user.name}<br /><a style={{ textDecoration: "underline", cursor: "pointer" }} onClick={onLogout}>Déconnexion</a>
