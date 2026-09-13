@@ -20,10 +20,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@capacitor/android": "^8.5.0",
+    "@capacitor/android": "^8.5.1",
     "@capacitor/app": "^8.1.1",
     "@capacitor/core": "^8.5.0",
-    "@capacitor/ios": "^8.5.0",
+    "@capacitor/ios": "^8.5.1",
     "@capacitor/network": "^8.0.1",
     "@capacitor/push-notifications": "^8.1.2",
     "@capacitor/splash-screen": "^8.0.2",
