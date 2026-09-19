@@ -345,7 +345,7 @@ async function issueOtpAndSend(user: { id: string; email: string; phone: string 
 }
 
 /** Public self-registration: create an unverified LEARNER and send an OTP. */
-export async function registerLearner(params: { name: string; email: string; password: string; phone?: string; marketingOptIn?: boolean }, ip?: string) {
+export async function registerLearner(params: { name: string; email: string; password: string; phone?: string; marketingOptIn?: boolean; compositionExempt?: boolean }, ip?: string) {
   const existing = await prisma.user.findUnique({ where: { email: params.email } });
   if (existing) {
     if (!existing.emailVerifiedAt) { await issueOtpAndSend(existing); return { verificationRequired: true as const, email: existing.email }; }
@@ -353,12 +353,15 @@ export async function registerLearner(params: { name: string; email: string; pas
   }
   if (await isPasswordPwned(params.password)) throw new AuthError("password_breached", "Ce mot de passe figure dans des fuites de données connues — choisissez-en un autre.");
   const user = await prisma.user.create({
-    data: { name: params.name, email: params.email, role: "LEARNER", phone: params.phone ?? null, passwordHash: await hashPassword(params.password) },
+    // compositionExempt (avenant n°1, F.4) : exemption accessibilité déclarée à
+    // l'inscription — les champs certifiants ne seront pas instrumentés et la
+    // mention figure au dossier.
+    data: { name: params.name, email: params.email, role: "LEARNER", phone: params.phone ?? null, passwordHash: await hashPassword(params.password), compositionExempt: !!params.compositionExempt },
   });
   // RGPD: record the terms + privacy acceptance (required) and optional marketing opt-in.
   await recordRegistrationConsents(user.id, !!params.marketingOptIn, ip);
   await issueOtpAndSend(user);
-  await audit({ actorId: user.id, action: "auth.register", ip, meta: { email: user.email, marketingOptIn: !!params.marketingOptIn } });
+  await audit({ actorId: user.id, action: "auth.register", ip, meta: { email: user.email, marketingOptIn: !!params.marketingOptIn, compositionExempt: !!params.compositionExempt } });
   return { verificationRequired: true as const, email: user.email };
 }
 

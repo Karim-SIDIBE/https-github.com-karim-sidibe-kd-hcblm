@@ -30,6 +30,8 @@ export type CertificateData = {
   /** Unique licence number shown on the certificate (Open Badge credential id). */
   licenseId: string;
   issuedOn: Date;
+  /** Échéance de validité (A3 : délivrance + 3 ans). Absente → aucune mention. */
+  expiresOn?: Date | null;
   verifyUrl: string;
   /** Test hook: override the template directory (defaults to assets/certificates). */
   templateDir?: string;
@@ -143,6 +145,13 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     doc.font(f.bold).fontSize(licSize);
     doc.text(lic, W * 0.5 - doc.widthOfString(lic) / 2, H * 0.765, { lineBreak: false });
 
+    // Échéance (A3) : ligne discrète centrée sous la rangée date/licence.
+    if (d.expiresOn) {
+      const exp = `Valable jusqu'au ${d.expiresOn.toLocaleDateString("fr-FR")}`;
+      doc.font(f.regular).fontSize(8.5).fillColor("#555");
+      doc.text(exp, W * 0.5 - doc.widthOfString(exp) / 2, H * 0.815, { lineBreak: false });
+    }
+
     // Discreet verification QR (white pad keeps it scannable on any corner art).
     const qs = 50;
     const qx = W * 0.075;
@@ -163,6 +172,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
       .text(`Formation « ${d.courseTitle} » — domaine « ${d.domainLabel || "—"} » (niveau ${d.level})`, { width: W - 100, align: "center" });
     doc.moveDown(0.3).fontSize(12).fillColor("#555").text(d.achievementName, { width: W - 100, align: "center" });
     doc.moveDown(1).fontSize(11).fillColor("#666").text(`Date de délivrance : ${dateStr}`, { width: W - 100, align: "center" });
+    if (d.expiresOn) doc.moveDown(0.2).text(`Valable jusqu'au ${d.expiresOn.toLocaleDateString("fr-FR")}`, { width: W - 100, align: "center" });
     doc.moveDown(0.2).text(`N° de licence : ${d.licenseId}`, { width: W - 100, align: "center" });
     const qy = H - 150;
     doc.image(qr, W / 2 - 60, qy, { width: 120 });

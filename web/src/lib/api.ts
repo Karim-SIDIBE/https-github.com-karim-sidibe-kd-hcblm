@@ -63,7 +63,7 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       return j.user as { id: string; name: string; email: string; role: string };
     },
     /** B2C self-registration → sends an OTP; no session yet. */
-    async register(body: { name: string; email: string; password: string; phone?: string; acceptTerms?: boolean; marketingOptIn?: boolean }) {
+    async register(body: { name: string; email: string; password: string; phone?: string; acceptTerms?: boolean; marketingOptIn?: boolean; compositionExempt?: boolean }) {
       const res = await fetch(`${baseUrl}/auth/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(j.message || "Inscription impossible"), { code: j.error as string | undefined });

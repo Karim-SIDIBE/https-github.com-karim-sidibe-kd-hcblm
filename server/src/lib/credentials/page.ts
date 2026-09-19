@@ -31,6 +31,10 @@ export type CredentialPageData = {
   achievementName: string;
   level: 1 | 2 | 3;
   issuedOn: Date;
+  /** Échéance de validité (A3 : certificat de niveau, 3 ans). NULL pour un
+   *  badge de bloc — la page ne lui applique aucune date. */
+  expiresOn: Date | null;
+  expired: boolean;
   revoked: boolean;
   revocationReason: string | null;
   /** VC-JWT signature verified against the platform's public keys. */
@@ -86,6 +90,15 @@ function status(d: CredentialPageData): Status {
       note: "L'authenticité de ce certificat n'a pas pu être confirmée cryptographiquement. Contactez l'émetteur avant de vous y fier.",
     };
   }
+  // A3 / objet E : la certification atteste une démonstration à une date, pas
+  // une acquisition définitive — après 3 ans le titre est authentique mais échu.
+  if (d.expired) {
+    return {
+      badge: "⏳ Certificat expiré",
+      color: "#8a6d00", bg: "#fff8e1",
+      note: `Ce certificat, authentique et émis par ${d.issuerName}, est arrivé à échéance le ${d.expiresOn!.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}. La certification est valable 3 ans ; son renouvellement s'opère par un parcours de mise à jour propre au niveau.`,
+    };
+  }
   return {
     badge: "✅ Certificat valide",
     color: "#1e7e34", bg: "#e8f5e9",
@@ -123,6 +136,7 @@ export function renderCredentialPage(d: CredentialPageData): string {
         ${row("Parcours", esc(d.courseTitle))}
         ${row("Niveau", `Niveau ${d.level}`)}
         ${row("Délivré le", esc(date))}
+        ${d.expiresOn ? row("Valable jusqu'au", esc(d.expiresOn.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }))) : ""}
         ${row("N° de licence", `<code style="font-size:13px;background:#f4f6f9;padding:2px 6px;border-radius:4px">${esc(d.id)}</code>`)}
       </table>
     </div>

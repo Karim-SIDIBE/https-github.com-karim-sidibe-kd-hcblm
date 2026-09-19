@@ -8,6 +8,7 @@ import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { answerOf, useAnswers } from "../lib/answers";
 import { Breadcrumb } from "./Breadcrumb";
 import { useT, useI18n } from "../lib/i18n";
+import { FieldMeter } from "../lib/composition";
 
 const words = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 
@@ -35,6 +36,9 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
   const [after, setAfter] = useState<null | { progress: any; ai: string | null; aiLoading: boolean }>(null);
 
   const isJournal = /^J\+\d+$/.test(itemKey);
+  // Objet F : seules les micro-entrées du journal (champ certifiant du Bloc 4)
+  // sont mesurées — jamais les livrables formatifs des Blocs 1 à 3.
+  const journalMeter = useMemo(() => (isJournal ? new FieldMeter() : null), [isJournal]);
 
   useEffect(() => {
     let alive = true;
@@ -115,7 +119,10 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
       const data = structured
         ? { fields: Object.fromEntries(Object.entries(values).map(([k, v]) => [k, v.trim()])), text: Object.entries(values).map(([k, v]) => `${k} : ${v.trim()}`).join("\n") }
         : { text: text.trim() };
-      const r = await engine.commit(eid, "complete_item", { blockIndex: block, itemType: spec.itemType, itemKey, data });
+      const r = await engine.commit(eid, "complete_item", {
+        blockIndex: block, itemType: spec.itemType, itemKey, data,
+        ...(journalMeter?.active ? { composition: journalMeter.capture(text.trim()) } : {}),
+      });
       clearDraft(draftKey);
       if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
       // Personalised feedback on the saved submission (AI when configured,
@@ -225,6 +232,7 @@ export function Deliverable({ eid, block, itemKey }: { eid: string; block: numbe
         ) : (
           <div className="hf-textwrap">
             <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setText(e.target.value)} placeholder={("placeholder" in spec && spec.placeholder) || t("answerPlaceholder")} style={{ minHeight: 180 }}
+              onBeforeInput={journalMeter ? (journalMeter.onBeforeInput as never) : undefined}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
             <span className="hf-count" style={{ color: ok ? "var(--brand-declick)" : undefined }}>{count >= spec.min ? t("count.ok", { n: count, unit: spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars") }) : t("count.min", { n: count, min: spec.min, unit: spec.unit === "mots" ? t("dl.unitWords") : t("dl.unitChars") })}</span>
           </div>

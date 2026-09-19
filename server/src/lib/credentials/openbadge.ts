@@ -63,6 +63,9 @@ export function hostedAssertion(params: {
   recipientHash: string;
   recipientSalt: string;
   issuedAt: Date;
+  /** Échéance de validité (certificat de niveau : 3 ans — A3/objet E). Les
+   *  badges de bloc n'expirent pas : ne pas fournir. */
+  expiresAt?: Date | null;
   revoked: boolean;
   revocationReason?: string | null;
 }) {
@@ -74,6 +77,7 @@ export function hostedAssertion(params: {
     badge: badgeClassDocument(params.achievement),
     recipient: { type: "email", hashed: true, salt: params.recipientSalt, identity: `sha256$${params.recipientHash}` },
     issuedOn: params.issuedAt.toISOString(),
+    ...(params.expiresAt ? { expires: params.expiresAt.toISOString() } : {}),
     verification: { type: "HostedBadge" },
     ...(r ? { narrative: resultNarrative(r), evidence: [{ type: "Evidence", narrative: resultNarrative(r) }] } : {}),
     ...(params.revoked ? { revoked: true, revocationReason: params.revocationReason ?? "revoked" } : {}),
@@ -87,6 +91,7 @@ export function verifiableCredential(params: {
   recipientHash: string;
   subjectName: string;
   issuedAt: Date;
+  expiresAt?: Date | null;
 }) {
   return {
     "@context": [
@@ -97,6 +102,7 @@ export function verifiableCredential(params: {
     type: ["VerifiableCredential", "OpenBadgeCredential"],
     issuer: { id: issuerId(), name: env.CREDENTIAL_ISSUER_NAME, url: env.CREDENTIAL_ISSUER_URL },
     issuanceDate: params.issuedAt.toISOString(),
+    ...(params.expiresAt ? { expirationDate: params.expiresAt.toISOString() } : {}),
     credentialSubject: {
       type: ["AchievementSubject"],
       identifier: { type: "IdentityObject", hashed: true, identityHash: `sha256$${params.recipientHash}` },

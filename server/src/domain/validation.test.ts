@@ -147,3 +147,62 @@ test("la grille officielle annexe v1.1 + socle v1.1 du canonique est publiable",
   assert.ok(crits.every((cr: any) => cr.bands?.length === 4));
   assert.deepEqual(crits.map((cr: any) => cr.minPoints ?? null), [10, 10, 10, 8, null, null]);
 });
+
+// --- Socle v1.2 (avenant n°1, objets A et C) ---------------------------------
+
+test("v1.2 : le cours publié reste publiable, avec les avertissements référentiel v3.0 attendus", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const p = validatePolicy((s as any).content);
+  assert.equal(p.publishable, true);
+  // D4.C4 (Performance durable) n'a pas encore de critère dédié dans l'annexe
+  // v1.1, et S1 porte son code : exactement la zone de recouvrement C.2.
+  assert.ok(p.issues.some((i) => i.level === "warning" && i.rule === "rubric.refCoverage" && i.message.includes("D4.C4")));
+  assert.ok(p.issues.some((i) => i.level === "warning" && i.rule === "rubric.overlap"));
+});
+
+test("objet A.3 : une répartition inégale du bloc domaine bloque la publication", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone((s as any).content);
+  c.blocks[4].payload.rubric.criteria[0].weightPoints = 25;
+  c.blocks[4].payload.rubric.criteria[1].weightPoints = 15;
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.domainEqualSplit"));
+});
+
+test("objet A.2 : un poids de socle non conforme au niveau bloque la publication", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone((s as any).content);
+  const s1 = c.blocks[4].payload.rubric.criteria.find((x: any) => /^S1\b/.test(x.label));
+  s1.weightPoints = 20; s1.minPoints = 10; // barème F2F standard — pas DECLICK
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.socleWeight"));
+});
+
+test("objet C : un critère de socle placé avant le bloc domaine casse l'ordre de notation", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone((s as any).content);
+  const crit = c.blocks[4].payload.rubric.criteria;
+  crit.unshift(crit.pop()); // S3 remonte en tête
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.order"));
+});
+
+test("S4 hors Niveau 3 est refusé", () => {
+  const s = validateShape(n1Full);
+  assert.ok(s.ok);
+  const c: any = structuredClone((s as any).content);
+  const crit = c.blocks[4].payload.rubric.criteria;
+  // On transforme S2 (15 pts) en S4 : poids identique, mais réservé au N3.
+  const s2 = crit.find((x: any) => /^S2\b/.test(x.label));
+  s2.label = "S4 — Transmission de la pratique";
+  const p = validatePolicy(c);
+  assert.equal(p.publishable, false);
+  assert.ok(p.issues.some((i) => i.rule === "rubric.s4Level"));
+});

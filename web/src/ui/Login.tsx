@@ -15,6 +15,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
   const [website, setWebsite] = useState(""); // honeypot — must stay empty
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [marketingOptIn, setMarketingOptIn] = useState(false);
+  const [compositionExempt, setCompositionExempt] = useState(false);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -36,7 +37,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
     if (!acceptTerms) { setError(t("signup.mustAccept")); return; }
     setBusy(true); setError(null);
     try {
-      await api.register({ name: name.trim(), email: email.trim(), password, acceptTerms, marketingOptIn, ...(website ? { website } as any : {}) });
+      await api.register({ name: name.trim(), email: email.trim(), password, acceptTerms, marketingOptIn, compositionExempt, ...(website ? { website } as any : {}) });
       setMode("verify"); setInfo(t("signup.codeSent", { email }));
     } catch (err: any) { setError(err?.message || t("signup.fail")); }
     finally { setBusy(false); }
@@ -89,6 +90,14 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
           <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
           <span>{t("signup.marketing")} <span className="muted">{t("common.optional")}</span>.</span>
+        </label>
+        {/* Avenant n°1 (objet F.10) : mention d'information LISIBLE et DISTINCTE
+            des conditions générales — champs concernés, ce qui est mesuré, ce
+            qui ne l'est pas, et la voie d'exemption. */}
+        <p className="muted" style={{ fontSize: 12, lineHeight: 1.5, margin: "2px 0 0" }}>{t("signup.compositionNotice")}</p>
+        <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
+          <input type="checkbox" checked={compositionExempt} onChange={(e) => setCompositionExempt(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
+          <span>{t("signup.exemptLabel")} <span className="muted">{t("common.optional")}</span></span>
         </label>
         {error && <p className="ko">{error}</p>}
         <button disabled={busy || !acceptTerms}>{busy ? "…" : t("signup.create")}</button>

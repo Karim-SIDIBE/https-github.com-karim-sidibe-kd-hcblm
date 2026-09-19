@@ -17,6 +17,7 @@ import { decorateActionPlan, decorateFieldApplication, orderFields, savedProject
 import { seededShuffle } from "../../domain/engine/shuffle.js";
 import { materializeQuiz } from "../bank/bank.service.js";
 import { publicUrl } from "../../lib/storage/storage.js";
+import { CompositionCapture } from "../../lib/composition.js";
 import {
   EngineError, captureMomentAncrage, completeItem, designatePeer, getResume, reconcile,
   savePosition, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
@@ -187,14 +188,23 @@ export async function buildBundle(enrollmentId: string) {
 
 const num = (v: unknown) => (typeof v === "number" ? v : Number(v));
 
+/** Agrégats de composition (objet F) embarqués dans une action hors-ligne —
+ *  validés strictement, silencieusement ignorés si malformés (une métrique ne
+ *  bloque jamais une synchronisation). */
+function parseComposition(v: unknown) {
+  if (v == null) return undefined;
+  const parsed = CompositionCapture.safeParse(v);
+  return parsed.success ? parsed.data : undefined;
+}
+
 /** Apply a single decoded action to the engine. */
 async function applyOne(enrollmentId: string, type: string, payload: Record<string, unknown>) {
   switch (type) {
-    case "moment_ancrage": return captureMomentAncrage(enrollmentId, String(payload.text ?? ""));
+    case "moment_ancrage": return captureMomentAncrage(enrollmentId, String(payload.text ?? ""), parseComposition(payload.composition));
     case "peer": return designatePeer(enrollmentId, String(payload.name ?? ""), String(payload.email ?? ""), payload.phone != null ? String(payload.phone) : undefined, payload.consent != null ? Boolean(payload.consent) : undefined);
     case "position": return savePosition(enrollmentId, num(payload.blockIndex), String(payload.itemKey ?? ""), payload.positionSec != null ? num(payload.positionSec) : undefined, payload.durationSec != null ? num(payload.durationSec) : undefined);
     case "complete_item":
-      return completeItem(enrollmentId, num(payload.blockIndex), payload.itemType as never, String(payload.itemKey ?? ""), payload.data, (payload.meta ?? {}) as never);
+      return completeItem(enrollmentId, num(payload.blockIndex), payload.itemType as never, String(payload.itemKey ?? ""), payload.data, (payload.meta ?? {}) as never, parseComposition(payload.composition));
     case "quiz_trigger":
       return submitTriggerQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, payload.profileKey as string | undefined);
     case "quiz_diagnostic": return submitDiagnosticQuiz(enrollmentId, (payload.answers ?? {}) as Record<string, string>, (payload.meta ?? {}) as never);

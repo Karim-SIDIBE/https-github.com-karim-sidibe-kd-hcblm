@@ -21,7 +21,7 @@ import { enqueueNotification } from "../notifications/notifications.service.js";
 import { env } from "../../config/env.js";
 import { hasPermission } from "../../domain/auth/permissions.js";
 import { hostedAssertion, verifiableCredential, credentialUrl, type AchievementInput } from "../../lib/credentials/openbadge.js";
-import { signVcJwt } from "../credentials/credentials.service.js";
+import { signVcJwt, certificateExpiry } from "../credentials/credentials.service.js";
 import { certificatePdf } from "../../lib/credentials/pdf.js";
 import type { Principal } from "../../lib/auth.js";
 
@@ -597,18 +597,20 @@ async function issueF2fCredential(
     result: { score, max: 100, threshold, passed: true },
   };
   const issuedAt = new Date();
+  // Validité de 3 ans, commune aux deux départements (avenant n°1, objet E).
+  const expiresAt = certificateExpiry(issuedAt);
   const row = await prisma.f2fCredential.create({
     data: {
       participantId: participant.id, achievementType: achievement.type,
       recipientSalt: salt, recipientHash, assertion: {}, vcJwt: "tmp",
     },
   });
-  const assertion = hostedAssertion({ credentialId: row.id, achievement, recipientHash, recipientSalt: salt, issuedAt, revoked: false });
-  const vc = verifiableCredential({ credentialId: row.id, achievement, recipientHash, subjectName: participant.user.name, issuedAt });
+  const assertion = hostedAssertion({ credentialId: row.id, achievement, recipientHash, recipientSalt: salt, issuedAt, expiresAt, revoked: false });
+  const vc = verifiableCredential({ credentialId: row.id, achievement, recipientHash, subjectName: participant.user.name, issuedAt, expiresAt });
   const vcJwt = await signVcJwt(vc, recipientHash, row.id);
   return prisma.f2fCredential.update({
     where: { id: row.id },
-    data: { assertion: assertion as unknown as Prisma.InputJsonValue, vcJwt, issuedAt },
+    data: { assertion: assertion as unknown as Prisma.InputJsonValue, vcJwt, issuedAt, expiresAt },
   });
 }
 

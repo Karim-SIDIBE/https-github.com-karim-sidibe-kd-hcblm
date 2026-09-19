@@ -59,7 +59,7 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const [detail, setDetail] = useState<ProjectDetail | null>(null);
   const [points, setPoints] = useState<number[]>(() => (item.rubric?.criteria ?? []).map(() => 0));
   const [notes, setNotes] = useState("");
-  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai" | "draft" | "helper">("");
+  const [busy, setBusy] = useState<"" | "assign" | "grade" | "ai" | "draft" | "helper" | "align">("");
   const [msg, setMsg] = useState<string | null>(null);
   const [evaluators, setEvaluators] = useState<UserRow[]>([]);
   const [pick, setPick] = useState("");
@@ -98,6 +98,12 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   const [renote, setRenote] = useState(false);
   const [gradedNow, setGradedNow] = useState(false);
   const sealed = item.scoreTotal != null && !gradedNow && !renote;
+  // Conditions préalables (v2.3 A5.1 / avenant F.6) : la grille ne s'ouvre
+  // qu'après l'attestation d'alignement Moment d'Ancrage ↔ Situation (hors
+  // recours §10, où le 2e/3e évaluateur note à l'aveugle).
+  const [aligned, setAligned] = useState(false);
+  useEffect(() => { setAligned(Boolean(detail?.alignment?.checkedAt)); }, [detail]);
+  const needsAlignment = !sealed && item.appealStage === 0 && !aligned;
   const fiche = sealed ? (detail?.criteria ?? null) : null;
   const aiPointsOf = (label: string) => (ai?.criteria ?? []).find((s) => s.label === label)?.suggested ?? null;
   const DECISION_LABEL: Record<string, { label: string; cls: string }> = {
@@ -145,7 +151,14 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
   function copyEvidence(i: number, text: string) {
     setEvidence((ev) => ev.map((v, j) => (j === i ? (v.trim() ? `${v.trimEnd()}\n${text}` : text) : v)));
   }
+  async function attestAlignment() {
+    setBusy("align"); setMsg(null);
+    try { await api.ancrageCheck(item.enrollmentId); setAligned(true); setMsg("Alignement attesté — la grille est déverrouillée."); }
+    catch (e: any) { setMsg(e?.message || "Erreur"); }
+    finally { setBusy(""); }
+  }
   async function grade() {
+    if (needsAlignment) { setMsg("Conditions préalables (Pilier 6.6) : attestez d'abord l'alignement de la situation sur le Moment d'Ancrage."); return; }
     if (banded && evidence.some((e) => !e.trim())) { setMsg("Preuve manquante : chaque critère exige une citation exacte ou une déclaration d'absence (règle 3 du socle)."); return; }
     setBusy("grade"); setMsg(null);
     try {
@@ -206,6 +219,44 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
               <input type="checkbox" checked={f2f} onChange={(e) => setF2f(e.target.checked)} style={{ marginTop: 2 }} />
               <span className="muted">Déclaration FACE2FACE (§5.1 du socle) : cochez si l'évaluateur pressenti a animé une session FACE2FACE suivie par ce candidat sur la même compétence — l'assignation sera refusée et archivée.</span>
             </label>
+          )}
+
+          {/* Conditions préalables (K-HCBLM v2.3 A5.1 / avenant n°1 F.6) : la
+              grille ne s'ouvre qu'après. Trois conditions sont structurelles —
+              la Section 5 n'est soumissible qu'après le dossier complet,
+              l'application terrain et le journal. La quatrième s'atteste ici :
+              le Moment d'Ancrage est affiché à côté de la Situation. */}
+          {detail?.alignment && (
+            <div className="card" style={{ padding: "10px 12px", marginBottom: 12, borderLeft: needsAlignment ? "3px solid var(--orange-600, #E8650A)" : "3px solid var(--success, #2E9E4F)" }}>
+              <div className="row between">
+                <strong style={{ fontSize: 13 }}>Conditions préalables — Pilier 6.6</strong>
+                <span className={`pill pill--sm ${needsAlignment ? "pill--warn" : "pill--green"}`}>{needsAlignment ? "grille verrouillée" : "vérifiées"}</span>
+              </div>
+              <div className="muted" style={{ fontSize: 12, margin: "6px 0" }}>
+                ✓ dossier du Bloc 4 complet · ✓ application terrain réalisée · ✓ journal de pratique déposé <span style={{ opacity: .7 }}>(garanties par la soumission de la Section 5)</span>
+              </div>
+              <div style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10, margin: "8px 0" }}>
+                <b style={{ fontSize: 12.5 }}>Moment d'Ancrage (Bloc 0 — spécimen de référence)</b>
+                <p style={{ margin: "4px 0 0", fontSize: 13, whiteSpace: "pre-wrap" }}>{detail.alignment.momentAncrage ?? "—"}</p>
+              </div>
+              {detail.alignment.ancrageChangeNote ? (
+                <div style={{ borderLeft: "3px solid var(--line)", paddingLeft: 10, margin: "8px 0" }}>
+                  <b style={{ fontSize: 12.5 }}>Explication du changement de situation (candidat)</b>
+                  <p style={{ margin: "4px 0 0", fontSize: 13, whiteSpace: "pre-wrap" }}>{detail.alignment.ancrageChangeNote}</p>
+                </div>
+              ) : (
+                <p className="muted" style={{ fontSize: 12, margin: "6px 0" }}>Aucune explication de changement fournie — si la situation du dossier diffère du Moment d'Ancrage, cette absence constitue elle-même le signal (F.6).</p>
+              )}
+              {needsAlignment ? (
+                <button className="btn btn--sm btn--primary" disabled={busy === "align"} onClick={() => void attestAlignment()}>
+                  {busy === "align" ? "…" : "J'atteste : la situation du dossier est celle du Moment d'Ancrage, ou le changement est expliqué"}
+                </button>
+              ) : item.appealStage > 0 ? (
+                <span className="muted" style={{ fontSize: 12 }}>Recours (§10) : notation à l'aveugle — condition vérifiée à la première notation.</span>
+              ) : (
+                <span className="muted" style={{ fontSize: 12 }}>Alignement attesté{detail.alignment.checkedAt ? ` le ${frDate(detail.alignment.checkedAt)}` : ""}.</span>
+              )}
+            </div>
           )}
 
           <div className="eyebrow" style={{ marginBottom: 8 }}>Copie de l'apprenant</div>
@@ -456,7 +507,9 @@ function GradeDrawer({ item, onClose, onDone }: { item: EvalQueueItem; onClose: 
             ? (item.revisionStatus === "REVISION_REQUESTED" && (
               <button className="btn btn--primary" onClick={() => setRenote(true)}>Noter la remise (nouvelle grille)</button>
             ))
-            : <button className="btn btn--primary" disabled={busy === "grade" || crit.length === 0 || gradedNow} onClick={grade}>{busy === "grade" ? "…" : "Enregistrer la note"}</button>}
+            : <button className="btn btn--primary" disabled={busy === "grade" || crit.length === 0 || gradedNow || needsAlignment}
+                title={needsAlignment ? "Conditions préalables (Pilier 6.6) : attestez d'abord l'alignement Moment d'Ancrage ↔ Situation" : undefined}
+                onClick={grade}>{busy === "grade" ? "…" : needsAlignment ? "🔒 Enregistrer la note" : "Enregistrer la note"}</button>}
         </div>
       </aside>
     </>

@@ -39,6 +39,7 @@ import { webhookRoutes } from "./modules/webhooks/webhooks.routes.js";
 import { docsRoutes } from "./modules/docs/docs.routes.js";
 import { jobRoutes } from "./modules/jobs/jobs.routes.js";
 import { uiTextRoutes } from "./modules/uitexts/uitexts.routes.js";
+import { compositionRoutes } from "./modules/composition/composition.routes.js";
 import { paymentRoutes } from "./modules/payments/payments.routes.js";
 import { viewsRoutes } from "./modules/views/views.routes.js";
 import { settingsRoutes } from "./modules/settings/settings.routes.js";
@@ -201,6 +202,7 @@ export async function buildApp(): Promise<FastifyInstance> {
       await jobRoutes(api);
       await uiTextRoutes(api);
       await paymentRoutes(api);
+      await compositionRoutes(api);
     },
     { prefix: "/api/v1" },
   );

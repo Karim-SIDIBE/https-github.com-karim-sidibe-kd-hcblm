@@ -42,6 +42,7 @@ export async function authRoutes(app: FastifyInstance) {
       phone: z.string().trim().min(1).optional(),
       acceptTerms: z.boolean().optional(),
       marketingOptIn: z.boolean().optional(),
+      compositionExempt: z.boolean().optional(),
       website: z.string().optional(),
     }).parse(req.body);
     if (body.website) return reply.status(400).send({ error: "rejected", message: "Requête invalide" });

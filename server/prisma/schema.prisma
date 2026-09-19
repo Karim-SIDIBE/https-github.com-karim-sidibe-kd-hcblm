@@ -106,6 +106,9 @@ model User {
   role                Role      @default(LEARNER)
   /// Mobile number for SMS / WhatsApp re-engagement (§7.2). Optional.
   phone               String?
+  /// Exemption accessibilité (avenant n°1, objet F.4) : déclarée à l'inscription,
+  /// les champs certifiants ne sont pas instrumentés et la mention figure au dossier.
+  compositionExempt   Boolean   @default(false)
   /// Argon2id hash for first-party password auth (null = SSO-only / no password).
   passwordHash        String?
   /// Brute-force lockout (OWASP): failed-attempt counter + temporary lock.
@@ -781,6 +784,11 @@ model Enrollment {
   /// Anchor for the journal trigger schedule (Pilier 5.1): set when the
   /// certification block first unlocks ("block start").
   journalStartedAt DateTime?
+  /// Explication du changement de situation depuis le Moment d'Ancrage
+  /// (avenant F.6, champ bloc4.ecart_ancrage — deux lignes, optionnel) : une
+  /// situation peut légitimement changer en huit semaines ; ce qui est exigé
+  /// est la continuité ou son explication, jamais l'identité.
+  ancrageChangeNote String?
 
   startedAt   DateTime  @default(now())
   completedAt DateTime?
@@ -800,9 +808,51 @@ model Enrollment {
   projectSubmission ProjectSubmission?
   appeal            Appeal?
   doubleMarkings    DoubleMarking[]
+  compositionMetrics CompositionMetric[]
 
   @@unique([userId, courseId])
   @@index([status])
+}
+
+/// Signaux de composition des champs certifiants (K-HCBLM v2.3 A5 / avenant n°1
+/// objet F + annexe technique). AGRÉGATS SEULEMENT, écrits UNE FOIS à la
+/// soumission du champ : aucune séquence de caractères, aucun contenu, aucune
+/// écriture en continu pendant la saisie. Cloisonnement (annexe §7) : jamais
+/// exposé à l'évaluateur, à aucun moment, y compris après la décision.
+/// Période d'observation (F.9) : `signal` reste NULL tant qu'aucun seuil n'est
+/// calibré — le dispositif mesure la distribution, sans conséquence candidat.
+model CompositionMetric {
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  /// Identifiant fonctionnel (annexe §1) : bloc0.ancrage · bloc4.journal.J+2 …
+  /// bloc4.situation · bloc4.solution · bloc4.resultat · bloc4.apprentissage ·
+  /// bloc4.ecart_ancrage
+  fieldKey     String
+  /// Type d'appareil (annexe §2) : "mobile" | "desktop".
+  device       String
+  firstInputAt DateTime
+  submittedAt  DateTime   @default(now())
+  /// Compteurs par origine d'insertion (annexe §4) : composition = frappe +
+  /// saisie gestuelle/prédictive + dictée ; dépôt = collage explicite.
+  charsTotal    Int
+  charsComposed Int
+  charsPasted   Int
+  /// Suppressions + remplacements (total), et ceux postérieurs au DERNIER collage.
+  deleteEvents        Int
+  retouchesAfterPaste Int
+  /// Sessions de saisie distinctes, séparées de plus de 10 minutes.
+  sessions      Int
+  /// Les quatre indicateurs calculés à la soumission (annexe §3).
+  depositRate Float // collé / total
+  retouchRate Float? // retouches post-collage / caractères collés (null sans collage)
+  density     Float // caractères / minute
+  spread      Float? // journal seulement : (soumission - ouverture) / largeur de fenêtre
+  /// Signal levé (annexe §3, règle de combinaison). NULL en période d'observation.
+  signal      Boolean?
+
+  @@unique([enrollmentId, fieldKey])
+  @@index([enrollmentId])
 }
 
 /// Procédure de recours (socle §10) : contestation d'une décision devant une
@@ -1007,6 +1057,11 @@ model ProjectSubmission {
   /// Étage de recours (socle §10) : 0 = aucun. > 0 → suggestion IA
   /// indisponible (§8.7, notation à l'aveugle du 2e/3e évaluateur).
   appealStage    Int            @default(0)
+  /// Condition préalable d'alignement (v2.3 A5 / avenant F.6) : l'évaluateur
+  /// atteste que la situation du dossier est celle du Moment d'Ancrage, ou que
+  /// le changement est expliqué — la grille ne se déverrouille qu'après.
+  ancrageAlignedAt DateTime?
+  ancrageAlignedBy String?
 
   @@index([evaluatorId])
 }
@@ -1099,6 +1154,9 @@ model Credential {
   assertion        Json // OB 2.0 hosted assertion
   vcJwt            String // OB 3.0 VC-JWT
   issuedAt         DateTime   @default(now())
+  /// Échéance de validité (K-HCBLM v2.3, A3 / avenant n°1 objet E) : 3 ans pour
+  /// le certificat de niveau ; NULL pour les badges de bloc, qui n'expirent pas.
+  expiresAt        DateTime?
   revokedAt        DateTime?
   revocationReason String?
 
@@ -1711,6 +1769,8 @@ model F2fCredential {
   assertion        Json
   vcJwt            String
   issuedAt         DateTime       @default(now())
+  /// Validité de 3 ans, commune aux deux départements (avenant n°1, objet E).
+  expiresAt        DateTime?
   revokedAt        DateTime?
   revocationReason String?
 }

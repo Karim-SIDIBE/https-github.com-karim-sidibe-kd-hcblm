@@ -31,6 +31,10 @@ export type Permission =
   | "lti:manage" // register / manage LTI platforms
   | "org:manage" // create / oversee organizations (platform level)
   | "uitexts:manage" // edit the learner-app interface texts (SUPER_ADMIN only)
+  // Avenant n°1 objet F (annexe §7) : distribution des signaux de composition —
+  // Directeur Pédagogique SEUL. Jamais l'évaluateur, à aucun moment : ce
+  // cloisonnement conditionne la double notation (§9.3) et le recours (§10).
+  | "composition:observe"
   // paiement (spec « Architecture paiement v3 », §06)
   | "order:read" // lire toutes les commandes (l'acheteur lit les siennes par propriété)
   | "order:manage" // produits/prix, constat de virement (manual), annulation
@@ -43,7 +47,7 @@ const ALL: Permission[] = [
   "course:review", "course:publish", "course:archive",
   "enrollment:create", "enrollment:read_any", "evaluation:grade", "evaluation:assign",
   "user:manage", "job:run", "analytics:read", "audit:read", "session:manage", "forum:moderate", "media:manage", "credential:revoke", "lti:manage", "org:manage",
-  "uitexts:manage",
+  "uitexts:manage", "composition:observe",
   "order:read", "order:manage", "payment:read", "refund:create", "entitlement:gift",
 ];
 

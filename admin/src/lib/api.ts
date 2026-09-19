@@ -253,6 +253,8 @@ export type AiComplianceIndicators = {
 };
 export type CredentialRow = {
   id: string; achievementType: string; badgeLabel: string; issuedAt: string;
+  /// A3 : échéance de 3 ans du certificat de niveau ; null pour un badge de bloc.
+  expiresAt: string | null; expired: boolean;
   revoked: boolean; revocationReason: string | null;
   learner: { name: string; email: string }; courseTitle: string; verifyUrl: string;
 };
@@ -339,6 +341,10 @@ export type ProjectDetail = {
   sectionMeta?: { title: string; submittedAt: string | null; journal: boolean }[];
   /** Micro-entrées du journal (Section 4), datées, avec leur texte. */
   journalEntries?: { day: number; completedAt: string | null; text: string }[];
+  /** Condition préalable d'alignement (v2.3 A5.1 / avenant F.6) : le Moment
+   *  d'Ancrage affiché à côté de la Situation, l'explication éventuelle du
+   *  changement, et l'attestation de l'évaluateur. */
+  alignment?: { momentAncrage: string | null; ancrageChangeNote: string | null; checkedAt: string | null };
 };
 
 // --- endpoints ---
@@ -563,6 +569,9 @@ export const api = {
   evaluations: () => req<EvalQueueItem[]>("GET", "/evaluations"),
   project: (enrollmentId: string) => req<ProjectDetail>("GET", `/enrollments/${enrollmentId}/project`),
   gradeProject: (enrollmentId: string, body: { criteria: { index: number; points: number; evidence?: string }[]; notes?: string }) => req<unknown>("POST", `/enrollments/${enrollmentId}/evaluation`, body),
+  /** F.6 : atteste l'alignement Moment d'Ancrage ↔ Situation (ou l'explication
+   *  du changement) — condition préalable au déverrouillage de la grille. */
+  ancrageCheck: (enrollmentId: string) => req<{ ancrageAlignedAt: string }>("POST", `/enrollments/${enrollmentId}/evaluation/ancrage-check`),
   assignEvaluator: (enrollmentId: string, evaluatorId: string, f2fConflict?: boolean) => req<unknown>("POST", `/enrollments/${enrollmentId}/project/assign`, { evaluatorId, f2fConflict }),
   appeals: () => req<AppealsRegister>("GET", "/appeals"),
   assignAppeal: (enrollmentId: string, evaluatorId: string) => req<unknown>("POST", `/enrollments/${enrollmentId}/appeal/assign`, { evaluatorId }),
