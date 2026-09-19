@@ -94,7 +94,15 @@ export type SessionView = { index: number; title: string; scheduledAt: string | 
 export type Anchor = { situation: string; behaviorChange: string; beneficiary: string; updatedAt: string; frozen: boolean };
 export type JournalEntry = { id: string; periodIndex: number; entryIndex: number; entryDate: string; situation: string; action: string; observation: string; learning: string; createdAt: string };
 export type Mission = { id: string; sessionIndex: number; text: string; peerName: string | null; engagedAt: string };
-export type Certification = { decision: string; scoreTotal: number; feedback: string | null; evaluatedAt: string; scores?: { label: string; weightPoints: number; points: number; evidence: string | null }[] };
+export type Certification = {
+  decision: string; scoreTotal: number; feedback: string | null; evaluatedAt: string;
+  /// Socle F2F v1.3 : tentative (1 = décision initiale, 2 = reprise unique),
+  /// variante de scénario jouée, fiche avec source de preuve + vérification orale.
+  attempt: number; scenarioVariant: string | null;
+  scores?: { label: string; weightPoints: number; points: number; band?: number | null; evidence: string | null; source?: string; competencyCodes?: string[]; oralCheck?: string }[];
+};
+
+export type MiniProject = { situation: string; solution: string; result: string; learning: string; submittedAt: string; updatedAt: string } | null;
 
 export type SelfPhase = { score: number; comment: string | null; updatedAt: string; frozen: boolean } | null;
 export type SelfAssessment = { entry: SelfPhase; exit: SelfPhase; delta: number | null; entryOpen: boolean; exitOpen: boolean };
@@ -104,18 +112,25 @@ export type Cycle = { index: number; sessionHeldAt: string | null; mission: Miss
 
 export type Overview = {
   id: string; status: string; user: UserRef;
-  module: { id: string; title: string; level: number; location: string | null; shape: Shape; sessions: SessionView[] };
+  module: { id: string; title: string; level: number; location: string | null; shape: Shape; sessions: SessionView[]; s5Enabled?: boolean; scenarioFamily?: string | null };
   anchor: Anchor | null;
   journal: { entries: JournalEntry[]; count: number; target: number };
   missions: Mission[];
   cycles: Cycle[];
   certification: Certification | null;
+  certifications?: Certification[];
+  miniProject: MiniProject;
+  recusal: { at: string; note: string | null } | null;
   credential: { id: string; issuedAt: string } | null;
   selfAssessment: SelfAssessment;
 };
 
 export type Prereq = { code: string; label: string; ok: boolean };
-export type CertState = { ok: boolean; prereqs: Prereq[]; alreadyCertified: boolean; decision: string | null };
+export type CertState = {
+  ok: boolean; prereqs: Prereq[]; alreadyCertified: boolean; decision: string | null;
+  /// Reprise (objet J) : fenêtre de 60 jours après « Nouvelle mise en situation ».
+  retake: { open: boolean; attempt: number; deadline: string | null; recusalRequested: boolean; firstEvaluatorId: string | null; firstVariant: string | null } | null;
+};
 
 export type ModuleRow = {
   id: string; title: string; level: number; status: string; location: string | null; createdAt: string;
@@ -147,7 +162,7 @@ export type ModuleDetail = {
 
 // Grille du socle commun (miroir de @kd/shared RubricSchema).
 export type RubricBand = { band: number; scoreRange: [number, number]; descriptor: string };
-export type RubricCriterion = { label: string; competencyCode?: string; weightPoints: number; minPoints?: number; whereToLook?: string; bands?: RubricBand[] };
+export type RubricCriterion = { label: string; competencyCode?: string; weightPoints: number; minPoints?: number; whereToLook?: string; bands?: RubricBand[]; evidenceSource?: "situation" | "journal" | "livrable"; competencyCodes?: string[] };
 export type Rubric = { criteria: RubricCriterion[]; totalPoints: number; threshold: number };
 
 export type CertifyResult = {
@@ -198,7 +213,7 @@ export const api = {
   // --- formateur / staff ---
   modules: () => req<ModuleRow[]>("GET", "/f2f/modules"),
   module: (id: string) => req<ModuleDetail>("GET", `/f2f/modules/${id}`),
-  createModule: (b: { title: string; level: number; location?: string; trainerId?: string; rubric: Rubric; sessions?: { index: number; scheduledAt?: string }[] }) =>
+  createModule: (b: { title: string; level: number; location?: string; trainerId?: string; rubric: Rubric; s5Enabled?: boolean; scenarioFamily?: string; sessions?: { index: number; scheduledAt?: string }[] }) =>
     req<ModuleRow>("POST", "/f2f/modules", b),
   addParticipant: (moduleId: string, b: { email: string; name?: string }) =>
     req<{ id: string; user: UserRef; invited: boolean; accountCreated: boolean }>("POST", `/f2f/modules/${moduleId}/participants`, b),
@@ -206,8 +221,12 @@ export const api = {
     req<ModuleSession>("POST", `/f2f/sessions/${sessionId}/hold`, { attendance }),
   cancelHold: (sessionId: string) => req<ModuleSession>("DELETE", `/f2f/sessions/${sessionId}/hold`),
   deleteModule: (moduleId: string) => req<{ id: string; title: string }>("DELETE", `/f2f/modules/${moduleId}`),
-  certify: (pid: string, b: { criteria: { points: number; evidence?: string }[]; feedback?: string }) =>
+  certify: (pid: string, b: { criteria: { points: number; evidence?: string; oralCheck?: string }[]; feedback?: string; scenarioVariant?: string }) =>
     req<CertifyResult>("POST", `/f2f/participants/${pid}/certify`, b),
+  submitMiniProject: (pid: string, b: { situation: string; solution: string; result: string; learning: string }) =>
+    req<MiniProject>("PUT", `/f2f/participants/${pid}/mini-project`, b),
+  requestRecusal: (pid: string, note?: string) =>
+    req<{ recusalAt: string; already: boolean }>("POST", `/f2f/participants/${pid}/recusal`, { note }),
 
   // --- transverses (création de module) ---
   courses: () => req<CourseSummary[]>("GET", "/courses"),

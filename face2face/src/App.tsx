@@ -316,9 +316,19 @@ function JournalCycleCard({ ov, cycle, onSaved }: { ov: Overview; cycle: Cycle; 
 }
 
 /** Conditions §6 + certification + certificat téléchargeable. */
-function CertificationCard({ ov, cs }: { ov: Overview; cs: CertState | null }) {
+function CertificationCard({ ov, cs, onChanged }: { ov: Overview; cs: CertState | null; onChanged?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [recusing, setRecusing] = useState(false);
+
+  // Récusation de droit (avenant n°3, objet J.2) : avant la reprise, le
+  // candidat peut demander par écrit un AUTRE évaluateur — sans motif à donner.
+  async function recuse() {
+    setRecusing(true); setError(null);
+    try { await api.requestRecusal(ov.id); onChanged?.(); }
+    catch (err) { setError(errMsg(err, "Demande impossible")); }
+    finally { setRecusing(false); }
+  }
 
   async function download() {
     setBusy(true); setError(null);
@@ -340,8 +350,18 @@ function CertificationCard({ ov, cs }: { ov: Overview; cs: CertState | null }) {
       {cert && (
         <div style={{ textAlign: "center", padding: "10px 0 4px" }}>
           <div className="medal"><span>NIVEAU</span><b>{ov.module.level}</b><span>{ov.module.shape.label.toUpperCase()}</span></div>
-          <h2 style={{ marginBottom: 2 }}>{cert.decision === "CERTIFIED" ? `Certification Niveau ${ov.module.level} · ${ov.module.shape.label}` : cert.decision === "RESUBMIT" ? "Seconde présentation proposée" : "Non certifié à cette session"}</h2>
-          <p className="meta">Décision du {fmtDate(cert.evaluatedAt)} · score {cert.scoreTotal}/100</p>
+          <h2 style={{ marginBottom: 2 }}>{cert.decision === "CERTIFIED" ? `Certification Niveau ${ov.module.level} · ${ov.module.shape.label}` : cert.decision === "RESUBMIT" ? "Nouvelle mise en situation proposée" : "Non certifié à cette session"}</h2>
+          <p className="meta">Décision du {fmtDate(cert.evaluatedAt)} · score {cert.scoreTotal}/100{(cert.attempt ?? 1) > 1 ? " · reprise (tentative 2/2)" : ""}</p>
+          {cs?.retake?.open && (
+            <div style={{ textAlign: "left", marginTop: 8 }}>
+              <p className="meta" style={{ margin: 0 }}>
+                🔁 Une <b>reprise unique</b> vous est ouverte{cs.retake.deadline ? <> jusqu'au <b>{fmtDate(cs.retake.deadline)}</b></> : null} (socle §9) : nouvelle mise en situation, sur une variante différente, grille vierge — conduite par l'évaluateur de la première décision, qui vous a nommé ce qui manquait.
+              </p>
+              {cs.retake.recusalRequested
+                ? <p className="meta" style={{ margin: "6px 0 0" }}>✓ Vous avez demandé un autre évaluateur (récusation de droit) — le Directeur Pédagogique en assignera un.</p>
+                : <button type="button" className="btn ghost" style={{ marginTop: 8 }} disabled={recusing} onClick={recuse}>{recusing ? "…" : "Demander un autre évaluateur (de droit, sans motif)"}</button>}
+            </div>
+          )}
           {cert.feedback && <p style={{ fontSize: 12.5, margin: "6px 0 0" }}>« {cert.feedback} »</p>}
           {ov.credential && (
             <div className="row" style={{ marginTop: 10, gap: 8 }}>
@@ -364,6 +384,60 @@ function CertificationCard({ ov, cs }: { ov: Overview; cs: CertState | null }) {
             ? <p className="okmsg">Dossier complet — la mise en situation certifiante peut être évaluée.</p>
             : <p className="meta" style={{ marginTop: 8 }}>🔒 Grille verrouillée tant que le dossier est incomplet.</p>)}
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Mini-projet S5 (avenant n°1, objet A) : livrable déposé AVANT la session
+ *  finale — condition préalable à la certification quand l'annexe active S5.
+ *  Vérifié oralement en session finale (deux questions, 3 minutes). */
+function MiniProjectCard({ ov, onSaved }: { ov: Overview; onSaved: () => void }) {
+  const mp = ov.miniProject;
+  const [form, setForm] = useState({ situation: mp?.situation ?? "", solution: mp?.solution ?? "", result: mp?.result ?? "", learning: mp?.learning ?? "" });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const finalSession = ov.module.sessions.find((x) => x.index === ov.module.shape.sessions);
+  const frozen = Boolean(finalSession?.heldAt) || Boolean(ov.certification);
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true); setError(null);
+    try { await api.submitMiniProject(ov.id, form); onSaved(); }
+    catch (err) { setError(errMsg(err, "Dépôt impossible")); }
+    finally { setBusy(false); }
+  }
+
+  const FIELDS: { key: keyof typeof form; label: string; ph: string }[] = [
+    { key: "situation", label: "Situation", ph: "La situation réelle de mon contexte de travail : le problème concret, l'enjeu…" },
+    { key: "solution", label: "Solution mise en œuvre", ph: "Ce que j'ai fait, quand, et les compromis acceptés à cause de mes contraintes réelles…" },
+    { key: "result", label: "Résultat observé", ph: "Ce qui s'est réellement passé : faits, dates, réactions — succès partiel ou échec compris…" },
+    { key: "learning", label: "Apprentissage personnel", ph: "Ce que cette mise en pratique a changé chez moi, ce que je ferai différemment…" },
+  ];
+  return (
+    <div className="card">
+      <div className="row between"><span className="eyebrow">Mini-projet — Mise en application documentée (S5)</span>
+        <span className={`pill ${mp ? "ok" : "warn"}`}>{mp ? `déposé · ${fmtDate(mp.submittedAt)}` : "à déposer avant la session finale"}</span></div>
+      {frozen ? (
+        mp ? (
+          <p style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 0 }}>
+            <b>Situation :</b> {mp.situation}<br /><b>Solution :</b> {mp.solution}<br />
+            <b>Résultat :</b> {mp.result}<br /><b>Apprentissage :</b> {mp.learning}
+          </p>
+        ) : <p className="meta" style={{ marginBottom: 0 }}>🔒 La session finale est tenue — le dépôt n'est plus possible.</p>
+      ) : (
+        <form onSubmit={save}>
+          <p className="meta" style={{ marginTop: 0 }}>Quatre sections, sur VOTRE situation réelle (30 mots minimum chacune). En session finale, l'évaluateur vous posera deux questions sur ce livrable : un choix précis que vous y avez fait, et un obstacle rencontré. Un livrable que vous n'avez pas produit ne survit pas à ces trois minutes.</p>
+          {FIELDS.map((f) => (
+            <label className="lbl" key={f.key}>{f.label}
+              <textarea className="field" style={{ minHeight: 56 }} value={form[f.key]} placeholder={f.ph} required
+                onChange={(e) => setForm({ ...form, [f.key]: e.target.value })} />
+            </label>
+          ))}
+          {error && <p className="ko">{error}</p>}
+          <button className="btn" disabled={busy}>{busy ? "…" : mp ? "Mettre à jour mon mini-projet" : "Déposer mon mini-projet"}</button>
+          <p className="meta" style={{ marginTop: 6 }}>Modifiable jusqu'à la tenue de la session finale, puis figé — même règle que la fiche d'ancrage.</p>
+        </form>
       )}
     </div>
   );
@@ -415,7 +489,8 @@ function ParticipantModule({ pid }: { pid: string }) {
           <JournalCycleCard ov={ov} cycle={c} onSaved={reload} />
         </div>
       ))}
-      <CertificationCard ov={ov} cs={cs} />
+      {ov.module.s5Enabled && <MiniProjectCard ov={ov} onSaved={reload} />}
+      <CertificationCard ov={ov} cs={cs} onChanged={reload} />
     </div>
   );
 }
@@ -469,6 +544,10 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
   const [trainerId, setTrainerId] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Avenants du socle F2F : S5 activé par l'annexe (N1-N2), famille de
+  // scénarios pour les domaines servant plusieurs parcours.
+  const [s5Enabled, setS5Enabled] = useState(false);
+  const [scenarioFamily, setScenarioFamily] = useState("");
 
   function pickLevel(l: number) {
     setLevel(l);
@@ -492,7 +571,12 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
       const sessions = dates
         .map((d, i) => ({ index: i + 1, scheduledAt: d ? new Date(d).toISOString() : undefined }))
         .filter((s): s is { index: number; scheduledAt: string } => Boolean(s.scheduledAt));
-      await api.createModule({ title, level, location: location || undefined, trainerId: trainerId || undefined, rubric, sessions: sessions.length ? sessions : undefined });
+      await api.createModule({
+        title, level, location: location || undefined, trainerId: trainerId || undefined, rubric,
+        s5Enabled: level === 3 ? undefined : s5Enabled || undefined,
+        scenarioFamily: scenarioFamily.trim() || undefined,
+        sessions: sessions.length ? sessions : undefined,
+      });
       onCreated();
     } catch (err) { setError(errMsg(err, "Création impossible")); }
     finally { setBusy(false); }
@@ -540,7 +624,16 @@ function NewModuleForm({ onCreated, onCancel }: { onCreated: () => void; onCance
           })}
         </select>
       </label>
-      <p className="meta">Les {"sessions"} sont créées automatiquement selon la forme du niveau. La grille comportementale est celle du Bloc 4 du parcours choisi — même socle d'évaluation que DECLICK.</p>
+      <p className="meta">Les {"sessions"} sont créées automatiquement selon la forme du niveau. La grille reprend les <b>compétences du domaine</b> du parcours choisi (60 points, identiques dans les deux départements) et les complète par les critères du <b>socle FACE2FACE</b> propres au canal (S1 régularité du Journal de Bord, S2 apprentissage personnel — S4 Transmission au Niveau 3).</p>
+      {level !== 3 && (
+        <label className="lbl" style={{ display: "flex", gap: 8, alignItems: "flex-start", cursor: "pointer" }}>
+          <input type="checkbox" checked={s5Enabled} onChange={(e) => setS5Enabled(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
+          <span>Activer le critère <b>S5 — Mise en application documentée</b> (annexe du parcours : au moins une compétence du domaine se prouve sur un livrable). Le mini-projet devient une <b>condition préalable</b> à la certification, avec vérification orale en session finale.</span>
+        </label>
+      )}
+      <label className="lbl">Famille de scénarios (domaines servant plusieurs parcours — optionnel)
+        <input className="field" value={scenarioFamily} onChange={(e) => setScenarioFamily(e.target.value)} placeholder="ex. cybersécurité · fraude et ingénierie sociale · protection des données" />
+      </label>
       {error && <p className="ko">{error}</p>}
       <div className="row" style={{ marginTop: 8 }}>
         <button className="btn" disabled={busy}>{busy ? "…" : "Créer le module"}</button>
@@ -674,20 +767,29 @@ function SessionRow({ s, participants, user, onHeld }: { s: ModuleSession; parti
   );
 }
 
-/** Fiche de notation : grille du socle, preuve par comportement, verrou §6. */
+const SOURCE_LABEL: Record<string, string> = {
+  situation: "Mise en situation", journal: "Journal de Bord", livrable: "Livrable produit",
+};
+
+/** Fiche de notation : grille du socle, preuve par comportement (avec la
+ *  SOURCE reprise sur la fiche — §10), vérification orale des livrables
+ *  (objet B), variante de scénario tracée (objet H), verrou §6. */
 function CertifyPanel({ p, rubric, cs, onDone }: { p: ParticipantRow; rubric: Rubric; cs: CertState; onDone: () => void }) {
-  const [scores, setScores] = useState<{ points: string; evidence: string }[]>(rubric.criteria.map(() => ({ points: "", evidence: "" })));
+  const [scores, setScores] = useState<{ points: string; evidence: string; oralCheck: string }[]>(rubric.criteria.map(() => ({ points: "", evidence: "", oralCheck: "" })));
   const [feedback, setFeedback] = useState("");
+  const [variant, setVariant] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const retake = Boolean(cs.retake?.open);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setError(null);
     try {
       await api.certify(p.id, {
-        criteria: scores.map((s) => ({ points: Number(s.points), evidence: s.evidence || undefined })),
+        criteria: scores.map((s) => ({ points: Number(s.points), evidence: s.evidence || undefined, oralCheck: s.oralCheck || undefined })),
         feedback: feedback || undefined,
+        scenarioVariant: variant.trim() || undefined,
       });
       onDone();
     } catch (err) { setError(errMsg(err, "Décision impossible")); }
@@ -709,12 +811,27 @@ function CertifyPanel({ p, rubric, cs, onDone }: { p: ParticipantRow; rubric: Ru
   return (
     <form className="card" onSubmit={submit}>
       <span className="eyebrow">Grille comportementale du socle commun · seuil {rubric.threshold}/100</span>
-      <h2>Fiche de notation — {p.user.name}</h2>
+      <h2>{retake ? "Reprise — grille vierge" : "Fiche de notation"} — {p.user.name}</h2>
+      {retake && cs.retake && (
+        <p className="meta" style={{ marginTop: 0 }}>
+          🔁 <b>Nouvelle mise en situation</b> (socle §9) : variante <b>différente</b> de la même famille{cs.retake.firstVariant ? ` (1re : « ${cs.retake.firstVariant} »)` : ""}, grille vierge — aucun report de la première prestation (règle 6).
+          {cs.retake.recusalRequested
+            ? " Le candidat a demandé un AUTRE évaluateur (récusation de droit)."
+            : " Conduite par l'évaluateur de la première décision."}
+          {cs.retake.deadline ? ` Fenêtre ouverte jusqu'au ${fmtDate(cs.retake.deadline)}.` : ""}
+        </p>
+      )}
+      <label className="lbl">Variante de scénario jouée (tracée sur la fiche — objet H)
+        <input className="field" value={variant} onChange={(e) => setVariant(e.target.value)} placeholder="ex. variante B — changement de coordonnées bancaires fournisseur" />
+      </label>
       {rubric.criteria.map((c, i) => (
         <div key={i} style={{ borderTop: i ? "1px solid var(--line)" : "none", paddingTop: i ? 10 : 0, marginTop: i ? 10 : 0 }}>
           <div className="row between wrap">
             <h2 style={{ fontSize: 13.5, margin: 0 }}>{c.label}</h2>
-            <span className="meta">{c.weightPoints} pts{c.minPoints != null ? ` · minimum ${c.minPoints}` : ""}</span>
+            <span className="meta">
+              <b>{SOURCE_LABEL[c.evidenceSource ?? "situation"]}</b> · {c.weightPoints} pts{c.minPoints != null ? ` · minimum ${c.minPoints}` : ""}
+              {c.competencyCodes?.length ? ` · ${c.competencyCodes.join(" + ")}` : ""}
+            </span>
           </div>
           {c.bands && (
             <div className="bands">
@@ -732,10 +849,20 @@ function CertifyPanel({ p, rubric, cs, onDone }: { p: ParticipantRow; rubric: Ru
             </label>
             <label className="lbl" style={{ flex: 1, marginBottom: 0 }}>Preuve d'observation{banded ? " (obligatoire)" : ""}
               <textarea className="field" style={{ minHeight: 44 }} value={scores[i].evidence} required={banded}
-                placeholder="Ce qui a été observé pendant la mise en situation, citable et daté…"
+                placeholder={(c.evidenceSource ?? "situation") === "journal" ? "Citation d'au moins huit mots tirée d'une entrée, avec sa date…" : (c.evidenceSource ?? "situation") === "livrable" ? "Citation du livrable…" : "Verbatim ou acte observé, avec la minute…"}
                 onChange={(e) => setScores(scores.map((s, j) => j === i ? { ...s, evidence: e.target.value } : s))} />
             </label>
           </div>
+          {(c.evidenceSource ?? "situation") === "livrable" && (
+            <label className="lbl" style={{ marginTop: 6 }}>Vérification orale (objet B — obligatoire) : question posée + substance de la réponse, en verbatim
+              <textarea className="field" style={{ minHeight: 44 }} value={scores[i].oralCheck} required={banded}
+                placeholder={'ex. Q : « Pourquoi avoir choisi le créneau du matin ? » — R : « parce que les livraisons bloquent l\'après-midi, je l\'ai testé la 2e semaine »'}
+                onChange={(e) => setScores(scores.map((s, j) => j === i ? { ...s, oralCheck: e.target.value } : s))} />
+            </label>
+          )}
+          {(c.evidenceSource ?? "situation") === "livrable" && (
+            <p className="meta" style={{ margin: "4px 0 0" }}>3 minutes prélevées sur le débrief. Un candidat qui ne peut pas répondre sur son propre livrable descend d'une bande.</p>
+          )}
         </div>
       ))}
       <label className="lbl" style={{ marginTop: 10 }}>Retour à la personne certifiée (optionnel)
@@ -827,24 +954,48 @@ function Dossier({ p, rubric, user, onBack, onChanged }: { p: ParticipantRow; ru
               </p>
             )}
           </div>
-          {ov.certification ? (
+          {ov.miniProject && (
             <div className="card">
-              <span className="eyebrow">Décision</span>
-              <h2>{ov.certification.decision} · {ov.certification.scoreTotal}/100</h2>
-              <p className="meta">Prononcée le {fmtDate(ov.certification.evaluatedAt)}</p>
-              {(ov.certification.scores ?? []).map((s, i) => (
+              <span className="eyebrow">Mini-projet S5 — livrable pour la vérification orale (objet B)</span>
+              <p style={{ fontSize: 12.5, lineHeight: 1.55, marginBottom: 0 }}>
+                <b>Situation :</b> {ov.miniProject.situation}<br />
+                <b>Solution mise en œuvre :</b> {ov.miniProject.solution}<br />
+                <b>Résultat observé :</b> {ov.miniProject.result}<br />
+                <b>Apprentissage personnel :</b> {ov.miniProject.learning}
+              </p>
+              <p className="meta" style={{ marginTop: 6 }}>Déposé le {fmtDate(ov.miniProject.submittedAt)} — deux questions en Temps 2 : un choix précis du livrable, un obstacle rencontré.</p>
+            </div>
+          )}
+          {(ov.certifications ?? (ov.certification ? [ov.certification] : [])).map((cert) => (
+            <div className="card" key={cert.attempt ?? 1}>
+              <span className="eyebrow">{(cert.attempt ?? 1) > 1 ? "Décision de reprise (fiche archivée)" : "Décision"}{cert.scenarioVariant ? ` · variante « ${cert.scenarioVariant} »` : ""}</span>
+              <h2>{cert.decision} · {cert.scoreTotal}/100</h2>
+              <p className="meta">Prononcée le {fmtDate(cert.evaluatedAt)}{(cert.attempt ?? 1) > 1 ? " · tentative 2/2" : ""}</p>
+              {(cert.scores ?? []).map((s, i) => (
                 <div className="prereq" key={i}>
                   <span className="num">{s.points}/{s.weightPoints}</span>
-                  <div style={{ flex: 1 }}><b style={{ fontSize: 12 }}>{s.label}</b>{s.evidence && <div className="meta" style={{ fontStyle: "italic" }}>« {s.evidence} »</div>}</div>
+                  <div style={{ flex: 1 }}>
+                    <b style={{ fontSize: 12 }}>{s.label}</b>
+                    {s.source && <span className="meta"> · {SOURCE_LABEL[s.source] ?? s.source}{s.competencyCodes?.length ? ` · ${s.competencyCodes.join(" + ")}` : ""}</span>}
+                    {s.evidence && <div className="meta" style={{ fontStyle: "italic" }}>« {s.evidence} »</div>}
+                    {s.oralCheck && <div className="meta">Vérification orale : {s.oralCheck}</div>}
+                  </div>
                 </div>
               ))}
-              {ov.certification.feedback && <p style={{ fontSize: 12.5 }}>Retour : « {ov.certification.feedback} »</p>}
+              {cert.feedback && <p style={{ fontSize: 12.5 }}>Retour : « {cert.feedback} »</p>}
             </div>
-          ) : canGrade(user.role) ? (
+          ))}
+          {ov.recusal && !cs.alreadyCertified && (
+            <div className="card" style={{ borderColor: "#f2d9c4", background: "#fffcf9" }}>
+              <span className="eyebrow">Récusation de droit (objet J)</span>
+              <p className="meta" style={{ marginBottom: 0 }}>Le candidat a demandé par écrit, le {fmtDate(ov.recusal.at)}, que la reprise soit conduite par un AUTRE évaluateur que celui de la première décision. La demande est de droit et n'a pas à être motivée.{ov.recusal.note ? ` « ${ov.recusal.note} »` : ""}</p>
+            </div>
+          )}
+          {!cs.alreadyCertified && (canGrade(user.role) ? (
             <CertifyPanel p={p} rubric={rubric} cs={cs} onDone={() => { reload(); onChanged(); }} />
           ) : (
             <div className="card"><span className="eyebrow">Grille comportementale</span><p className="meta">La décision certifiante est réservée aux évaluateurs habilités (socle §5/§9).</p></div>
-          )}
+          ))}
         </div>
       </div>
     </>

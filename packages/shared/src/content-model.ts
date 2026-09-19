@@ -496,6 +496,16 @@ export const RubricCriterion = z.object({
   /** Les 4 descripteurs de bande (bande 4 → 1). Présents = notation par bande
    *  et preuve obligatoire par critère. */
   bands: z.array(RubricBand).length(4, "exactement 4 bandes").optional(),
+  /** Source de preuve du critère (socle FACE2FACE §3, avenant n°1 objet C) :
+   *  mise en situation certifiante, Journal de Bord, ou livrable produit —
+   *  une seule mention par critère, reprise sur la fiche de notation. Un
+   *  critère « livrable » entraîne la vérification orale (objet B). Absent
+   *  (grilles DECLICK) : sans effet. */
+  evidenceSource: z.enum(["situation", "journal", "livrable"]).optional(),
+  /** Codes des compétences couvertes par un critère GROUPÉ (avenants objet D :
+   *  un groupement ne franchit jamais une frontière de domaine ; l'annexe
+   *  liste les codes, la fiche de notation les reporte). */
+  competencyCodes: z.array(z.string()).optional(),
 });
 export type RubricCriterion = z.infer<typeof RubricCriterion>;
 
