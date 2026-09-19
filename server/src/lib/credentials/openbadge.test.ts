@@ -49,3 +49,15 @@ test("the Bloc 4 rubric result surfaces as OB2 evidence + OB3 results", () => {
   assert.equal(vc.credentialSubject.results[0].status, "Completed");
   assert.equal(vc.credentialSubject.achievement.resultDescriptions[0].requiredValue, "70");
 });
+
+test("A3 : l'assertion OB2 et le VC portent l'échéance quand elle est fournie — jamais sinon", () => {
+  const achievement = { courseSlug: "c", type: "CERTIFICATE", name: "n", description: "d", criteria: ["x"] };
+  const issuedAt = new Date("2026-09-19T00:00:00Z");
+  const expiresAt = new Date("2029-09-19T00:00:00Z");
+  const withExp = hostedAssertion({ credentialId: "id1", achievement, recipientHash: "h", recipientSalt: "s", issuedAt, expiresAt, revoked: false }) as any;
+  assert.equal(withExp.expires, expiresAt.toISOString());
+  const badge = hostedAssertion({ credentialId: "id2", achievement: { ...achievement, type: "ENTRY" }, recipientHash: "h", recipientSalt: "s", issuedAt, revoked: false }) as any;
+  assert.equal("expires" in badge, false); // les badges de bloc n'expirent pas
+  const vc = verifiableCredential({ credentialId: "id1", achievement, recipientHash: "h", subjectName: "N", issuedAt, expiresAt }) as any;
+  assert.equal(vc.expirationDate, expiresAt.toISOString());
+});

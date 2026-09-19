@@ -30,6 +30,10 @@ import { credentialUrl } from "../../lib/credentials/openbadge.js";
 import { sendSmtpEmail, smtpConfigured } from "../../lib/notify/email.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { audit } from "../../lib/audit.js";
+import {
+  computeIndicators, journalWindows, journalFieldKey, sectionFieldKey,
+  FIELD_ANCRAGE, FIELD_ECART_ANCRAGE, type CompositionCaptureT, type JournalWindow,
+} from "../../lib/composition.js";
 import { env } from "../../config/env.js";
 
 export class EngineError extends Error {
@@ -227,10 +231,45 @@ export async function resetEnrollment(actorId: string | undefined, enrollmentId:
   return { mode, version: latest.version };
 }
 
+// --- Signaux de composition (avenant n°1, objet F — étape 1 : observation) --
+
+/** Enregistre les agrégats de composition d'un champ certifiant, UNE FOIS, à
+ *  la soumission (annexe §5). Exemption accessibilité (F.4) : rien n'est
+ *  enregistré. `signal` reste NULL : période d'observation (F.9) — aucun seuil
+ *  n'est fixé, aucune restitution, aucune conséquence pour le candidat.
+ *  Non-fatal : une métrique ne doit jamais faire échouer une soumission. */
+async function recordComposition(
+  enrollmentId: string, exempt: boolean, fieldKey: string,
+  capture: CompositionCaptureT | undefined, journalWindow?: JournalWindow,
+) {
+  if (!capture || exempt) return;
+  try {
+    const submittedAt = new Date();
+    const ind = computeIndicators(capture, submittedAt, journalWindow);
+    const data = {
+      device: capture.device, firstInputAt: capture.firstInputAt, submittedAt,
+      charsTotal: capture.charsTotal, charsComposed: capture.charsComposed, charsPasted: capture.charsPasted,
+      deleteEvents: capture.deleteEvents, retouchesAfterPaste: capture.retouchesAfterPaste, sessions: capture.sessions,
+      depositRate: ind.depositRate, retouchRate: ind.retouchRate, density: ind.density, spread: ind.spread,
+      signal: null,
+    };
+    await prisma.compositionMetric.upsert({
+      where: { enrollmentId_fieldKey: { enrollmentId, fieldKey } },
+      update: data, create: { enrollmentId, fieldKey, ...data },
+    });
+  } catch (e) {
+    console.error(`[composition] enregistrement impossible (${fieldKey}):`, e instanceof Error ? e.message : e);
+  }
+}
+
 // --- Moment d'Ancrage -------------------------------------------------------
 
-export async function captureMomentAncrage(enrollmentId: string, text: string) {
-  const { content } = await loadContext(enrollmentId);
+export async function captureMomentAncrage(enrollmentId: string, text: string, composition?: CompositionCaptureT) {
+  // A4 (v2.3) : le Moment d'Ancrage se COMPOSE dans la plateforme — jamais
+  // prérempli, importé, ni repris d'une inscription antérieure (la reprise de
+  // parcours le remet à null). C'est le spécimen de référence du candidat :
+  // il est instrumenté en priorité (F.5) comme point de comparaison.
+  const { content, enrollment } = await loadContext(enrollmentId);
   const onboarding = content.blocks.find((b) => b.type === "ONBOARDING");
   const courseMin = onboarding?.type === "ONBOARDING" ? onboarding.payload.momentAncrage.minChars : 50;
   // Per-course minimum, with a configurable platform-wide floor (§6.1).
@@ -240,6 +279,7 @@ export async function captureMomentAncrage(enrollmentId: string, text: string) {
     throw new EngineError(422, "too_short", `Le Moment d'Ancrage doit faire au moins ${minChars} caractères`);
   }
   await prisma.enrollment.update({ where: { id: enrollmentId }, data: { momentAncrage: trimmed } });
+  await recordComposition(enrollmentId, enrollment.user.compositionExempt, FIELD_ANCRAGE, composition);
   await touch(enrollmentId, 0, "moment-ancrage");
   await emitXapi(await loadContext(enrollmentId), "completed", ["moment-ancrage"], "Moment d'Ancrage");
   return reconcile(enrollmentId);
@@ -464,6 +504,7 @@ function assembleProjectContent(ctx: Awaited<ReturnType<typeof loadContext>>, bl
 
 export async function completeItem(
   enrollmentId: string, blockIndex: number, itemType: ItemType, itemKey: string, data?: unknown, meta: ExerciseMeta = {},
+  composition?: CompositionCaptureT,
 ) {
   const ctx = await loadContext(enrollmentId); // validates existence
   assertUnlocked(ctx, blockIndex);
@@ -477,6 +518,30 @@ export async function completeItem(
   }
   const hasMeta = meta.timeMs != null || meta.feedbackViewed != null || meta.response != null || meta.correct != null;
   await upsertCompletion(enrollmentId, blockIndex, itemType, itemKey, null, data ?? null);
+  // Objet F : seuls les champs CERTIFIANTS sont instrumentés (annexe §1) — les
+  // champs formatifs des Blocs 1 à 3 ne le sont JAMAIS (F.2 : « collecter des
+  // données comportementales sur des champs formatifs serait un traitement
+  // sans finalité »).
+  if (composition) {
+    const block = ctx.content.blocks.find((b) => b.index === blockIndex);
+    if (block?.type === "CERTIFICATION") {
+      let fieldKey: string | null = null;
+      let window: JournalWindow | undefined;
+      if (itemType === "JOURNAL_ENTRY") {
+        const day = Number(itemKey.replace(/^J\+/, ""));
+        if (Number.isFinite(day)) {
+          fieldKey = journalFieldKey(day);
+          if (ctx.enrollment.journalStartedAt) {
+            const days = block.payload.journal.entries.map((e) => e.day);
+            window = journalWindows(ctx.enrollment.journalStartedAt, days).get(day);
+          }
+        }
+      } else if (itemType === "PROJECT") {
+        fieldKey = sectionFieldKey(itemKey);
+      }
+      if (fieldKey) await recordComposition(enrollmentId, ctx.enrollment.user.compositionExempt, fieldKey, composition, window);
+    }
+  }
   // Bloc 4 project (progressive): sections 1–3 and 5 are their own completions;
   // ONLY the final section (Section 5) assembles the whole project — the four
   // typed sections + the journal chapter (auto-composed Section 4) — and opens
@@ -632,6 +697,37 @@ export async function assignEvaluator(enrollmentId: string, evaluatorId: string,
  *  - `journalEntries` : les micro-entrées J+n datées, avec leur texte ;
  *  - `submittedAt` effectif = date du DERNIER élément déposé (c'est elle qui
  *    fait foi pour l'évaluation). */
+/** Explication du changement de situation (avenant F.6, bloc4.ecart_ancrage) :
+ *  deux lignes, optionnelles — « une situation professionnelle peut
+ *  légitimement changer en huit semaines : ce qui est exigé est la continuité
+ *  ou son explication, jamais l'identité ». Modifiable tant que la décision
+ *  n'est pas rendue ; champ certifiant, donc instrumenté. */
+export async function setAncrageChangeNote(enrollmentId: string, text: string, composition?: CompositionCaptureT) {
+  const ctx = await loadContext(enrollmentId);
+  const trimmed = text.trim();
+  if (trimmed.length > 400) throw new EngineError(422, "too_long", "L'explication du changement de situation tient en deux lignes (400 caractères max)");
+  const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId }, select: { evaluatedAt: true } });
+  if (submission?.evaluatedAt) throw new EngineError(409, "already_evaluated", "La décision est rendue : le dossier ne peut plus être modifié");
+  await prisma.enrollment.update({ where: { id: enrollmentId }, data: { ancrageChangeNote: trimmed || null } });
+  if (trimmed) await recordComposition(enrollmentId, ctx.enrollment.user.compositionExempt, FIELD_ECART_ANCRAGE, composition);
+  return { ancrageChangeNote: trimmed || null };
+}
+
+/** Condition préalable d'alignement (v2.3 A5.1 / avenant F.6) : l'évaluateur
+ *  atteste — au même titre que les autres conditions préalables — que la
+ *  situation du dossier est celle du Moment d'Ancrage, ou que le candidat a
+ *  expliqué le changement. La grille ne se déverrouille qu'après. */
+export async function checkAncrageAlignment(enrollmentId: string, evaluatorId: string) {
+  const submission = await prisma.projectSubmission.findUnique({ where: { enrollmentId } });
+  if (!submission) throw new EngineError(409, "no_submission", "Aucun projet soumis pour cette inscription");
+  if (submission.evaluatedAt) throw new EngineError(409, "already_evaluated", "La décision est déjà rendue");
+  const updated = await prisma.projectSubmission.update({
+    where: { enrollmentId },
+    data: { ancrageAlignedAt: new Date(), ancrageAlignedBy: evaluatorId },
+  });
+  return { ancrageAlignedAt: updated.ancrageAlignedAt, ancrageAlignedBy: updated.ancrageAlignedBy };
+}
+
 export async function getProjectSubmission(enrollmentId: string) {
   const submission = await prisma.projectSubmission.findUnique({
     where: { enrollmentId },
@@ -639,6 +735,8 @@ export async function getProjectSubmission(enrollmentId: string) {
       evaluator: { select: { id: true, name: true, email: true } },
       enrollment: {
         select: {
+          momentAncrage: true,
+          ancrageChangeNote: true,
           courseVersion: { select: { content: true } },
           completions: { select: { blockIndex: true, itemKey: true, completedAt: true, data: true } },
         },
@@ -647,12 +745,20 @@ export async function getProjectSubmission(enrollmentId: string) {
   });
   if (!submission) throw new EngineError(404, "no_submission", "Aucun projet soumis pour cette inscription");
   const { enrollment, ...record } = submission;
+  // Condition préalable d'alignement (F.6) : le Moment d'Ancrage est affiché
+  // à côté de la section Situation — jamais les signaux de composition
+  // (cloisonnement, annexe §7).
+  const alignment = {
+    momentAncrage: enrollment.momentAncrage ?? null,
+    ancrageChangeNote: enrollment.ancrageChangeNote ?? null,
+    checkedAt: record.ancrageAlignedAt?.toISOString() ?? null,
+  };
 
   const content = enrollment.courseVersion.content as {
     blocks?: { type: string; payload?: { sections?: { title: string }[]; journal?: { entries?: { day: number }[] } } }[];
   } | null;
   const cert = content?.blocks?.find((b) => b.type === "CERTIFICATION");
-  if (!cert?.payload?.sections?.length) return record;
+  if (!cert?.payload?.sections?.length) return { ...record, alignment };
 
   const byKey = new Map(enrollment.completions
     .filter((c) => c.blockIndex === submission.blockIndex)
@@ -687,6 +793,7 @@ export async function getProjectSubmission(enrollmentId: string) {
     },
     sectionMeta: parts.map((p) => ({ title: p.title, submittedAt: p.submittedAt ? p.submittedAt.toISOString() : null, journal: p.journal })),
     journalEntries,
+    alignment,
   };
 }
 
@@ -925,6 +1032,22 @@ export async function recordRubricEvaluation(enrollmentId: string, input: Rubric
   const rubric = block.payload.rubric;
   const threshold = rubric.threshold;
   const banded = rubric.criteria.some((rc) => rc.bands?.length);
+
+  // Conditions préalables (v2.3 A5.1 / avenant F.6) : la grille ne s'ouvre
+  // qu'après vérification des quatre conditions. Trois sont structurelles —
+  // le dossier est complet, l'application terrain réalisée et le journal
+  // déposé, puisque la Section 5 n'est soumissible qu'après. La quatrième,
+  // l'alignement de la situation sur le Moment d'Ancrage (ou l'explication du
+  // changement), est attestée par l'évaluateur. Hors recours (§10 : le 2e/3e
+  // évaluateur note à l'aveugle — la condition a été vérifiée à la première
+  // notation).
+  const pre = await prisma.projectSubmission.findUnique({
+    where: { enrollmentId }, select: { ancrageAlignedAt: true, appealStage: true },
+  });
+  if (pre && pre.appealStage === 0 && !pre.ancrageAlignedAt) {
+    throw new EngineError(409, "ancrage_check_required",
+      "Conditions préalables (Pilier 6.6) : attestez d'abord que la situation du dossier est celle du Moment d'Ancrage, ou que le candidat a expliqué le changement");
+  }
 
   // Habilitation (socle §9.2) : le notateur doit détenir une habilitation
   // ACTIVE sur ce parcours — quel que soit son rôle.
@@ -1431,6 +1554,12 @@ export async function projectState(enrollmentId: string) {
     return { key, title: sec.title, helpText: sec.helpText, auto: false as const, done: byKey.has(key), text: saved, locked, ...(prefill ? { prefill } : {}) };
   });
 
-  return { sections, journal, journalStartedAt: started ? started.toISOString() : null, finalSectionKey: PROJECT_FINAL_SECTION_KEY };
+  return {
+    sections, journal, journalStartedAt: started ? started.toISOString() : null, finalSectionKey: PROJECT_FINAL_SECTION_KEY,
+    // F.6 : le Moment d'Ancrage est rappelé à l'apprenant à côté de la
+    // Situation, avec le champ d'explication du changement (2 lignes).
+    momentAncrage: ctx.enrollment.momentAncrage ?? null,
+    ancrageChangeNote: ctx.enrollment.ancrageChangeNote ?? null,
+  };
 }
 

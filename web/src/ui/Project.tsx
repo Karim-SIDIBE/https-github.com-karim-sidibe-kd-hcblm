@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api, engine, store } from "../lib/app";
 import { setCachedProgress } from "../lib/cache";
 import { navigate, routes } from "../lib/router";
 import { assessText, assessmentReason } from "../lib/textcheck";
 import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { useT, useI18n } from "../lib/i18n";
+import { FieldMeter } from "../lib/composition";
 
 type RubricBand = { band: number; scoreRange: [number, number]; descriptor?: string };
 type Rubric = { criteria: { label: string; weightPoints: number; minPoints?: number; whereToLook?: string; bands?: RubricBand[] }[]; threshold: number };
@@ -16,7 +17,11 @@ const wordsOf = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
 // libellés de critères sont retirés — la compétence elle-même suffit.
 const critLabel = (l: string) => l.replace(/^S\d+\s*[—-]\s*/, "");
 type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
-type ProjectState = { sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[]; journalStartedAt: string | null; finalSectionKey: string };
+type ProjectState = {
+  sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[];
+  journalStartedAt: string | null; finalSectionKey: string;
+  momentAncrage?: string | null; ancrageChangeNote?: string | null;
+};
 
 /**
  * Block 4 certification project — PROGRESSIVE (consigne « Amélioration ») :
@@ -36,6 +41,13 @@ export function Project({ eid }: { eid: string }) {
   const draftKey = `pj:${eid}`;
   const [values, setValues] = useState<Record<string, string>>(() => loadDraft<Record<string, string>>(draftKey) ?? {});
   const [busy, setBusy] = useState<string | null>(null);
+  // Objet F : un compteur d'agrégats de composition par champ certifiant
+  // (sections du dossier + explication d'écart) — jamais le contenu.
+  const meters = useRef<Record<string, FieldMeter>>({});
+  const meterFor = (key: string) => (meters.current[key] ??= new FieldMeter());
+  // F.6 : explication du changement de situation depuis le Moment d'Ancrage.
+  const [ancrageNote, setAncrageNote] = useState("");
+  const [ancrageSaved, setAncrageSaved] = useState<string | null>(null);
   const [appeal, setAppeal] = useState<any | null>(null);
   const [appealForm, setAppealForm] = useState<{ contested: string[]; statement: string } | null>(null);
   const [appealMsg, setAppealMsg] = useState<string | null>(null);
@@ -47,6 +59,7 @@ export function Project({ eid }: { eid: string }) {
     try {
       const st = await api.get<ProjectState>(`/enrollments/${eid}/project/state`);
       setState(st ?? null);
+      if (st) { setAncrageSaved(st.ancrageChangeNote ?? null); setAncrageNote((v) => v || st.ancrageChangeNote || ""); }
       // Pré-remplissage serveur (ex. Section 1 depuis le PAM + l'Application
       // terrain) : point de départ éditable, seulement si rien n'est saisi.
       if (st) setValues((v) => Object.fromEntries(st.sections.filter((s) => !s.auto).map((s) => [s.key, v[s.key] || s.text || s.prefill || ""])));
@@ -82,12 +95,28 @@ export function Project({ eid }: { eid: string }) {
     return { blockIndex: blk.index as number, brief: blk.payload.projectBrief as string, rubric: blk.payload.rubric as Rubric };
   }, [bundle]);
 
+  async function saveAncrageNote() {
+    setBusy("ancrage");
+    try {
+      const trimmed = ancrageNote.trim();
+      await api.postChecked(`/enrollments/${eid}/ancrage-change`, {
+        text: trimmed,
+        ...(meters.current["ecart"]?.active ? { composition: meters.current["ecart"]!.capture(trimmed) } : {}),
+      });
+      setAncrageSaved(trimmed || null);
+    } catch { /* offline : réessayer plus tard */ }
+    finally { setBusy(null); }
+  }
+
   async function submitSection(s: SectionState) {
     const text = (values[s.key] ?? "").trim();
     if (!text || s.locked || s.auto) return;
     setBusy(s.key);
     try {
-      const r = await engine.commit(eid, "complete_item", { blockIndex: spec!.blockIndex, itemType: "PROJECT", itemKey: s.key, data: { text } });
+      const r = await engine.commit(eid, "complete_item", {
+        blockIndex: spec!.blockIndex, itemType: "PROJECT", itemKey: s.key, data: { text },
+        ...(meters.current[s.key]?.active ? { composition: meters.current[s.key]!.capture(text) } : {}),
+      });
       if ((r as any).progress) setCachedProgress(eid, (r as any).progress);
       await refresh();
     } finally { setBusy(null); }
@@ -242,6 +271,7 @@ export function Project({ eid }: { eid: string }) {
             ) : (
               <>
                 <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))} style={{ minHeight: 110 }}
+                  onBeforeInput={meterFor(s.key).onBeforeInput as never}
                   onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} />
                 {quality && <p className="meta" style={{ margin: 0, color: "var(--danger, #b45309)" }}>{quality}</p>}
                 {/* Plancher de rédaction : sous 30 mots, ni bande haute ni
@@ -259,6 +289,25 @@ export function Project({ eid }: { eid: string }) {
           </div>
         );
       })}
+
+      {/* F.6 (v2.3, A5.1) : la situation du dossier est celle du Moment
+          d'Ancrage, ou le changement s'explique — deux lignes suffisent. Son
+          absence, lorsque les situations diffèrent, constitue elle-même le
+          signal ; l'évaluateur vérifie l'alignement avant d'ouvrir la grille. */}
+      {state?.momentAncrage && (
+        <div className="hf-card stack">
+          <strong className="h4">{t("pj.ancrage.title")}</strong>
+          <div className="hf-pam"><span className="tag">{t("ob.pamTag")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{state.momentAncrage}</div></div>
+          <p className="meta" style={{ margin: 0 }}>{t("pj.ancrage.intro")}</p>
+          <textarea className="hf-field" spellCheck lang="fr" maxLength={400} value={ancrageNote} placeholder={t("pj.ancrage.ph")}
+            onBeforeInput={meterFor("ecart").onBeforeInput as never}
+            onChange={(e) => setAncrageNote(e.target.value)} style={{ minHeight: 64 }} />
+          <button className="hf-btn hf-btn--outline" disabled={busy === "ancrage" || ancrageNote.trim() === (ancrageSaved ?? "")}
+            onClick={() => void saveAncrageNote()}>
+            {busy === "ancrage" ? "…" : ancrageSaved != null && ancrageNote.trim() === ancrageSaved ? t("pj.ancrage.saved") : t("pj.ancrage.save")}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

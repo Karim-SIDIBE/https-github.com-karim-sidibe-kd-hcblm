@@ -7,6 +7,7 @@ import { clearDraft, loadDraft, useDraft } from "../lib/draft";
 import { formatDuration } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
+import { FieldMeter } from "../lib/composition";
 
 type Onboarding = {
   momentAncrage: { promptText: string; minChars: number; placeholderExample?: string };
@@ -30,6 +31,7 @@ export function Onboarding({ eid }: { eid: string }) {
   // Brouillon local du Moment d'Ancrage (P3) — la saisie survit à un départ.
   const draftKey = `ob:${eid}`;
   const [pam, setPam] = useState(() => loadDraft<string>(draftKey) ?? "");
+  const pamMeter = useMemo(() => new FieldMeter(), []);
   useDraft(draftKey, pam, step === "pam");
   const [profileKey, setProfileKey] = useState("");
   const [peer, setPeer] = useState({ name: "", email: "", consent: false });
@@ -66,7 +68,10 @@ export function Onboarding({ eid }: { eid: string }) {
   async function submitPam() {
     if (pam.trim().length < minChars || pamQuality) return;
     setBusy(true);
-    try { await engine.commit(eid, "moment_ancrage", { text: pam.trim() }); clearDraft(draftKey); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
+    // A4/F.5 : le Moment d'Ancrage se compose dans la plateforme (jamais
+    // prérempli ni importé) — spécimen de référence, ses agrégats de
+    // composition partent avec la soumission (jamais le contenu).
+    try { await engine.commit(eid, "moment_ancrage", { text: pam.trim(), composition: pamMeter.capture(pam.trim()) }); clearDraft(draftKey); await engine.cacheBundle(eid); setStep("profile"); } finally { setBusy(false); }
   }
   async function submitProfile() {
     if (!profileKey) return;
@@ -116,6 +121,7 @@ export function Onboarding({ eid }: { eid: string }) {
           <div className="hf-pam"><span className="tag">{t("ob.pamTag")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{payload.momentAncrage.promptText}</div></div>
           <div className="hf-textwrap">
             <textarea className="hf-field" spellCheck lang="fr" value={pam} onChange={(e) => setPam(e.target.value)} placeholder={payload.momentAncrage.placeholderExample || t("ob.pamPlaceholder")}
+              onBeforeInput={pamMeter.onBeforeInput as never}
               onFocus={(e) => setTimeout(() => e.target.scrollIntoView({ block: "center", behavior: "smooth" }), 200)} style={{ minHeight: 160 }} />
             <span className="hf-count" style={{ color: pam.trim().length >= minChars ? "var(--brand-declick)" : undefined }}>{pam.trim().length >= minChars ? t("count.ok", { n: pam.trim().length, unit: t("dl.unitChars") }) : t("count.min", { n: pam.trim().length, min: minChars, unit: t("dl.unitChars") })}</span>
           </div>

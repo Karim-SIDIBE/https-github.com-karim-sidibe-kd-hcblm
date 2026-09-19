@@ -100,7 +100,11 @@ export function Certificats() {
                     ? <span className="pill pill--green">🎓 Certificat</span>
                     : <span className="pill pill--soft">Badge — {BADGE_FR[c.badgeLabel] ?? c.badgeLabel}</span>}</td>
                   <td><span style={{ fontSize: 12.5 }}>{ago(c.issuedAt)}</span></td>
-                  <td>{c.revoked ? <span className="pill pill--red" title={c.revocationReason ?? ""}><span className="dot" />Révoqué</span> : <span className="pill pill--green"><span className="dot" />Valide</span>}</td>
+                  <td>{c.revoked
+                    ? <span className="pill pill--red" title={c.revocationReason ?? ""}><span className="dot" />Révoqué</span>
+                    : c.expired
+                      ? <span className="pill pill--warn" title={`Échéance : ${new Date(c.expiresAt!).toLocaleDateString("fr-FR")}`}><span className="dot" />Expiré</span>
+                      : <span className="pill pill--green" title={c.expiresAt ? `Valable jusqu'au ${new Date(c.expiresAt).toLocaleDateString("fr-FR")}` : "Badge de bloc — n'expire pas"}><span className="dot" />Valide</span>}</td>
                   <td style={{ textAlign: "right" }}>
                     <a className="btn btn--sm btn--ghost" href={c.verifyUrl} target="_blank" rel="noreferrer">Vérifier</a>
                     <button className="btn btn--sm btn--ghost" style={{ marginLeft: 6 }} disabled={busy === `pdf:${c.id}`} onClick={() => download(c, "pdf")}>{busy === `pdf:${c.id}` ? "…" : "PDF"}</button>

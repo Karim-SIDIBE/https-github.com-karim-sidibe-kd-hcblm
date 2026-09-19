@@ -21,6 +21,7 @@ import {
   type CourseContent as CourseContentT,
 } from "./content-model.js";
 import { bandContiguityIssues, nonCompensationCheck } from "./engine/certification.js";
+import { referentielDomain, REFERENTIEL_VERSION } from "./referentiel.js";
 
 export type ValidationIssue = {
   level: "error" | "warning";
@@ -165,6 +166,80 @@ export function validatePolicy(content: CourseContentT): PolicyResult {
       const nc = nonCompensationCheck(criteria, certification.payload.rubric.threshold);
       if (!nc.ok)
         err("rubric.nonCompensation", "blocks[4].payload.rubric.criteria", `non-compensation : ${nc.minimumsSum} (minimums) + ${nc.freeSum} (bloc libre) = ${nc.maxAtStrictMinimums} ≥ seuil ${certification.payload.rubric.threshold} — répartition à revoir`);
+    }
+
+    // --- Socle v1.2 (avenant n°1, objets A et C — applicable au 01/11/2026) ---
+    // Structure de grille : bloc domaine de 60 points également répartis aux
+    // TROIS niveaux ; au Niveau 3, S4 est financé par S1, S2 et S3.
+    const isSocle = (c: (typeof criteria)[number]) => c.origin === "socle" || /^S[1-5]\b/.test(c.label.trim());
+    const domainCrit = criteria.filter((c) => !isSocle(c));
+    const socleCrit = criteria.filter(isSocle);
+    const path = "blocks[4].payload.rubric.criteria";
+    if (domainCrit.length && socleCrit.length) {
+      const domSum = domainCrit.reduce((a, c) => a + c.weightPoints, 0);
+      if (domSum !== 60)
+        err("rubric.domainBlock", path, `objet A : le bloc domaine vaut 60 points aux trois niveaux (actuel : ${domSum})`);
+      if (new Set(domainCrit.map((c) => c.weightPoints)).size > 1)
+        err("rubric.domainEqualSplit", path, "objet A.3 : les 60 points du bloc domaine se répartissent ÉGALEMENT entre les compétences du domaine");
+      for (const c of domainCrit) {
+        const expectedMin = Math.ceil(c.weightPoints / 2);
+        if (c.minPoints !== expectedMin)
+          err("rubric.domainMin", path, `« ${c.label} » : minimum non compensable attendu à 50 % de la pondération, arrondi à l'unité supérieure (${expectedMin} — reçu ${c.minPoints ?? "aucun"})`);
+      }
+
+      // Pondérations du socle par niveau (objet A.2) — S5 est propre à FACE2FACE.
+      const S = (n: number) => socleCrit.find((c) => new RegExp(`^S${n}\\b`).test(c.label.trim()));
+      const expected: [number, number, number | null][] = content.level === 3
+        ? [[4, 15, 8], [1, 10, 5], [2, 10, null], [3, 5, null]]
+        : [[1, 15, 8], [2, 15, null], [3, 10, null]];
+      for (const [n, weight, min] of expected) {
+        const c = S(n);
+        if (!c) { err("rubric.socleMissing", path, `critère S${n} du socle absent (requis au Niveau ${content.level})`); continue; }
+        if (c.weightPoints !== weight)
+          err("rubric.socleWeight", path, `« ${c.label} » : ${weight} points attendus au Niveau ${content.level} (objet A.2 — reçu ${c.weightPoints})`);
+        if ((c.minPoints ?? null) !== min)
+          err("rubric.socleMin", path, `« ${c.label} » : minimum attendu ${min ?? "aucun"} au Niveau ${content.level} (objet A.2 — reçu ${c.minPoints ?? "aucun"})`);
+      }
+      if (content.level !== 3 && S(4))
+        err("rubric.s4Level", path, "S4 — Transmission de la pratique est réservé au Niveau 3");
+
+      // Objet C — ordre de notation : les critères de domaine d'abord, puis S4
+      // le cas échéant, puis S1, S2 et S3 (la fiche de notation suit la grille).
+      const rank = (c: (typeof criteria)[number]) => {
+        if (!isSocle(c)) return 0;
+        const m = /^S(\d)/.exec(c.label.trim());
+        return ({ 4: 1, 1: 2, 2: 3, 3: 4 } as Record<number, number>)[Number(m?.[1])] ?? 5;
+      };
+      const ranks = criteria.map(rank);
+      if (ranks.some((r, i) => i > 0 && r < ranks[i - 1]!))
+        err("rubric.order", path, "objet C : ordre de notation attendu — critères du domaine, puis S4 le cas échéant, puis S1, S2, S3");
+
+      // Référentiel v3.0 — cartographie des compétences du domaine. Signalé en
+      // AVERTISSEMENT tant que l'annexe en vigueur (antérieure au référentiel
+      // v3.0, applicable au 01/11/2026) n'est pas révisée : la grille publiée
+      // reste valable, la prochaine version du parcours devra se conformer.
+      const dom = referentielDomain(content.domain.code);
+      if (dom) {
+        const domainCodes = new Set(dom.competencies.map((c) => c.code));
+        for (const c of domainCrit) {
+          if (c.competencyCode && !domainCodes.has(c.competencyCode))
+            warn("rubric.refCode", path, `« ${c.label} » : code ${c.competencyCode} inconnu du domaine ${dom.code} au référentiel v${REFERENTIEL_VERSION}`);
+        }
+        const covered = new Set(domainCrit.map((c) => c.competencyCode).filter(Boolean));
+        for (const comp of dom.competencies) {
+          if (!covered.has(comp.code))
+            warn("rubric.refCoverage", path, `référentiel v${REFERENTIEL_VERSION} : la compétence ${comp.code} — ${comp.label} n'a pas de critère de domaine dédié (répartition égale des 60 points attendue à la prochaine révision de l'annexe)`);
+        }
+        // Objet C (non-chevauchement) : un critère du socle ne PORTE pas une
+        // compétence du domaine — deux critères ne se fondent pas sur la même
+        // preuve. La correction se fait à la conception du descripteur.
+        for (const c of socleCrit) {
+          if (c.competencyCode && domainCodes.has(c.competencyCode))
+            warn("rubric.overlap", path, `objet C : « ${c.label} » porte le code de la compétence de domaine ${c.competencyCode} — zone de recouvrement à traiter à la conception (paragraphe de distinction requis dans l'annexe)`);
+        }
+      } else {
+        warn("rubric.refDomain", "domain.code", `domaine ${content.domain.code} inconnu du référentiel v${REFERENTIEL_VERSION}`);
+      }
     }
   }
 

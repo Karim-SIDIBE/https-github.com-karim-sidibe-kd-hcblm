@@ -29,6 +29,18 @@ export class CredentialError extends Error {
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
+/** Validité du certificat de niveau : 3 ans aux trois niveaux, commune aux deux
+ *  départements (K-HCBLM v2.3, amendement A3 / avenant n°1 au socle, objet E).
+ *  Les badges de bloc attestent une progression, pas une compétence certifiée :
+ *  ils n'expirent pas et la page de vérification ne leur applique aucune date. */
+export const CERTIFICATE_VALIDITY_YEARS = 3;
+export function certificateExpiry(issuedAt: Date): Date {
+  const d = new Date(issuedAt);
+  d.setFullYear(d.getFullYear() + CERTIFICATE_VALIDITY_YEARS);
+  return d;
+}
+const isExpired = (expiresAt: Date | null | undefined) => Boolean(expiresAt && expiresAt.getTime() <= Date.now());
+
 function achievementFor(
   content: CourseContent, courseSlug: string, badgeType: string, block: Block, result?: AchievementInput["result"],
 ): AchievementInput {
@@ -85,6 +97,8 @@ export async function issueCredential(params: {
 
   const achievement = achievementFor(params.content, params.courseSlug, params.badgeType, params.block, result);
   const issuedAt = new Date();
+  // A3 : seul le titre de fin de parcours porte une échéance (3 ans).
+  const expiresAt = params.badgeType === "CERTIFICATE" ? certificateExpiry(issuedAt) : null;
 
   // Create the row first to get a stable id for the hosted URLs.
   const row = await prisma.credential.create({
@@ -93,13 +107,13 @@ export async function issueCredential(params: {
       recipientSalt: salt, recipientHash, assertion: {}, vcJwt: "tmp",
     },
   });
-  const assertion = hostedAssertion({ credentialId: row.id, achievement, recipientHash, recipientSalt: salt, issuedAt, revoked: false });
-  const vc = verifiableCredential({ credentialId: row.id, achievement, recipientHash, subjectName: params.recipientName, issuedAt });
+  const assertion = hostedAssertion({ credentialId: row.id, achievement, recipientHash, recipientSalt: salt, issuedAt, expiresAt, revoked: false });
+  const vc = verifiableCredential({ credentialId: row.id, achievement, recipientHash, subjectName: params.recipientName, issuedAt, expiresAt });
   const vcJwt = await signVcJwt(vc, recipientHash, row.id);
 
   return prisma.credential.update({
     where: { id: row.id },
-    data: { assertion: assertion as unknown as Prisma.InputJsonValue, vcJwt, issuedAt },
+    data: { assertion: assertion as unknown as Prisma.InputJsonValue, vcJwt, issuedAt, expiresAt },
   });
 }
 
@@ -154,9 +168,14 @@ export async function verify(input: { jws?: string; credentialId?: string }) {
         ?? await prisma.f2fCredential.findUnique({ where: { id: credId } }))
       : null;
     const revoked = Boolean(row?.revokedAt);
+    // A3 : l'échéance est un état du titre, pas un défaut de signature — la
+    // signature reste vérifiable après expiration, le verdict devient « expiré ».
+    const expired = isExpired(row?.expiresAt);
     return {
-      valid: !revoked,
+      valid: !revoked && !expired,
       revoked,
+      expired,
+      expiresOn: row?.expiresAt?.toISOString() ?? null,
       issuer: payload.iss,
       subject: payload.sub,
       achievement: vc?.credentialSubject?.achievement?.name ?? null,
@@ -164,7 +183,7 @@ export async function verify(input: { jws?: string; credentialId?: string }) {
       ...(revoked ? { revocationReason: row?.revocationReason } : {}),
     };
   } catch (e) {
-    return { valid: false, revoked: false, error: "signature_invalid", message: e instanceof Error ? e.message : "invalide" };
+    return { valid: false, revoked: false, expired: false, error: "signature_invalid", message: e instanceof Error ? e.message : "invalide" };
   }
 }
 
@@ -193,6 +212,7 @@ export async function listForEnrollment(enrollmentId: string) {
   const creds = await prisma.credential.findMany({ where: { enrollmentId }, orderBy: { issuedAt: "asc" }, include: { badge: true } });
   return creds.map((c) => ({
     id: c.id, achievementType: c.achievementType, issuedAt: c.issuedAt, revoked: Boolean(c.revokedAt),
+    expiresAt: c.expiresAt, expired: isExpired(c.expiresAt),
     badgeLabel: c.badge.type, hostedUrl: credentialUrl(c.id), verifyUrl: `${credentialUrl(c.id)}/verify`,
   }));
 }
@@ -236,6 +256,8 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
     achievementType: c.achievementType,
     badgeLabel: c.badge.type,
     issuedAt: c.issuedAt,
+    expiresAt: c.expiresAt,
+    expired: isExpired(c.expiresAt),
     revoked: Boolean(c.revokedAt),
     revocationReason: c.revocationReason ?? null,
     learner: { name: c.enrollment.user.name, email: c.enrollment.user.email },
@@ -282,6 +304,8 @@ export async function verificationData(id: string) {
       achievementName: fa.badge?.name ?? f.achievementType,
       level: f.participant.module.level as 1 | 2 | 3,
       issuedOn: f.issuedAt,
+      expiresOn: f.expiresAt,
+      expired: isExpired(f.expiresAt),
       revoked: Boolean(f.revokedAt),
       revocationReason: f.revocationReason ?? null,
       signatureValid: !("error" in v),
@@ -300,6 +324,8 @@ export async function verificationData(id: string) {
     achievementName: a.badge?.name ?? c.achievementType,
     level,
     issuedOn: c.issuedAt,
+    expiresOn: c.expiresAt,
+    expired: isExpired(c.expiresAt),
     revoked: Boolean(c.revokedAt),
     revocationReason: c.revocationReason ?? null,
     signatureValid: !("error" in v),
@@ -324,6 +350,7 @@ export async function certificate(id: string): Promise<Buffer> {
       level,
       licenseId: f.id,
       issuedOn: f.issuedAt,
+      expiresOn: f.expiresAt,
       verifyUrl: credentialUrl(f.id),
       templateDir: "assets/certificates/face2face",
     });
@@ -340,6 +367,7 @@ export async function certificate(id: string): Promise<Buffer> {
     level,
     licenseId: c.id,
     issuedOn: c.issuedAt,
+    expiresOn: c.expiresAt,
     verifyUrl: credentialUrl(c.id),
   });
 }

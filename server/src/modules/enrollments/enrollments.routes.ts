@@ -4,8 +4,9 @@ import {
   EngineError, assignEvaluator, captureMomentAncrage, cohortBoard, completeItem, designatePeer, enroll, getEnrollment,
   getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition, saveRubricDraft,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
-  projectState,
+  projectState, setAncrageChangeNote, checkAncrageAlignment,
 } from "./enrollments.service.js";
+import { CompositionCapture } from "../../lib/composition.js";
 import { listForEnrollment } from "../notifications/notifications.service.js";
 import { nudgeOne } from "../jobs/jobs.service.js";
 import { learnerDiagnostic, diagnosticReview } from "../analytics/analytics.service.js";
@@ -160,8 +161,16 @@ export async function enrollmentRoutes(app: FastifyInstance) {
   // Capture Moment d'Ancrage
   app.post("/enrollments/:id/moment-ancrage", { preHandler: owned }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
-    const { text } = z.object({ text: z.string() }).parse(req.body);
-    try { return { data: await captureMomentAncrage(id, text) }; } catch (err) { return handle(reply, err); }
+    const { text, composition } = z.object({ text: z.string(), composition: CompositionCapture.optional() }).parse(req.body);
+    try { return { data: await captureMomentAncrage(id, text, composition) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Explication du changement de situation depuis le Moment d'Ancrage
+  // (avenant n°1, F.6 — champ bloc4.ecart_ancrage, deux lignes, optionnel).
+  app.post("/enrollments/:id/ancrage-change", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { text, composition } = z.object({ text: z.string(), composition: CompositionCapture.optional() }).parse(req.body);
+    try { return { data: await setAncrageChangeNote(id, text, composition) }; } catch (err) { return handle(reply, err); }
   });
 
   // Designate progress peer
@@ -185,8 +194,11 @@ export async function enrollmentRoutes(app: FastifyInstance) {
         response: z.string().optional(),
         correct: z.boolean().optional(),
       }).optional(),
+      // Agrégats de composition (objet F) — pris en compte uniquement sur les
+      // champs certifiants du Bloc 4 ; ignorés partout ailleurs.
+      composition: CompositionCapture.optional(),
     }).parse(req.body);
-    try { return { data: await completeItem(id, body.blockIndex, body.itemType, body.itemKey, body.data, body.meta) }; }
+    try { return { data: await completeItem(id, body.blockIndex, body.itemType, body.itemKey, body.data, body.meta, body.composition) }; }
     catch (err) { return handle(reply, err); }
   });
 
@@ -217,6 +229,18 @@ export async function enrollmentRoutes(app: FastifyInstance) {
 
   // Human rubric evaluation — evaluator/admin only (NOT the learner).
   // Per-criterion scoring (preferred); a single scorePct is still accepted.
+  // Condition préalable d'alignement (v2.3 A5.1 / avenant F.6) : l'évaluateur
+  // atteste l'alignement Moment d'Ancrage ↔ Situation (ou l'explication du
+  // changement) — la grille de notation ne se déverrouille qu'après.
+  app.post("/enrollments/:id/evaluation/ancrage-check", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    try {
+      const data = await checkAncrageAlignment(id, req.principal!.id);
+      await audit({ actorId: req.principal!.id, action: "evaluation.ancrage_check", targetType: "Enrollment", targetId: id, ip: req.ip });
+      return { data };
+    } catch (err) { return handle(reply, err); }
+  });
+
   app.post("/enrollments/:id/evaluation", { preHandler: [authenticate, authorize("evaluation:grade")] }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     const body = z.object({

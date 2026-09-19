@@ -4,7 +4,7 @@ import { navigate, routes } from "../lib/router";
 import { brand } from "../lib/brand";
 import { useT, useI18n } from "../lib/i18n";
 
-type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; revoked: boolean; hostedUrl: string; verifyUrl: string };
+type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; expiresAt?: string | null; expired?: boolean; revoked: boolean; hostedUrl: string; verifyUrl: string };
 type TranscriptRow = { key: string; label: string; scorePct: number | null; correct: number | null; total: number | null; scored: boolean; at: string };
 const ORG = brand.issuer;
 // Symbol of each block badge (consigne « Amélioration » — 2e point).
@@ -114,6 +114,12 @@ export function Badges({ eid }: { eid: string }) {
             <button className="hf-btn hf-btn--sm hf-btn--primary" disabled={dl} onClick={() => void downloadPdf(cert)}>{dl ? "…" : t("bd.download")}</button>
             <a href={linkedInUrl(cert)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">{t("bd.addLinkedIn")}</button></a>
             <a href={cert.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">{t("bd.publicVerify")}</button></a>
+            {/* A3 : le certificat de niveau porte une échéance (3 ans) — les badges de bloc, non. */}
+            {cert.expiresAt && (
+              <p className="meta" style={{ margin: "6px 0 0", width: "100%" }}>
+                {t(cert.expired ? "bd.expired" : "bd.validUntil", { date: new Date(cert.expiresAt).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR") })}
+              </p>
+            )}
           </div>
         ) : (
           <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} onClick={() => navigate(routes.project(eid))}>{t("bd.submitProject")}</button>
