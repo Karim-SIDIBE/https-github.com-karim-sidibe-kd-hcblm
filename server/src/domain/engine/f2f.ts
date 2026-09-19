@@ -41,6 +41,11 @@ export type F2fPrereqInput = {
   missionAt: number[];
   /** Fiche d'ancrage déposée. */
   hasAnchor: boolean;
+  /** Critère S5 activé par l'annexe (avenant n°1, objet A.2) : le mini-projet
+   *  devient une condition préalable au même titre que le Journal de Bord. */
+  s5Enabled?: boolean;
+  /** Mini-projet déposé (Situation · Solution · Résultat · Apprentissage). */
+  hasMiniProject?: boolean;
 };
 
 export type F2fPrereq = { code: string; label: string; ok: boolean };
@@ -128,6 +133,14 @@ export function certificationPrereqs(input: F2fPrereqInput): { ok: boolean; prer
       label: `Mission Terrain engagée après ${missionRequired.length > 1 ? `les Sessions 1 à ${shape.sessions - 1}` : "la Session 1"}`,
       ok: missingMissions.length === 0,
     },
+    // Avenant n°1 (objet A) : dès que l'annexe active S5, le mini-projet est
+    // une condition préalable AU MÊME TITRE que le Journal de Bord — déposé
+    // sur la plateforme avant la session finale.
+    ...(input.s5Enabled ? [{
+      code: "miniProject",
+      label: "Mini-projet S5 déposé avant la session finale (Situation · Solution · Résultat · Apprentissage)",
+      ok: Boolean(input.hasMiniProject),
+    }] : []),
   ];
   return { ok: prereqs.every((p) => p.ok), prereqs };
 }

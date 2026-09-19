@@ -199,6 +199,46 @@ git pull
 docker compose -f deploy/docker-compose.yml up -d --build
 ```
 
+### Mise à jour complète après un `git pull` (API + fronts)
+
+Node/npm ne sont **pas installés sur le VPS** : les fronts se construisent en
+conteneur one-off `node:22-slim` (méthode utilisée en production). Depuis
+`~/kd-hcblm`, chaque commande dans l'ordre :
+
+```bash
+cd ~/kd-hcblm && git pull
+```
+
+```bash
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d --build api
+```
+
+> L'API applique automatiquement `prisma migrate deploy` au démarrage — aucune
+> commande de migration à lancer à la main.
+
+Puis **uniquement les fronts touchés par la mise à jour** (chaque build
+recharge le `dist/` que Caddy sert en live — pas de redémarrage) :
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w web run build"
+```
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w admin run build"
+```
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w face2face run build"
+```
+
+```bash
+docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
+  "npm ci && VITE_API_URL=https://api.declick.digital/api/v1 npm -w entreprise run build"
+```
+
 ## 8. Sauvegardes (base + médias + secrets)
 
 Le script **`deploy/backup.sh`** sauvegarde la base (`pg_dump -Fc`), le volume

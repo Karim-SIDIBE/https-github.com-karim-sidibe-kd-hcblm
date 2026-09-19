@@ -1635,6 +1635,13 @@ model F2fModule {
   trainer      User?            @relation("F2fTrainer", fields: [trainerId], references: [id], onDelete: SetNull)
   /// Grille comportementale du SOCLE COMMUN (RubricSchema : criteria + seuil).
   rubric       Json
+  /// Critère S5 « Mise en application documentée » activé par l'annexe
+  /// (avenant F2F n°1, objet A.2) : Niveaux 1-2 seulement — le mini-projet
+  /// devient une condition préalable au même titre que le Journal de Bord.
+  s5Enabled    Boolean          @default(false)
+  /// Famille de scénarios jouée par ce module (avenant F2F n°2, objet H) —
+  /// domaines servant plusieurs parcours ; tracée sur la fiche de notation.
+  scenarioFamily String?
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
   sessions     F2fSession[]
@@ -1678,10 +1685,16 @@ model F2fParticipant {
   user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   status         F2fParticipantStatus @default(ACTIVE)
   joinedAt       DateTime             @default(now())
+  /// Récusation de droit avant la reprise (avenant F2F n°3, objet J.2) :
+  /// demande écrite du candidat, jamais motivée à justifier — la reprise est
+  /// alors conduite par un autre évaluateur.
+  recusalAt      DateTime?
+  recusalNote    String?
   anchor         F2fAnchor?
   journal        F2fJournalEntry[]
   missions       F2fMission[]
-  certification  F2fCertification?
+  certifications F2fCertification[]
+  miniProject    F2fMiniProject?
   credential     F2fCredential?
   f2Fattendances F2fAttendance[]
   selfAssessments F2fSelfAssessment[]
@@ -1744,16 +1757,46 @@ model F2fMission {
 /// fiche d'ancrage) — verrou applicatif, cf. f2f.service.
 model F2fCertification {
   id            String         @id @default(cuid())
-  participantId String         @unique
+  participantId String
   participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
-  /// [{label, weightPoints, points, band?, evidence?}] — fiche archivée.
+  /// Tentative : 1 = décision initiale ; 2 = reprise unique après « Nouvelle
+  /// mise en situation » (socle §9, avenant n°3 objet J — 60 jours, variante
+  /// différente, grille vierge). Les deux fiches restent archivées.
+  attempt       Int            @default(1)
+  /// [{label, weightPoints, points, band?, evidence?, source?, competencyCodes?,
+  ///   oralCheck?}] — fiche archivée : source de preuve et codes regroupés
+  /// reportés (objets C/D), verbatim de la vérification orale des livrables
+  /// (objet B) inclus dans la fiche.
   scores        Json
   scoreTotal    Int
   decision      String // CERTIFIED | RESUBMIT | NOT_CERTIFIED
+  /// Variante de scénario jouée (avenant n°2, objet H : la fiche porte le
+  /// parcours, la famille et la variante — la reprise se joue sur une
+  /// variante différente).
+  scenarioVariant String?
   feedback      String?
   evaluatorId   String?
   evaluator     User?          @relation("F2fEvaluator", fields: [evaluatorId], references: [id], onDelete: SetNull)
   evaluatedAt   DateTime       @default(now())
+
+  @@unique([participantId, attempt])
+}
+
+/// Mini-projet S5 (avenant F2F n°1, objet A) : livrable écrit déposé sur la
+/// plateforme AVANT la session finale — condition préalable au déverrouillage
+/// de la grille au même titre que le Journal de Bord, quand l'annexe active
+/// S5. Structure du Bloc 4 DECLICK : un apprenant du parcours combiné produit
+/// UN livrable, pas deux. Figé par la tenue de la session finale.
+model F2fMiniProject {
+  id            String         @id @default(cuid())
+  participantId String         @unique
+  participant   F2fParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  situation     String
+  solution      String
+  result        String
+  learning      String
+  submittedAt   DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
 
 /// Open Badge FACE2FACE (OB 2.0 hébergé + VC-JWT), émis à la décision

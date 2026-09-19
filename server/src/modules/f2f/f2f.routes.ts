@@ -14,7 +14,7 @@ import {
   F2fError, addJournalEntry, addMission, addParticipant, cancelHold, certificationState, certify,
   createModule, deleteModule, f2fKpis, getAnchor, getModule, getSelfAssessments, holdSession,
   listJournal, listModules, myModules, participantCertificatePdf, participantOverview,
-  upsertAnchor, upsertSelfAssessment,
+  requestRecusal, submitMiniProject, upsertAnchor, upsertSelfAssessment,
 } from "./f2f.service.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { isStaff } from "../../domain/auth/permissions.js";
@@ -33,6 +33,10 @@ const createModuleBody = z.object({
   location: z.string().optional(),
   trainerId: z.string().optional(),
   rubric: z.unknown(),
+  // Avenants F2F : S5 activé par l'annexe (objet A.2) et famille de scénarios
+  // du module (objet H) — tracés jusqu'à la fiche de notation.
+  s5Enabled: z.boolean().optional(),
+  scenarioFamily: z.string().optional(),
   sessions: z.array(z.object({
     index: z.number().int().min(1),
     title: z.string().optional(),
@@ -65,8 +69,19 @@ const missionBody = z.object({
 });
 
 const certifyBody = z.object({
-  criteria: z.array(z.object({ points: z.number(), evidence: z.string().optional() })).min(1),
+  // oralCheck : verbatim de la vérification orale d'un critère « livrable »
+  // (objet B — question posée + substance de la réponse).
+  criteria: z.array(z.object({ points: z.number(), evidence: z.string().optional(), oralCheck: z.string().optional() })).min(1),
   feedback: z.string().optional(),
+  // Variante de scénario jouée (objet H) — la reprise exige une variante différente.
+  scenarioVariant: z.string().optional(),
+});
+
+const miniProjectBody = z.object({
+  situation: z.string(),
+  solution: z.string(),
+  result: z.string(),
+  learning: z.string(),
 });
 
 export async function f2fRoutes(app: FastifyInstance) {
@@ -203,6 +218,26 @@ export async function f2fRoutes(app: FastifyInstance) {
   app.get("/f2f/participants/:id/certification-state", { preHandler: authenticate }, async (req, reply) => {
     const { id } = idParam.parse(req.params);
     try { return { data: await certificationState(id, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Mini-projet S5 (avenant n°1, objet A) : déposé par le participant avant la
+  // session finale — condition préalable au déverrouillage de la grille.
+  app.put("/f2f/participants/:id/mini-project", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const body = miniProjectBody.parse(req.body ?? {});
+    try { return { data: await submitMiniProject(id, body, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Récusation de droit avant la reprise (avenant n°3, objet J.2) : demande
+  // écrite du candidat, jamais à motiver.
+  app.post("/f2f/participants/:id/recusal", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const body = z.object({ note: z.string().optional() }).parse(req.body ?? {});
+    try {
+      const result = await requestRecusal(id, body.note, req.principal!);
+      await audit({ actorId: req.principal?.id, action: "f2f.recusal", targetType: "f2fParticipant", targetId: id, ip: req.ip });
+      return { data: result };
+    } catch (err) { return handle(reply, err); }
   });
 
   app.post("/f2f/participants/:id/certify", { preHandler: guard("evaluation:grade") }, async (req, reply) => {

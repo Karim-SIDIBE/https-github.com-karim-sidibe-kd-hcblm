@@ -12,7 +12,8 @@ import { randomBytes, createHash } from "node:crypto";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { RubricSchema, type Rubric } from "../../domain/content-model.js";
-import { decideCertification } from "../../domain/engine/certification.js";
+import { bandOf } from "../../domain/engine/certification.js";
+import { buildF2fRubric, validateF2fRubric, decideF2fCertification, F2F_RETAKE_WINDOW_DAYS } from "../../domain/engine/f2f-rubric.js";
 import {
   certificationPrereqs, convocationStage, entriesPerPeriod, f2fShape, journalNudgeDue, journalSlotOpensAt,
   F2F_HOLD_UNDO_MS, F2F_JOURNAL_MIN_WORDS, F2F_SELF_SCORE_MAX, F2F_SELF_SCORE_MIN,
@@ -42,11 +43,23 @@ const isStaff = (p: Principal) => isAdmin(p) || hasPermission(p.role, "evaluatio
 export async function createModule(input: {
   title: string; level: number; location?: string; trainerId?: string;
   rubric: unknown;
+  s5Enabled?: boolean; scenarioFamily?: string;
   sessions?: { index: number; title?: string; scheduledAt?: string; location?: string; durationMin?: number }[];
 }) {
   const shape = f2fShape(input.level);
-  // La grille est LE contrat du socle commun — même schéma que DECLICK.
-  const rubric = RubricSchema.parse(input.rubric);
+  // Socle FACE2FACE v1.3 : la grille du module = les critères du DOMAINE du
+  // parcours source (60 points, identiques dans les deux départements —
+  // objet A) + les critères du socle F2F propres au canal (S1 20/10 · S2 20
+  // en standard ; S5 15/8 · S1 15/8 · S2 10 quand l'annexe active S5 ;
+  // S4 15/8 · S1 10/5 · S2 15 au Niveau 3). Le parcours fournit le domaine,
+  // jamais S1-S3 DECLICK.
+  const source = RubricSchema.parse(input.rubric);
+  const domainCriteria = source.criteria.filter((c) => !(c.origin === "socle" || /^S[1-5]\b/.test(c.label.trim())));
+  const rubric = buildF2fRubric(input.level, domainCriteria, { s5Enabled: input.s5Enabled });
+  const issues = validateF2fRubric(rubric, input.level, { s5Enabled: input.s5Enabled });
+  if (issues.length) {
+    throw new F2fError(422, "rubric_invalid", `Grille non conforme au socle FACE2FACE v1.3 : ${issues.join(" · ")}`);
+  }
   if (input.trainerId) {
     const trainer = await prisma.user.findUnique({ where: { id: input.trainerId } });
     if (!trainer) throw new F2fError(404, "trainer_not_found", "Formateur introuvable");
@@ -56,6 +69,7 @@ export async function createModule(input: {
     data: {
       title: input.title, level: input.level, location: input.location ?? null,
       trainerId: input.trainerId ?? null,
+      s5Enabled: Boolean(input.s5Enabled), scenarioFamily: input.scenarioFamily?.trim() || null,
       rubric: rubric as unknown as Prisma.InputJsonValue,
       sessions: {
         create: Array.from({ length: shape.sessions }, (_, i) => {
@@ -112,7 +126,7 @@ export async function getModule(moduleId: string, principal: Principal) {
     include: {
       user: { select: { id: true, name: true, email: true } },
       anchor: { select: { id: true, updatedAt: true } },
-      certification: { select: { decision: true, scoreTotal: true, evaluatedAt: true } },
+      certifications: { select: { decision: true, scoreTotal: true, evaluatedAt: true, attempt: true }, orderBy: { attempt: "desc" as const }, take: 1 },
       credential: { select: { id: true, issuedAt: true } },
       _count: { select: { journal: true, missions: true } },
     },
@@ -134,7 +148,7 @@ export async function getModule(moduleId: string, principal: Principal) {
       journalCount: p._count.journal, journalTarget: shape.journalMin,
       missionCount: p._count.missions,
       presentAt: (presentByParticipant.get(p.id) ?? []).sort((a, b) => a - b),
-      certification: p.certification, credential: p.credential,
+      certification: p.certifications[0] ?? null, credential: p.credential,
     })),
   };
 }
@@ -412,15 +426,19 @@ export async function participantOverview(participantId: string, principal: Prin
   const participant = await loadParticipant(participantId);
   assertReadAccess(participant, principal);
   const shape = f2fShape(participant.module.level);
-  const [anchor, journal, missions, attendance, certification, credential, selfAssessments] = await Promise.all([
+  const [anchor, journal, missions, attendance, certifications, miniProject, credential, selfAssessments] = await Promise.all([
     prisma.f2fAnchor.findUnique({ where: { participantId } }),
     prisma.f2fJournalEntry.findMany({ where: { participantId }, orderBy: [{ periodIndex: "asc" }, { entryDate: "asc" }] }),
     prisma.f2fMission.findMany({ where: { participantId }, orderBy: { sessionIndex: "asc" } }),
     prisma.f2fAttendance.findMany({ where: { participantId }, include: { session: { select: { index: true } } } }),
-    prisma.f2fCertification.findUnique({ where: { participantId } }),
+    prisma.f2fCertification.findMany({ where: { participantId }, orderBy: { attempt: "asc" } }),
+    prisma.f2fMiniProject.findUnique({ where: { participantId } }),
     prisma.f2fCredential.findUnique({ where: { participantId }, select: { id: true, issuedAt: true } }),
     prisma.f2fSelfAssessment.findMany({ where: { participantId } }),
   ]);
+  // Décision courante = tentative la plus récente ; les fiches restent
+  // toutes archivées (socle §9 / avenant n°3, objet J).
+  const certification = certifications.at(-1) ?? null;
   const presentAt = attendance.filter((a) => a.present).map((a) => a.session.index).sort((a, b) => a - b);
   // Cycles du parcours : après chaque session intermédiaire, une Mission
   // Terrain (engagement public) puis les 3 entrées à créneaux du Journal.
@@ -451,6 +469,7 @@ export async function participantOverview(participantId: string, principal: Prin
     module: {
       id: participant.module.id, title: participant.module.title, level: participant.module.level,
       location: participant.module.location, shape,
+      s5Enabled: participant.module.s5Enabled, scenarioFamily: participant.module.scenarioFamily,
       sessions: participant.module.sessions.map((s) => ({
         index: s.index, title: s.title, scheduledAt: s.scheduledAt, heldAt: s.heldAt,
         present: presentAt.includes(s.index),
@@ -460,7 +479,9 @@ export async function participantOverview(participantId: string, principal: Prin
     journal: { entries: journal, count: journal.length, target: shape.journalMin },
     missions,
     cycles,
-    certification, credential,
+    certification, certifications, miniProject,
+    recusal: participant.recusalAt ? { at: participant.recusalAt, note: participant.recusalNote } : null,
+    credential,
     selfAssessment: selfAssessmentView(selfAssessments, participant, Boolean(certification)),
   };
 }
@@ -480,11 +501,12 @@ export async function myModules(principal: Principal) {
 // ---------------------------------------------------------------------------
 
 async function prereqInput(participant: Awaited<ReturnType<typeof loadParticipant>>) {
-  const [attendance, journalCount, missions, anchor] = await Promise.all([
+  const [attendance, journalCount, missions, anchor, miniProject] = await Promise.all([
     prisma.f2fAttendance.findMany({ where: { participantId: participant.id }, include: { session: { select: { index: true } } } }),
     prisma.f2fJournalEntry.count({ where: { participantId: participant.id } }),
     prisma.f2fMission.findMany({ where: { participantId: participant.id }, select: { sessionIndex: true } }),
     prisma.f2fAnchor.findUnique({ where: { participantId: participant.id }, select: { id: true } }),
+    prisma.f2fMiniProject.findUnique({ where: { participantId: participant.id }, select: { id: true } }),
   ]);
   return {
     level: participant.module.level,
@@ -493,7 +515,15 @@ async function prereqInput(participant: Awaited<ReturnType<typeof loadParticipan
     journalCount,
     missionAt: missions.map((m) => m.sessionIndex),
     hasAnchor: Boolean(anchor),
+    s5Enabled: participant.module.s5Enabled,
+    hasMiniProject: Boolean(miniProject),
   };
+}
+
+/** Décision courante (tentative la plus récente — la reprise archive les deux
+ *  fiches, socle §9 / avenant n°3 objet J). */
+async function latestCertification(participantId: string) {
+  return prisma.f2fCertification.findFirst({ where: { participantId }, orderBy: { attempt: "desc" } });
 }
 
 /** Panneau des conditions de certification (K-SPEM §6, toutes requises). */
@@ -501,8 +531,27 @@ export async function certificationState(participantId: string, principal: Princ
   const participant = await loadParticipant(participantId);
   assertReadAccess(participant, principal);
   const verdict = certificationPrereqs(await prereqInput(participant));
-  const certification = await prisma.f2fCertification.findUnique({ where: { participantId } });
-  return { ...verdict, alreadyCertified: Boolean(certification), decision: certification?.decision ?? null };
+  const certification = await latestCertification(participantId);
+  // Reprise (objet J) : ouverte 60 jours après une décision « Nouvelle mise en
+  // situation », une seule fois, même évaluateur sauf récusation de droit.
+  const retakeOpen = Boolean(
+    certification && certification.decision === "RESUBMIT" && certification.attempt === 1
+    && Date.now() - certification.evaluatedAt.getTime() <= F2F_RETAKE_WINDOW_DAYS * 86_400_000,
+  );
+  return {
+    ...verdict,
+    alreadyCertified: Boolean(certification) && !retakeOpen,
+    decision: certification?.decision ?? null,
+    retake: certification ? {
+      open: retakeOpen,
+      attempt: certification.attempt,
+      deadline: certification.decision === "RESUBMIT" && certification.attempt === 1
+        ? new Date(certification.evaluatedAt.getTime() + F2F_RETAKE_WINDOW_DAYS * 86_400_000).toISOString() : null,
+      recusalRequested: Boolean(participant.recusalAt),
+      firstEvaluatorId: certification.evaluatorId,
+      firstVariant: certification.scenarioVariant,
+    } : null,
+  };
 }
 
 /**
@@ -518,15 +567,49 @@ export async function certificationState(participantId: string, principal: Princ
  */
 export async function certify(
   participantId: string,
-  input: { criteria: { points: number; evidence?: string }[]; feedback?: string },
+  input: {
+    criteria: { points: number; evidence?: string; oralCheck?: string }[];
+    feedback?: string;
+    /** Variante de scénario jouée (avenant n°2, objet H) — tracée sur la
+     *  fiche ; la reprise se joue sur une variante différente. */
+    scenarioVariant?: string;
+  },
   principal: Principal,
 ) {
   if (!hasPermission(principal.role, "evaluation:grade")) {
     throw new F2fError(403, "forbidden", "La décision certifiante est réservée aux évaluateurs (socle §5/§9)");
   }
   const participant = await loadParticipant(participantId);
-  const existing = await prisma.f2fCertification.findUnique({ where: { participantId } });
-  if (existing) throw new F2fError(409, "already_certified", `Décision déjà prononcée (${existing.decision}) — fiche scellée`);
+  const prior = await prisma.f2fCertification.findMany({ where: { participantId }, orderBy: { attempt: "asc" } });
+  const latest = prior.at(-1) ?? null;
+
+  // Reprise (socle §9 / avenant n°3, objet J) : uniquement après une décision
+  // « Nouvelle mise en situation », une seule fois, dans les 60 jours, sur une
+  // variante différente, grille vierge — conduite par l'évaluateur de la
+  // première décision, sauf récusation de droit demandée par le candidat.
+  let attempt = 1;
+  if (latest) {
+    if (latest.decision !== "RESUBMIT") {
+      throw new F2fError(409, "already_certified", `Décision déjà prononcée (${latest.decision}) — fiche scellée`);
+    }
+    if (latest.attempt >= 2) {
+      throw new F2fError(409, "retake_exhausted", "Une seule reprise (socle §9) — réinscription sur une cohorte ultérieure");
+    }
+    if (Date.now() - latest.evaluatedAt.getTime() > F2F_RETAKE_WINDOW_DAYS * 86_400_000) {
+      throw new F2fError(409, "retake_expired", `La fenêtre de reprise de ${F2F_RETAKE_WINDOW_DAYS} jours est échue — réinscription sur une cohorte ultérieure`);
+    }
+    const recused = Boolean(participant.recusalAt);
+    if (!recused && latest.evaluatorId && principal.id !== latest.evaluatorId) {
+      throw new F2fError(403, "retake_evaluator", "La reprise est conduite par l'évaluateur de la première décision (objet J) — sauf récusation de droit demandée par écrit par le candidat");
+    }
+    if (recused && latest.evaluatorId && principal.id === latest.evaluatorId) {
+      throw new F2fError(403, "retake_recused", "Le candidat a demandé un autre évaluateur (récusation de droit, objet J) — la reprise vous est fermée");
+    }
+    if (input.scenarioVariant?.trim() && latest.scenarioVariant && input.scenarioVariant.trim() === latest.scenarioVariant) {
+      throw new F2fError(422, "same_variant", "La reprise se joue sur une VARIANTE DIFFÉRENTE de la même famille (objets H et J)");
+    }
+    attempt = latest.attempt + 1;
+  }
 
   const verdict = certificationPrereqs(await prereqInput(participant));
   if (!verdict.ok) {
@@ -547,24 +630,40 @@ export async function certify(
     if (banded && !s.evidence?.trim()) {
       throw new F2fError(422, "evidence_required", `Preuve d'observation requise pour « ${spec.label} » (règle 3 du socle)`);
     }
+    // Vérification orale des livrables (avenant n°1, objet B) : tout critère
+    // dont la preuve est un livrable produit (S5, S4, compétence à livrable)
+    // comporte la question posée et la substance de la réponse, en verbatim,
+    // reportées dans la fiche. Un candidat qui ne peut pas répondre sur son
+    // propre livrable descend d'une bande sur le critère.
+    if (banded && (spec.evidenceSource ?? "situation") === "livrable" && !s.oralCheck?.trim()) {
+      throw new F2fError(422, "oral_check_required", `Vérification orale requise pour « ${spec.label} » : la question posée et la substance de la réponse, en verbatim (objet B)`);
+    }
     return { points: s.points };
   });
-  const decision = decideCertification(rubric.criteria, scores, rubric.threshold);
+  const decision = decideF2fCertification(rubric.criteria, scores, rubric.threshold);
   const breakdown = rubric.criteria.map((c, i) => ({
     label: c.label, weightPoints: c.weightPoints, points: input.criteria[i]!.points,
+    band: bandOf(c, input.criteria[i]!.points),
     evidence: input.criteria[i]!.evidence?.trim() || null,
+    // Fiche §10 : la colonne Source est obligatoire ; les codes regroupés
+    // d'un critère groupé sont reportés (objet D).
+    source: c.evidenceSource ?? "situation",
+    ...(c.competencyCodes?.length ? { competencyCodes: c.competencyCodes } : {}),
+    ...(input.criteria[i]!.oralCheck?.trim() ? { oralCheck: input.criteria[i]!.oralCheck!.trim() } : {}),
   }));
 
   const certification = await prisma.f2fCertification.create({
     data: {
-      participantId, scores: breakdown as unknown as Prisma.InputJsonValue,
+      participantId, attempt, scores: breakdown as unknown as Prisma.InputJsonValue,
       scoreTotal: decision.total, decision: decision.decision,
+      scenarioVariant: input.scenarioVariant?.trim() || null,
       feedback: input.feedback?.trim() || null, evaluatorId: principal.id,
     },
   });
+  // RESUBMIT laisse le participant ACTIF : la reprise (60 jours) est ouverte.
   await prisma.f2fParticipant.update({
     where: { id: participantId },
-    data: { status: decision.decision === "CERTIFIED" ? "CERTIFIED" : "NOT_CERTIFIED" },
+    data: { status: decision.decision === "CERTIFIED" ? "CERTIFIED" : decision.decision === "NOT_CERTIFIED" ? "NOT_CERTIFIED" : "ACTIVE" },
   });
 
   let credential = null;
@@ -572,6 +671,58 @@ export async function certify(
     credential = await issueF2fCredential(participant, decision.total, rubric.threshold);
   }
   return { certification, decision, credential: credential ? { id: credential.id } : null };
+}
+
+/** Récusation de droit avant la reprise (avenant n°3, objet J.2) : demande
+ *  écrite du candidat, jamais à motiver — le Directeur Pédagogique assigne
+ *  alors un évaluateur qui n'a pas prononcé la première décision. */
+export async function requestRecusal(participantId: string, note: string | undefined, principal: Principal) {
+  const participant = await loadParticipant(participantId);
+  assertSelf(participant, principal);
+  const latest = await latestCertification(participantId);
+  if (!latest || latest.decision !== "RESUBMIT" || latest.attempt !== 1) {
+    throw new F2fError(409, "no_retake", "La récusation ne s'exerce qu'avant la reprise d'une décision « Nouvelle mise en situation »");
+  }
+  if (participant.recusalAt) return { recusalAt: participant.recusalAt, already: true };
+  const updated = await prisma.f2fParticipant.update({
+    where: { id: participantId },
+    data: { recusalAt: new Date(), recusalNote: note?.trim() || null },
+  });
+  return { recusalAt: updated.recusalAt, already: false };
+}
+
+/** Mini-projet S5 (avenant n°1, objet A) : déposé par le participant AVANT la
+ *  session finale ; modifiable jusqu'à la tenue de celle-ci, puis figé — même
+ *  règle que la fiche d'ancrage. Quatre sections, structure Bloc 4 DECLICK. */
+export async function submitMiniProject(
+  participantId: string,
+  input: { situation: string; solution: string; result: string; learning: string },
+  principal: Principal,
+) {
+  const participant = await loadParticipant(participantId);
+  assertSelf(participant, principal);
+  if (!participant.module.s5Enabled) {
+    throw new F2fError(409, "s5_disabled", "Ce module n'active pas le critère S5 — aucun mini-projet n'est attendu");
+  }
+  const shape = f2fShape(participant.module.level);
+  const finalHeld = Boolean(participant.module.sessions.find((s) => s.index === shape.sessions)?.heldAt);
+  if (finalHeld) throw new F2fError(409, "frozen", "La session finale est tenue : le mini-projet est figé (dépôt requis AVANT la session finale)");
+  const decided = await latestCertification(participantId);
+  if (decided) throw new F2fError(409, "sealed", "Une décision certifiante existe — le mini-projet est figé");
+  const sections: [keyof typeof input, string][] = [
+    ["situation", "Situation"], ["solution", "Solution mise en œuvre"], ["result", "Résultat observé"], ["learning", "Apprentissage personnel"],
+  ];
+  const MIN_WORDS = 30;
+  for (const [key, label] of sections) {
+    const words = (input[key] ?? "").trim().split(/\s+/).filter(Boolean).length;
+    if (words < MIN_WORDS) throw new F2fError(422, "too_short", `« ${label} » : ${MIN_WORDS} mots minimum (${words} saisis) — la vérification orale s'appuie sur un livrable développé`);
+  }
+  const data = { situation: input.situation.trim(), solution: input.solution.trim(), result: input.result.trim(), learning: input.learning.trim() };
+  return prisma.f2fMiniProject.upsert({
+    where: { participantId },
+    update: data,
+    create: { participantId, ...data },
+  });
 }
 
 /** Open Badge FACE2FACE : OB 2.0 hébergé + VC-JWT, servis par les routes
@@ -658,7 +809,7 @@ export async function upsertSelfAssessment(
     if (!lastSessionHeld(participant)) {
       throw new F2fError(423, "exit_locked", "L'auto-évaluation de sortie se remplit en session finale — la dernière session n'est pas encore tenue.");
     }
-    const sealed = await prisma.f2fCertification.findUnique({ where: { participantId }, select: { id: true } });
+    const sealed = await latestCertification(participantId);
     if (sealed) throw new F2fError(423, "exit_frozen", "L'auto-évaluation de sortie est figée : la décision certifiante est prononcée.");
   }
   return prisma.f2fSelfAssessment.upsert({
@@ -673,7 +824,7 @@ export async function getSelfAssessments(participantId: string, principal: Princ
   assertReadAccess(participant, principal);
   const [rows, certification] = await Promise.all([
     prisma.f2fSelfAssessment.findMany({ where: { participantId } }),
-    prisma.f2fCertification.findUnique({ where: { participantId }, select: { id: true } }),
+    latestCertification(participantId),
   ]);
   return selfAssessmentView(rows, participant, Boolean(certification));
 }
@@ -694,7 +845,7 @@ export async function f2fKpis(principal: Principal) {
       participants: {
         include: {
           anchor: { select: { id: true } },
-          certification: { select: { decision: true, scoreTotal: true } },
+          certifications: { select: { decision: true, scoreTotal: true }, orderBy: { attempt: "desc" as const }, take: 1 },
           selfAssessments: true,
           _count: { select: { journal: true, missions: true } },
         },
@@ -708,8 +859,8 @@ export async function f2fKpis(principal: Principal) {
     const held = m.sessions.filter((s) => s.heldAt);
     const expectedAttendance = held.length * active.length;
     const presentTotal = held.reduce((sum, s) => sum + s.attendance.length, 0);
-    const decided = active.filter((p) => p.certification);
-    const certified = decided.filter((p) => p.certification!.decision === "CERTIFIED");
+    const decided = active.filter((p) => p.certifications.length > 0);
+    const certified = decided.filter((p) => p.certifications[0]!.decision === "CERTIFIED");
     const entries = active.map((p) => {
       const e = p.selfAssessments.find((x) => x.phase === "ENTRY");
       const x = p.selfAssessments.find((y) => y.phase === "EXIT");
@@ -735,9 +886,9 @@ export async function f2fKpis(principal: Principal) {
       certification: {
         decided: decided.length,
         certified: certified.length,
-        resubmit: decided.filter((p) => p.certification!.decision === "RESUBMIT").length,
-        notCertified: decided.filter((p) => p.certification!.decision === "NOT_CERTIFIED").length,
-        avgScore: avg(decided.map((p) => p.certification!.scoreTotal)),
+        resubmit: decided.filter((p) => p.certifications[0]!.decision === "RESUBMIT").length,
+        notCertified: decided.filter((p) => p.certifications[0]!.decision === "NOT_CERTIFIED").length,
+        avgScore: avg(decided.map((p) => p.certifications[0]!.scoreTotal)),
       },
       selfAssessment: {
         avgEntry: avg(entries.filter((e) => e.entry != null).map((e) => e.entry!)),
