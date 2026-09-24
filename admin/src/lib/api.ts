@@ -365,6 +365,7 @@ export const api = {
   payStats: (days: number) => req<PayStats>("GET", `/payments/stats?days=${days}`),
   payReconciliation: () => req<PayReconciliation>("GET", "/payments/reconciliation"),
   payMarkPaid: (orderId: string, reference: string) => req<unknown>("POST", `/payments/orders/${orderId}/mark-paid`, { reference }),
+  payOrderLink: (orderId: string) => req<{ paymentId: string; link: string; reused: boolean; display: string }>("POST", `/payments/orders/${orderId}/payment-link`),
   courseReport: (courseId: string, range: { since?: string; until?: string } = {}) => {
     const qs = new URLSearchParams();
     if (range.since) qs.set("since", range.since);

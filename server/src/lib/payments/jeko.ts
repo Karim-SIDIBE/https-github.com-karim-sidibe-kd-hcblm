@@ -74,6 +74,71 @@ export function paymentIdOfReference(reference: string): string {
   return reference.split("-")[0] ?? reference;
 }
 
+// --- Liens de paiement (lot 2 — factures B2B partagées par WhatsApp/e-mail) ---
+
+/** Un lien de paiement n'a PAS de statut chez Jèko (seulement
+ *  canReceivePayments) et son identifiant vit dans un espace distinct des
+ *  demandes de paiement : providerRef préfixé pour router fetchStatus. */
+export const JEKO_LINK_PREFIX = "pl:";
+export function linkRefOf(linkId: string): string { return `${JEKO_LINK_PREFIX}${linkId}`; }
+export function linkIdOf(providerRef: string): string | null {
+  return providerRef.startsWith(JEKO_LINK_PREFIX) ? providerRef.slice(JEKO_LINK_PREFIX.length) : null;
+}
+
+/** Statut d'un lien À USAGE UNIQUE (doc « Vérifier si un paiement a été
+ *  complété ») : fermé = payé. ⚠️ Un lien expiré ou désactivé est fermé
+ *  aussi — cette lecture ne sert donc jamais seule à régler : le webhook
+ *  TRANSACTION_COMPLETED reste le déclencheur nominal, et « Re-vérifier »
+ *  est une action staff délibérée. Pur, testé. */
+export function linkStatusOf(link: { allowMultiplePayments?: boolean; canReceivePayments?: boolean } | null): ProviderStatus {
+  if (!link || typeof link.canReceivePayments !== "boolean") return "UNKNOWN";
+  if (link.allowMultiplePayments) return "UNKNOWN"; // réutilisable : indécidable par ce champ
+  return link.canReceivePayments ? "PENDING" : "SUCCEEDED";
+}
+
+/** Crée un lien de paiement Jèko À USAGE UNIQUE (titre 10-255, minimum
+ *  10 000 centimes = 100 XOF — doc « Liens de paiement »). */
+export async function createJekoPaymentLink(input: { title: string; amountMinor: number; currency: string }): Promise<{ linkId: string; url: string }> {
+  if (!jekoProvider.available()) {
+    throw new ProviderError(409, "provider_unconfigured",
+      "Jèko n'est pas configuré (JEKO_API_KEY / JEKO_API_KEY_ID / JEKO_STORE_ID / JEKO_WEBHOOK_SECRET) — le lien de paiement sera disponible dès la configuration.");
+  }
+  if (input.currency !== "XOF") {
+    throw new ProviderError(409, "unsupported_currency", `Les liens de paiement Jèko encaissent en XOF — devise demandée : ${input.currency}.`);
+  }
+  if (input.amountMinor < 100) {
+    throw new ProviderError(422, "amount_too_small", "Un lien de paiement Jèko exige 100 F CFA minimum.");
+  }
+  const title = input.title.length >= 10 ? input.title.slice(0, 255) : input.title.padEnd(10, "·");
+  const res = await fetch(`${BASE()}/partner_api/payment_links`, {
+    method: "POST",
+    headers: { "content-type": "application/json", ...KEY_HEADERS() },
+    body: JSON.stringify({
+      storeId: env.JEKO_STORE_ID,
+      title,
+      amountCents: toJekoCents(input.amountMinor),
+      currency: "XOF",
+      allowMultiplePayments: false,
+    }),
+  }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
+  const json = await res.json().catch(() => null) as { id?: string; link?: string; message?: string } | null;
+  if (!res.ok || !json?.id || !json.link) {
+    throw new ProviderError(502, "link_failed", `Jèko a refusé la création du lien (HTTP ${res.status}${json?.message ? ` · ${json.message}` : ""})`);
+  }
+  return { linkId: json.id, url: json.link };
+}
+
+/** Relit un lien (URL + disponibilité) — pour réutiliser un lien encore ouvert
+ *  plutôt que d'en semer un nouveau à chaque clic. */
+export async function fetchJekoPaymentLink(linkId: string): Promise<{ url: string; canReceivePayments: boolean } | null> {
+  if (!jekoProvider.available()) return null;
+  const res = await fetch(`${BASE()}/partner_api/payment_links/${encodeURIComponent(linkId)}`, { headers: KEY_HEADERS() })
+    .catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
+  const json = await res.json().catch(() => null) as { link?: string; canReceivePayments?: boolean } | null;
+  if (!res.ok || !json?.link) return null;
+  return { url: json.link, canReceivePayments: json.canReceivePayments === true };
+}
+
 type JekoTransaction = {
   id?: string;
   status?: string;
@@ -167,9 +232,11 @@ export const jekoProvider: PaymentProvider = {
       signatureOk,
       // L'id de transaction Jèko est la clé d'idempotence documentée.
       eventId: body.id ?? `notify:${Date.now().toString(36)}`,
-      // Corrélation nominale : l'id de la demande (= providerRef stocké au
+      // Corrélation : un paiement de LIEN porte paymentLinkId (providerRef
+      // stocké « pl:<id> ») ; sinon l'id de la demande (= providerRef du
       // checkout) ; secours : le préfixe paymentId de notre référence.
-      providerRef: body.transactionDetails?.id
+      providerRef: (body.transactionDetails?.paymentLinkId ? linkRefOf(body.transactionDetails.paymentLinkId) : null)
+        ?? body.transactionDetails?.id
         ?? (body.transactionDetails?.reference ? paymentIdOfReference(body.transactionDetails.reference) : null),
       // Le statut annoncé n'accorde rien : le service contre-vérifie toujours
       // par fetchStatus avant tout règlement.
@@ -182,6 +249,17 @@ export const jekoProvider: PaymentProvider = {
 
   async fetchStatus(providerRef): Promise<{ status: ProviderStatus; raw?: unknown }> {
     if (!this.available()) return { status: "UNKNOWN" };
+    // Lien de paiement (« pl:<id> ») : la disponibilité tient lieu de statut
+    // (usage unique : fermé = payé — voir la réserve de linkStatusOf).
+    const linkId = linkIdOf(providerRef);
+    if (linkId) {
+      const res = await fetch(`${BASE()}/partner_api/payment_links/${encodeURIComponent(linkId)}`, { headers: KEY_HEADERS() })
+        .catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
+      if (res.status === 404) return { status: "UNKNOWN", raw: "payment_link_not_found" };
+      const json = await res.json().catch(() => null) as { allowMultiplePayments?: boolean; canReceivePayments?: boolean } | null;
+      if (!res.ok || !json) return { status: "UNKNOWN", raw: json ?? `HTTP ${res.status}` };
+      return { status: linkStatusOf(json), raw: json };
+    }
     const res = await fetch(`${BASE()}/partner_api/payment_requests/${encodeURIComponent(providerRef)}`, {
       headers: KEY_HEADERS(),
     }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
