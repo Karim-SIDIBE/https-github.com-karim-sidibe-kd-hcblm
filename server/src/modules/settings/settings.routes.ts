@@ -18,15 +18,21 @@ const KNOWN = {
   /// §09) — bascule Super Admin sans redéploiement ; les webhooks de TOUS les
   /// agrégateurs restent toujours acceptés. Défaut : « manual » (aucun compte
   /// marchand requis).
-  payment_provider: z.enum(["manual", "cinetpay", "flutterwave", "paydunya", "intouch"]),
+  payment_provider: z.enum(["manual", "cinetpay", "flutterwave", "paydunya", "intouch", "jeko"]),
   /// Mentions légales imprimées en pied des reçus PDF (PAY-4) : n° contribuable,
   /// RCCM, régime de TVA… Texte libre multi-lignes, rédigé par le Super Admin.
   receipt_legal: z.string().max(2000),
+  /// Plafond du paiement EN LIGNE d'un PARTICULIER (B2C), en F CFA — politique
+  /// de maîtrise du risque : au-delà, l'écran d'achat oriente vers le virement
+  /// ou le contact commercial. 0 = pas de plafond. Ne concerne ni les commandes
+  /// d'organisation (virement B2B) ni le constat manuel. Modifiable par le
+  /// Super Admin (console Paiements), sans redéploiement.
+  b2c_online_cap: z.number().int().min(0).max(2_000_000),
 } as const;
 type SettingKey = keyof typeof KNOWN;
 const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
 
-const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual", receipt_legal: "" };
+const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual", receipt_legal: "", b2c_online_cap: 150_000 };
 
 export async function getSetting<T>(key: SettingKey): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } });

@@ -29,6 +29,31 @@ function useCurrency(): [string, (c: string) => void] {
   return [currency, pick];
 }
 
+/** Libellés d'affichage des moyens de paiement exigés au checkout (Jèko). */
+const METHOD_LABELS: Record<string, string> = { wave: "Wave", orange: "Orange Money", mtn: "MTN MoMo", moov: "Moov Money", djamo: "Djamo" };
+
+/** Choix du moyen de paiement AVANT le checkout — affiché seulement quand le
+ *  fournisseur actif l'exige à la création (catalogue → checkoutMethods). */
+function MethodPicker({ methods, active, onPick, label }: { methods: string[] | null | undefined; active: string | null; onPick: (m: string) => void; label: string }) {
+  if (!methods?.length) return null;
+  return (
+    <div style={{ margin: "10px 0" }}>
+      <span className="muted">{label}</span>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+        {methods.map((m) => (
+          <button
+            key={m} type="button" onClick={() => onPick(m)}
+            className={active === m ? "" : "secondary"}
+            style={{ padding: "8px 14px", borderRadius: 999, fontSize: 14 }}
+          >
+            {METHOD_LABELS[m] ?? m.toUpperCase()}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CurrencyPicker({ offered, active, onPick, label }: { offered: string[]; active: string; onPick: (c: string) => void; label: string }) {
   if (offered.length <= 1) return null;
   return (
@@ -53,6 +78,10 @@ function MemberPurchase({ courseId }: { courseId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [currency, pick] = useCurrency();
+  const [method, setMethod] = useState<string | null>(null);
+
+  // Le fournisseur actif exige un moyen de paiement : le premier est présélectionné.
+  useEffect(() => { if (cat?.checkoutMethods?.length && !method) setMethod(cat.checkoutMethods[0]!); }, [cat]);
 
   useEffect(() => {
     api.payCatalog(courseId).then(setCat).catch((e) => setError(e instanceof Error ? e.message : t("pay.loadError")));
@@ -72,7 +101,7 @@ function MemberPurchase({ courseId }: { courseId: string }) {
     setBusy(true); setError(null);
     try {
       const order = await api.payCreateOrder(cat!.product!.id, active);
-      const ck = await api.payCheckout(order.id);
+      const ck = await api.payCheckout(order.id, method ?? undefined);
       if (ck.paymentUrl) { location.href = ck.paymentUrl; return; } // page hébergée de l'agrégateur
       navigate(routes.order(order.id)); // manual : le suivi affiche les références de virement
     } catch (e) { setError(e instanceof Error ? e.message : t("pay.buyFail")); }
@@ -87,6 +116,7 @@ function MemberPurchase({ courseId }: { courseId: string }) {
         <CurrencyPicker offered={offered} active={active} onPick={pick} label={t("pay.currency")} />
         <p style={{ fontSize: 26, fontWeight: 800, margin: "6px 0" }}>{price.display}</p>
         <p className="muted" style={{ marginTop: 0 }}>{t("pay.oneTime")}</p>
+        <MethodPicker methods={cat.checkoutMethods} active={method} onPick={setMethod} label={t("pay.method")} />
         {error && <p className="banner offline">⚠️ {error}</p>}
         <button className="block" disabled={busy} onClick={() => void buy()}>{busy ? t("pay.buying") : t("pay.buy")}</button>
         <button className="block secondary" style={{ marginTop: 8 }} onClick={() => navigate(routes.enrollments())}>{t("pay.back")}</button>
@@ -105,6 +135,9 @@ function GuestPurchase({ courseId }: { courseId: string }) {
   const [email, setEmail] = useState("");
   const [entitled, setEntitled] = useState(false); // déjà titulaire → lien envoyé
   const [currency, pick] = useCurrency();
+  const [method, setMethod] = useState<string | null>(null);
+
+  useEffect(() => { if (info?.checkoutMethods?.length && !method) setMethod(info.checkoutMethods[0]!); }, [info]);
 
   useEffect(() => {
     api.guestCourse(courseId).then(setInfo).catch((e) => setError(e instanceof Error ? e.message : t("pay.loadError")));
@@ -138,7 +171,7 @@ function GuestPurchase({ courseId }: { courseId: string }) {
     try {
       // info.courseId : l'id technique résolu par le serveur — l'URL peut
       // porter le slug lisible (liens du site vitrine, ex. #/buy/gestion-du-temps-n1).
-      const out = await api.guestCheckout({ courseId: info!.courseId, currency: active, email: email.trim() });
+      const out = await api.guestCheckout({ courseId: info!.courseId, currency: active, email: email.trim(), method: method ?? undefined });
       if (out.alreadyEntitled) { setEntitled(true); return; }
       // Jeton de suivi conservé sur l'appareil : la page de retour du paiement
       // (#/order/:id) peut alors suivre la commande sans session.
@@ -170,6 +203,7 @@ function GuestPurchase({ courseId }: { courseId: string }) {
         <CurrencyPicker offered={offered} active={active} onPick={pick} label={t("pay.currency")} />
         <p style={{ fontSize: 26, fontWeight: 800, margin: "6px 0" }}>{price.display}</p>
         <p className="muted" style={{ marginTop: 0 }}>{t("pay.oneTime")}</p>
+        <MethodPicker methods={info.checkoutMethods} active={method} onPick={setMethod} label={t("pay.method")} />
         <label style={{ display: "block", margin: "10px 0" }}>
           <span className="muted">{t("pay.guestEmail")}</span>
           <input

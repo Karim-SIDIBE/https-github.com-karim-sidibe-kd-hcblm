@@ -75,7 +75,8 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   app.post("/payments/orders/:id/checkout", { preHandler: authenticate }, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    try { return { data: await startCheckout(req.principal!, id) }; } catch (err) { return handle(reply, err); }
+    const { method } = z.object({ method: z.string().max(20).optional() }).parse(req.body ?? {});
+    try { return { data: await startCheckout(req.principal!, id, { method }) }; } catch (err) { return handle(reply, err); }
   });
 
   // Constat staff d'un règlement `manual` (virement reçu) — référence obligatoire.
@@ -150,7 +151,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   app.post("/payments/guest/checkout", guestLimit, async (req, reply) => {
-    const body = z.object({ courseId: z.string(), currency: z.string(), email: z.string().email().max(254) }).parse(req.body);
+    const body = z.object({ courseId: z.string(), currency: z.string(), email: z.string().email().max(254), method: z.string().max(20).optional() }).parse(req.body);
     try { return reply.status(201).send({ data: await guestCheckout(body, req.ip) }); } catch (err) { return handle(reply, err); }
   });
 
@@ -162,8 +163,8 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   app.post("/payments/guest/orders/:id/checkout", guestLimit, async (req, reply) => {
     const { id } = z.object({ id: z.string() }).parse(req.params);
-    const { t } = z.object({ t: z.string() }).parse(req.body ?? {});
-    try { return { data: await guestResumeCheckout(id, t) }; } catch (err) { return handle(reply, err); }
+    const { t, method } = z.object({ t: z.string(), method: z.string().max(20).optional() }).parse(req.body ?? {});
+    try { return { data: await guestResumeCheckout(id, t, method) }; } catch (err) { return handle(reply, err); }
   });
 
   app.get("/payments/guest/orders/:id/receipt.pdf", async (req, reply) => {
@@ -177,7 +178,7 @@ export async function paymentRoutes(app: FastifyInstance) {
   });
 
   // --- webhooks publics (pas d'auth : la sécurité EST la signature + le check) ----
-  for (const key of ["cinetpay", "flutterwave", "paydunya"] as const) {
+  for (const key of ["cinetpay", "flutterwave", "paydunya", "jeko"] as const) {
     app.post(`/payments/webhooks/${key}`, async (req, reply) => {
       const out = await handleProviderWebhook(key, req.headers, rawBodyOf(req), req.ip);
       return reply.status(out.httpStatus).send(out.body);
