@@ -96,6 +96,7 @@ export const api = {
   // Produits SEATS actifs (avec leurs prix) — pour le formulaire d'achat.
   payProducts: () => req<PayProduct[]>("GET", "/payments/products"),
   orgOrders: (orgId: string) => req<OrgOrder[]>("GET", `/payments/organizations/${orgId}/orders`),
+  orderPaymentLink: (orderId: string) => req<{ paymentId: string; link: string; reused: boolean; display: string }>("POST", `/payments/orders/${orderId}/payment-link`),
   createSeatOrder: (orgId: string, productId: string, currency: string, quantity: number) =>
     req<OrgOrder>("POST", "/payments/orders", { productId, currency, buyerOrgId: orgId, quantity }),
   orderCheckout: (orderId: string) => req<CheckoutInfo>("POST", `/payments/orders/${orderId}/checkout`),

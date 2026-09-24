@@ -19,6 +19,7 @@ import { isStaff } from "../../domain/auth/permissions.js";
 import { formatAmount, isCurrency, toAmountMajor, toAmountMinor, type Currency } from "../../domain/payments/money.js";
 import { ProviderError, type ProviderKey } from "../../lib/payments/provider.js";
 import { PROVIDERS, PROVIDER_ENUM, getActiveProvider } from "../../lib/payments/registry.js";
+import { JEKO_LINK_PREFIX, createJekoPaymentLink, fetchJekoPaymentLink, linkIdOf, linkRefOf } from "../../lib/payments/jeko.js";
 import { receiptPdf } from "../../lib/payments/receipt.js";
 import { signOrderToken, verifyOrderToken } from "../../lib/auth/jwt.js";
 import { sendEmail } from "../../lib/notify/send.js";
@@ -366,6 +367,44 @@ async function notifyOrderPaid(orderId: string) {
   } catch (e) {
     console.warn(`[payments] e-mail post-paiement ${orderId} — échec : ${e instanceof Error ? e.message : String(e)}`);
   }
+}
+
+/** Lien de paiement Jèko sur une commande (lot 2 — factures B2B partagées par
+ *  WhatsApp/SMS/e-mail) : lien À USAGE UNIQUE au montant figé de la commande,
+ *  réutilisé tant qu'il est encore ouvert. Réservé au staff et aux
+ *  administrateurs de l'organisation acheteuse — un particulier passe par le
+ *  checkout (plafond B2C). Le règlement arrive par le webhook Jèko
+ *  (transactionDetails.paymentLinkId), contre-vérifié comme tout paiement. */
+export async function createOrderPaymentLink(principal: Principal, orderId: string) {
+  const order = await prisma.order.findUnique({ where: { id: orderId }, include: { product: true } });
+  if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
+  if (!isStaff(principal.role) && !(order.buyerOrgId && (await orgAdminOf(principal, order.buyerOrgId)))) {
+    throw new PaymentError(403, "forbidden", "Le lien de paiement est réservé au staff et aux administrateurs de l'organisation acheteuse");
+  }
+  if (order.status !== "PENDING") throw new PaymentError(409, "order_not_pending", `Commande déjà ${order.status}`);
+  if (order.amountMinor > 2_000_000 && order.currency !== "EUR") {
+    throw new PaymentError(409, "amount_over_operator_cap", "Les réseaux Mobile Money plafonnent une transaction à 2 000 000 F CFA — réglez ce montant par virement.");
+  }
+
+  // Réutilisation : le lien encore OUVERT de cette commande est renvoyé tel
+  // quel (un lien fermé — payé, expiré ou désactivé — en déclenche un neuf).
+  const existing = await prisma.payment.findFirst({
+    where: { orderId: order.id, provider: "JEKO", status: "INITIATED", providerRef: { startsWith: JEKO_LINK_PREFIX } },
+  });
+  if (existing?.providerRef) {
+    const live = await fetchJekoPaymentLink(linkIdOf(existing.providerRef)!);
+    if (live?.canReceivePayments) {
+      return { paymentId: existing.id, link: live.url, reused: true, display: formatAmount(order.amountMinor, order.currency as Currency) };
+    }
+  }
+
+  const title = `Facture ${order.id} — ${order.product.title}`;
+  const created = await createJekoPaymentLink({ title, amountMinor: order.amountMinor, currency: order.currency });
+  const payment = existing
+    ? await prisma.payment.update({ where: { id: existing.id }, data: { providerRef: linkRefOf(created.linkId), method: "payment_link", meta: { link: created.url, linkId: created.linkId } } })
+    : await prisma.payment.create({ data: { orderId: order.id, provider: "JEKO", amountMinor: order.amountMinor, currency: order.currency, providerRef: linkRefOf(created.linkId), method: "payment_link", meta: { link: created.url, linkId: created.linkId } } });
+  await audit({ actorId: principal.id, action: "payment.link.create", targetType: "Payment", targetId: payment.id, meta: { orderId: order.id, linkId: created.linkId, amountMinor: order.amountMinor, currency: order.currency } });
+  return { paymentId: payment.id, link: created.url, reused: false, display: formatAmount(order.amountMinor, order.currency as Currency) };
 }
 
 /** Constat staff d'un règlement `manual` (virement reçu, vente hors-ligne) —

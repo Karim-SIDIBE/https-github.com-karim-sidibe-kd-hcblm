@@ -201,7 +201,21 @@ function BuySeatsCard({ orgId, onOrdered }: { orgId: string; onOrdered: () => vo
 /* ------------------------------------------------------ Org orders (PAY-3) - */
 function OrgOrdersCard({ orders, onRefresh }: { orders: OrgOrder[]; onRefresh: () => void }) {
   const [error, setError] = useState<string | null>(null);
+  const [link, setLink] = useState<{ orderId: string; url: string } | null>(null);
+  const [busyLink, setBusyLink] = useState(false);
   if (orders.length === 0) return null;
+
+  // Lien de paiement Jèko à usage unique : régler la facture en Mobile Money
+  // plutôt que par virement — à partager aussi en interne (WhatsApp, e-mail).
+  async function paymentLink(orderId: string) {
+    setBusyLink(true); setError(null);
+    try {
+      const r = await api.orderPaymentLink(orderId);
+      await navigator.clipboard?.writeText(r.link).catch(() => {});
+      setLink({ orderId, url: r.link });
+    } catch (e) { setError(e instanceof Error ? e.message : "Lien de paiement indisponible pour le moment"); }
+    finally { setBusyLink(false); }
+  }
 
   const PILL: Record<string, string> = { PAID: "pill--green", PENDING: "pill--warn", FAILED: "pill--red", CANCELLED: "pill--red", REFUNDED: "pill--soft" };
   const LABEL: Record<string, string> = { PAID: "Payée", PENDING: "En attente", FAILED: "Échouée", CANCELLED: "Annulée", REFUNDED: "Remboursée" };
@@ -231,11 +245,23 @@ function OrgOrdersCard({ orders, onRefresh }: { orders: OrgOrder[]; onRefresh: (
             </div>
             <div className="row" style={{ gap: 6, flexShrink: 0 }}>
               <span className={`pill ${PILL[o.status] ?? "pill--soft"}`}>{LABEL[o.status] ?? o.status}</span>
+              {o.status === "PENDING" && <button className="btn btn--sm" disabled={busyLink} onClick={() => void paymentLink(o.id)}>Payer par Mobile Money</button>}
               {o.status === "PAID" && <button className="btn btn--sm" onClick={() => void receipt(o.id)}>Reçu</button>}
             </div>
           </div>
         ))}
-        <p className="muted" style={{ fontSize: 12, margin: 0 }}>Une commande en attente est réglée par virement (références fournies à la commande) ou via la page de paiement ; les licences sont créditées à la confirmation.</p>
+        {link && (
+          <div style={{ background: "var(--bg-soft)", borderRadius: 8, padding: 10 }}>
+            <p className="muted" style={{ fontSize: 12.5, margin: 0 }}>
+              🔗 Lien de paiement à usage unique (copié dans le presse-papiers) — ouvrez-le pour payer par Mobile Money, ou partagez-le à la personne qui règle :
+            </p>
+            <p style={{ fontSize: 12.5, margin: "6px 0 0", wordBreak: "break-all" }}>
+              <a href={link.url} target="_blank" rel="noopener noreferrer">{link.url}</a>
+            </p>
+            <p className="muted" style={{ fontSize: 12, margin: "6px 0 0" }}>Les licences sont créditées automatiquement dès la confirmation du paiement par Jèko.</p>
+          </div>
+        )}
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>Une commande en attente est réglée par virement (références fournies à la commande), ou en Mobile Money via un lien de paiement ; les licences sont créditées à la confirmation.</p>
       </div>
     </div>
   );

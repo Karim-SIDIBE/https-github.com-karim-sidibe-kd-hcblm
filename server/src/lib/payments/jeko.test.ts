@@ -6,8 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  JEKO_METHODS, expectedJekoSignature, fromJekoCents, jekoProvider, jekoReference,
-  jekoSignaturesMatch, mapJekoStatus, paymentIdOfReference, toJekoCents,
+  JEKO_METHODS, createJekoPaymentLink, expectedJekoSignature, fromJekoCents, jekoProvider,
+  jekoReference, jekoSignaturesMatch, linkIdOf, linkRefOf, linkStatusOf, mapJekoStatus,
+  paymentIdOfReference, toJekoCents,
 } from "./jeko.js";
 
 test("toJekoCents : 1 XOF (unité mineure) = 100 centimes — multiple de 100 garanti", () => {
@@ -103,4 +104,34 @@ test("createCheckout : refuse proprement sans configuration (aucun réseau)", as
 
 test("checkoutMethods : les 5 moyens documentés, exposés à l'écran d'achat", () => {
   assert.deepEqual([...(jekoProvider.checkoutMethods ?? [])], [...JEKO_METHODS]);
+});
+
+test("liens : providerRef préfixé pl:, aller-retour id ↔ ref", () => {
+  assert.equal(linkRefOf("abc-123"), "pl:abc-123");
+  assert.equal(linkIdOf("pl:abc-123"), "abc-123");
+  assert.equal(linkIdOf("d22c81f3"), null); // une demande de paiement n'est pas un lien
+});
+
+test("linkStatusOf : usage unique — ouvert = PENDING, fermé = SUCCEEDED ; réutilisable/inconnu = UNKNOWN", () => {
+  assert.equal(linkStatusOf({ allowMultiplePayments: false, canReceivePayments: true }), "PENDING");
+  assert.equal(linkStatusOf({ allowMultiplePayments: false, canReceivePayments: false }), "SUCCEEDED");
+  assert.equal(linkStatusOf({ allowMultiplePayments: true, canReceivePayments: true }), "UNKNOWN");
+  assert.equal(linkStatusOf(null), "UNKNOWN");
+  assert.equal(linkStatusOf({}), "UNKNOWN");
+});
+
+test("verifyWebhook : un paiement de LIEN se corrèle par paymentLinkId (préfixé)", () => {
+  const raw = JSON.stringify({
+    id: "txn_3", status: "success", paymentMethod: "orange",
+    transactionDetails: { id: "pr-interne", reference: undefined, paymentLinkId: "lnk-42" },
+  });
+  const v = jekoProvider.verifyWebhook({}, raw) as import("./provider.js").WebhookVerification;
+  assert.equal(v.providerRef, "pl:lnk-42"); // le lien prime sur l'id de demande
+});
+
+test("createJekoPaymentLink : refuse proprement sans configuration (aucun réseau)", async () => {
+  await assert.rejects(
+    () => createJekoPaymentLink({ title: "Facture TEST-000001", amountMinor: 50_000, currency: "XOF" }),
+    (e: { code?: string; statusCode?: number }) => e.code === "provider_unconfigured" && e.statusCode === 409,
+  );
 });

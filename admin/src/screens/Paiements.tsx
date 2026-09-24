@@ -62,6 +62,21 @@ export function Paiements() {
     finally { setBusy(false); }
   }
 
+  // Lien de paiement Jèko à usage unique (factures B2B) — affiché pour copie.
+  async function paymentLink(o: { id: string; display?: string; product?: { title: string } }) {
+    setBusy(true); setNote(null);
+    try {
+      const r = await api.payOrderLink(o.id);
+      await navigator.clipboard?.writeText(r.link).catch(() => {});
+      await modal.confirm({
+        title: r.reused ? "Lien de paiement (déjà ouvert)" : "Lien de paiement créé",
+        body: `${o.product?.title ?? o.id} — ${r.display}.\n\n${r.link}\n\nLien à usage unique, copié dans le presse-papiers : partagez-le par WhatsApp, SMS ou e-mail. Le règlement sera confirmé automatiquement par Jèko (webhook vérifié).`,
+        okLabel: "Fermer",
+      });
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Lien impossible"}`); }
+    finally { setBusy(false); }
+  }
+
   async function recheck(orderId: string) {
     setBusy(true); setNote(null);
     try {
@@ -174,6 +189,7 @@ export function Paiements() {
               </span>
               {o.status === "PENDING" && (
                 <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+                  <button className="btn btn--sm" disabled={busy} onClick={() => void paymentLink(o)}>🔗 Lien</button>
                   <button className="btn btn--sm" disabled={busy} onClick={() => void recheck(o.id)}>↻ Re-vérifier</button>
                   <button className="btn btn--sm btn--primary" disabled={busy} onClick={() => void markPaid(o)}>✓ Constater</button>
                 </span>

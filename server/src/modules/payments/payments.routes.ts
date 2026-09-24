@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, createOrderPaymentLink, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -77,6 +77,13 @@ export async function paymentRoutes(app: FastifyInstance) {
     const { id } = z.object({ id: z.string() }).parse(req.params);
     const { method } = z.object({ method: z.string().max(20).optional() }).parse(req.body ?? {});
     try { return { data: await startCheckout(req.principal!, id, { method }) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Lien de paiement Jèko à usage unique sur une commande (staff + admins de
+  // l'organisation acheteuse) — à partager par WhatsApp/SMS/e-mail.
+  app.post("/payments/orders/:id/payment-link", { preHandler: authenticate }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { return { data: await createOrderPaymentLink(req.principal!, id) }; } catch (err) { return handle(reply, err); }
   });
 
   // Constat staff d'un règlement `manual` (virement reçu) — référence obligatoire.
