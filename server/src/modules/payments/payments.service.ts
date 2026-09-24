@@ -190,14 +190,31 @@ async function assertOnlineCheckoutOpen() {
   }
 }
 
-export async function startCheckout(principal: Principal, orderId: string) {
+export async function startCheckout(principal: Principal, orderId: string, opts?: { method?: string }) {
   const order = await prisma.order.findUnique({ where: { id: orderId }, include: { product: true } });
   if (!order) throw new PaymentError(404, "order_not_found", "Commande introuvable");
   await assertOrderAccess(principal, order);
   if (order.status !== "PENDING") throw new PaymentError(409, "order_not_pending", `Commande déjà ${order.status}`);
   if (!isStaff(principal.role) && !order.buyerOrgId) await assertOnlineCheckoutOpen();
 
-  const provider = await getActiveProvider();
+  // Politique B2C : plafond du paiement en ligne d'un particulier (réglage
+  // `b2c_online_cap`, en F CFA, modifiable par le Super Admin sans
+  // redéploiement — 0 = désactivé). Les devises à parité mineure/majeure
+  // (XOF/XAF : 1 unité mineure = 1 franc) sont comparées directement ; le
+  // staff (tests, régularisations) n'est pas bridé.
+  if (!isStaff(principal.role) && !order.buyerOrgId && (order.currency === "XOF" || order.currency === "XAF")) {
+    const cap = await getSetting<number>("b2c_online_cap");
+    if (cap > 0 && order.amountMinor > cap) {
+      throw new PaymentError(409, "amount_over_cap",
+        `Le paiement en ligne est limité à ${formatAmount(cap, order.currency as Currency)} par commande. Pour ce montant, réglez par virement ou contactez nos services.`);
+    }
+  }
+
+  // Politique B2B : une commande d'ORGANISATION se règle par VIREMENT
+  // (fournisseur `manual` — références affichées, constat staff), quel que
+  // soit l'agrégateur actif. Les liens de paiement pour petites factures B2B
+  // arriveront dans un lot dédié.
+  const provider = order.buyerOrgId ? PROVIDERS.manual : await getActiveProvider();
   const providerId = PROVIDER_ENUM[provider.key];
   const payment = await prisma.payment.findFirst({ where: { orderId: order.id, provider: providerId, status: "INITIATED" } })
     ?? await prisma.payment.create({ data: { orderId: order.id, provider: providerId, amountMinor: order.amountMinor, currency: order.currency } });
@@ -212,6 +229,7 @@ export async function startCheckout(principal: Principal, orderId: string) {
     // Ce retour n'accorde JAMAIS l'accès — seul le webhook vérifié le fait.
     returnUrl: `${env.APP_BASE_URL ?? env.PUBLIC_BASE_URL}/#/order/${order.id}`,
     customer: buyer ? { email: buyer.email, name: buyer.name } : undefined,
+    method: opts?.method,
   });
   await prisma.payment.update({ where: { id: payment.id }, data: { providerRef: checkout.providerRef } });
   await audit({ actorId: principal.id, action: "payment.checkout.start", targetType: "Payment", targetId: payment.id, meta: { provider: provider.key, orderId: order.id } });
@@ -476,12 +494,20 @@ export async function hasCourseEntitlement(userId: string, courseId: string): Pr
   return Boolean(await prisma.entitlement.findFirst({ where: { holderOrgId: { in: orgIds }, scope: "COURSE_ACCESS", courseId, revokedAt: null } }));
 }
 
+/** Moyens de paiement que l'écran d'achat B2C doit faire choisir AVANT le
+ *  checkout — non vide seulement quand le fournisseur ACTIF les exige à la
+ *  création (Jèko). Null : la page hébergée du fournisseur porte le choix. */
+export async function activeCheckoutMethods(): Promise<string[] | null> {
+  const p = await getActiveProvider();
+  return p.checkoutMethods?.length ? [...p.checkoutMethods] : null;
+}
+
 /** Catalogue d'un cours pour l'écran d'achat : paywall + droit du demandeur. */
 export async function courseCatalog(idOrSlug: string, userId?: string) {
   const courseId = await resolveCourseId(idOrSlug);
   const paywall = await coursePaywall(courseId);
   const entitled = paywall.paid && userId ? await hasCourseEntitlement(userId, courseId) : !paywall.paid;
-  return { ...paywall, entitled };
+  return { ...paywall, entitled, checkoutMethods: paywall.paid ? await activeCheckoutMethods() : null };
 }
 
 // --- reçu PDF (commande payée) ---------------------------------------------------
@@ -598,7 +624,7 @@ export async function guestCourseInfo(idOrSlug: string) {
     prisma.course.findUnique({ where: { id: courseId }, select: { slug: true } }),
   ]);
   if (!version) throw new PaymentError(404, "course_not_found", "Parcours introuvable");
-  return { courseId, slug: course?.slug ?? null, title: version.title, level: version.level, ...paywall };
+  return { courseId, slug: course?.slug ?? null, title: version.title, level: version.level, ...paywall, checkoutMethods: paywall.paid ? await activeCheckoutMethods() : null };
 }
 
 /** Catalogue PUBLIC (site vitrine / achat sans compte, PAY-2ter) : les cours
@@ -635,7 +661,7 @@ const nameFromEmail = (email: string) => {
  *  suit le circuit normal, et un jeton scellé permet le suivi sans session.
  *  Le numéro mobile n'est jamais demandé ici : il est saisi sur la page de
  *  paiement de l'agrégateur (Mobile Money), par l'agrégateur. */
-export async function guestCheckout(input: { courseId: string; currency: string; email: string }, ip?: string) {
+export async function guestCheckout(input: { courseId: string; currency: string; email: string; method?: string }, ip?: string) {
   // :courseId accepte le slug lisible (liens vitrine) comme la fiche cours.
   const courseId = await resolveCourseId(input.courseId);
   const paywall = await coursePaywall(courseId);
@@ -662,7 +688,7 @@ export async function guestCheckout(input: { courseId: string; currency: string;
 
   const principal: Principal = { id: user.id, role: user.role };
   const { order } = await createOrder(principal, { productId: paywall.product.id, currency: input.currency });
-  const checkout = await startCheckout(principal, order.id);
+  const checkout = await startCheckout(principal, order.id, { method: input.method });
   await audit({ actorId: user.id, action: "payment.guest.checkout", targetType: "Order", targetId: order.id, ip, meta: { email, currency: input.currency } });
   return {
     alreadyEntitled: false as const,
@@ -685,8 +711,8 @@ async function guestPrincipal(orderId: string, token: string): Promise<Principal
 export async function guestGetOrder(orderId: string, token: string) {
   return getOrder(await guestPrincipal(orderId, token), orderId);
 }
-export async function guestResumeCheckout(orderId: string, token: string) {
-  return startCheckout(await guestPrincipal(orderId, token), orderId);
+export async function guestResumeCheckout(orderId: string, token: string, method?: string) {
+  return startCheckout(await guestPrincipal(orderId, token), orderId, { method });
 }
 export async function guestReceipt(orderId: string, token: string): Promise<Buffer> {
   return orderReceipt(await guestPrincipal(orderId, token), orderId);
@@ -790,5 +816,5 @@ export async function paymentsStats(days: number) {
 
 export async function providersOverview() {
   const active = (await getActiveProvider()).key;
-  return Object.values(PROVIDERS).map((p) => ({ key: p.key, available: p.available(), active: p.key === active }));
+  return Object.values(PROVIDERS).map((p) => ({ key: p.key, available: p.available(), active: p.key === active, checkoutMethods: p.checkoutMethods ?? null }));
 }

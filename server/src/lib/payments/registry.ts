@@ -11,6 +11,7 @@ import { cinetpayProvider } from "./cinetpay.js";
 import { flutterwaveProvider } from "./flutterwave.js";
 import { paydunyaProvider } from "./paydunya.js";
 import { intouchProvider } from "./intouch.js";
+import { jekoProvider } from "./jeko.js";
 import { manualProvider } from "./manual.js";
 import type { PaymentProvider, ProviderKey } from "./provider.js";
 
@@ -19,12 +20,13 @@ export const PROVIDERS: Record<ProviderKey, PaymentProvider> = {
   flutterwave: flutterwaveProvider,
   paydunya: paydunyaProvider,
   intouch: intouchProvider,
+  jeko: jekoProvider,
   manual: manualProvider,
 };
 
 /** Clé de registre ↔ enum Prisma porté par chaque Paiement. */
 export const PROVIDER_ENUM: Record<ProviderKey, PaymentProviderId> = {
-  cinetpay: "CINETPAY", flutterwave: "FLUTTERWAVE", paydunya: "PAYDUNYA", intouch: "INTOUCH", manual: "MANUAL",
+  cinetpay: "CINETPAY", flutterwave: "FLUTTERWAVE", paydunya: "PAYDUNYA", intouch: "INTOUCH", jeko: "JEKO", manual: "MANUAL",
 };
 export function providerKeyOf(id: PaymentProviderId): ProviderKey {
   return id.toLowerCase() as ProviderKey;

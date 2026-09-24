@@ -1436,6 +1436,7 @@ enum PaymentProviderId {
   FLUTTERWAVE
   PAYDUNYA
   INTOUCH
+  JEKO
   MANUAL // constat staff : virements B2B, ventes hors-ligne, dév & tests
 }
 

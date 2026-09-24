@@ -13,7 +13,7 @@ import { modal } from "../lib/modal";
 const inp: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 8, fontSize: 13.5 };
 const statCell: React.CSSProperties = { flex: 1, minWidth: 110, background: "var(--bg-soft, #f5f7fb)", borderRadius: 10, padding: "10px 12px" };
 
-const PROVIDER_LABEL: Record<string, string> = { manual: "Virement (constat manuel)", cinetpay: "CinetPay", flutterwave: "Flutterwave", paydunya: "PayDunya", intouch: "InTouch (TouchPay)" };
+const PROVIDER_LABEL: Record<string, string> = { manual: "Virement (constat manuel)", cinetpay: "CinetPay", flutterwave: "Flutterwave", paydunya: "PayDunya", intouch: "InTouch (TouchPay)", jeko: "Jèko" };
 const STATUS_PILL: Record<string, string> = { PAID: "pill--green", PENDING: "pill--warn", FAILED: "pill--red", CANCELLED: "pill--red", REFUNDED: "pill--info" };
 
 export function Paiements() {
@@ -73,16 +73,29 @@ export function Paiements() {
     finally { setBusy(false); }
   }
 
-  // --- mentions légales du reçu ---
+  // --- mentions légales du reçu + plafond B2C ---
   const [legal, setLegal] = useState<string>("");
   const [legalLoaded, setLegalLoaded] = useState(false);
+  const [cap, setCap] = useState<string>("150000");
   useEffect(() => {
-    api.settings().then((s) => { setLegal(String(s.receipt_legal ?? "")); setLegalLoaded(true); }).catch(() => setLegalLoaded(true));
+    api.settings().then((s) => {
+      setLegal(String(s.receipt_legal ?? ""));
+      setCap(String(s.b2c_online_cap ?? 150000));
+      setLegalLoaded(true);
+    }).catch(() => setLegalLoaded(true));
     void loadProviders();
   }, []);
   async function saveLegal() {
     setBusy(true); setNote(null);
     try { await api.setSetting("receipt_legal", legal); setNote("✓ Mentions légales enregistrées — elles apparaissent en pied de tous les reçus PDF."); }
+    catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Enregistrement impossible"}`); }
+    finally { setBusy(false); }
+  }
+  async function saveCap() {
+    const n = Number(cap);
+    if (!Number.isInteger(n) || n < 0 || n > 2_000_000) { setNote("✗ Plafond invalide : entier entre 0 et 2 000 000 F CFA (0 = désactivé)."); return; }
+    setBusy(true); setNote(null);
+    try { await api.setSetting("b2c_online_cap", n); setNote(n === 0 ? "✓ Plafond B2C désactivé." : `✓ Plafond B2C : ${n.toLocaleString("fr-FR")} F CFA par commande en ligne.`); }
     catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Enregistrement impossible"}`); }
     finally { setBusy(false); }
   }
@@ -206,6 +219,20 @@ export function Paiements() {
           )}
         </div>
       </div>
+
+      {isSuper && (
+        <div className="card">
+          <div className="card-b">
+            <h3 style={{ margin: 0 }}>🛡️ Plafond du paiement en ligne B2C (Super Admin)</h3>
+            <p className="muted" style={{ fontSize: 12.5 }}>Montant maximal (F CFA) qu'un PARTICULIER peut régler en ligne par commande — au-delà, l'écran d'achat oriente vers le virement ou le contact commercial. Ne concerne ni les commandes d'organisation (virement B2B) ni le constat manuel. 0 = pas de plafond. Appliqué immédiatement, sans redéploiement.</p>
+            <div className="row" style={{ gap: 8, alignItems: "center" }}>
+              <input style={{ ...inp, width: 180 }} type="number" min={0} max={2000000} step={1000} value={cap} onChange={(e) => setCap(e.target.value)} />
+              <span className="muted">F CFA</span>
+              <button className="btn btn--sm btn--primary" disabled={busy || !legalLoaded} onClick={() => void saveCap()}>Enregistrer</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isSuper && (
         <div className="card">

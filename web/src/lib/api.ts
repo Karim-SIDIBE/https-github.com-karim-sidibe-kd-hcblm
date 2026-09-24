@@ -16,10 +16,10 @@ export type EnrollmentSummary = {
 };
 
 export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; paid?: boolean; entitled?: boolean; prices?: { currency: string; display: string }[] };
-export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[]; checkoutMethods?: string[] | null };
 export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
 export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
-export type GuestCourseInfo = { courseId: string; slug: string | null; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[] };
+export type GuestCourseInfo = { courseId: string; slug: string | null; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[]; checkoutMethods?: string[] | null };
 /** Entrée du catalogue public (PAY-2ter) — consultable sans compte. */
 export type GuestCatalogItem = { courseId: string; slug: string; title: string; level: string; paid: boolean; prices: { currency: string; display: string }[] };
 export type GuestCheckout =
@@ -187,8 +187,8 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       if (!res.ok) throw Object.assign(new Error(j.message || "Commande introuvable"), { code: j.error as string | undefined });
       return j.data as PayOrder;
     },
-    async payCheckout(orderId: string): Promise<CheckoutInfo> {
-      const res = await raw("POST", `/payments/orders/${encodeURIComponent(orderId)}/checkout`);
+    async payCheckout(orderId: string, method?: string): Promise<CheckoutInfo> {
+      const res = await raw("POST", `/payments/orders/${encodeURIComponent(orderId)}/checkout`, { body: method ? { method } : {} });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(j.message || "Paiement impossible"), { code: j.error as string | undefined });
       return j.data as CheckoutInfo;
@@ -213,7 +213,7 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       if (!res.ok) throw Object.assign(new Error(j.message || "Parcours introuvable"), { code: j.error as string | undefined });
       return j.data as GuestCourseInfo;
     },
-    async guestCheckout(body: { courseId: string; currency: string; email: string }): Promise<GuestCheckout> {
+    async guestCheckout(body: { courseId: string; currency: string; email: string; method?: string }): Promise<GuestCheckout> {
       const res = await raw("POST", "/payments/guest/checkout", { auth: false, body });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(j.message || "Achat impossible"), { code: j.error as string | undefined });
@@ -225,8 +225,8 @@ export function createApi(baseUrl: string, tokens: TokenBox) {
       if (!res.ok) throw Object.assign(new Error(j.message || "Commande introuvable"), { code: j.error as string | undefined });
       return j.data as PayOrder;
     },
-    async guestOrderCheckout(orderId: string, t: string): Promise<CheckoutInfo> {
-      const res = await raw("POST", `/payments/guest/orders/${encodeURIComponent(orderId)}/checkout`, { auth: false, body: { t } });
+    async guestOrderCheckout(orderId: string, t: string, method?: string): Promise<CheckoutInfo> {
+      const res = await raw("POST", `/payments/guest/orders/${encodeURIComponent(orderId)}/checkout`, { auth: false, body: method ? { t, method } : { t } });
       const j = await res.json().catch(() => ({}));
       if (!res.ok) throw Object.assign(new Error(j.message || "Paiement impossible"), { code: j.error as string | undefined });
       return j.data as CheckoutInfo;

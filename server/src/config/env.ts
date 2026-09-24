@@ -120,6 +120,17 @@ const EnvSchema = z.object({
   INTOUCH_STATUS_URL: z.string().optional(),
   /// Basic auth « login:motdepasse » de l'API de statut, si le portail en fournit une.
   INTOUCH_STATUS_AUTH: z.string().optional(),
+  /// Jèko (Partner API, Côte d'Ivoire — developer.jeko.africa) : clés du
+  /// Dashboard Business (Paramètres > API & Webhooks) + le magasin (storeId)
+  /// débité/crédité. ATTENTION : Jèko n'a PAS de sandbox — un magasin de TEST
+  /// dédié tient ce rôle (mêmes clés, storeId différent), et le minimum d'une
+  /// demande de paiement est 1 F CFA.
+  JEKO_API_KEY: z.string().optional(),
+  JEKO_API_KEY_ID: z.string().optional(),
+  JEKO_STORE_ID: z.string().optional(),
+  /// Secret webhook (même écran du Dashboard) — HMAC-SHA256 de l'en-tête Jeko-Signature.
+  JEKO_WEBHOOK_SECRET: z.string().optional(),
+  JEKO_BASE_URL: z.string().url().default("https://api.jeko.africa"),
   CREDENTIAL_ISSUER_NAME: z.string().default("KOMPETENCES SOFT SKILLS"),
   CREDENTIAL_ISSUER_URL: z.string().url().default("https://declick.kompetences.net"),
 

@@ -25,6 +25,8 @@ export function OrderStatus({ orderId }: { orderId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [enrolling, setEnrolling] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const checkoutTried = useRef(false); // une seule reprise de checkout — un fournisseur
+  // qui exige le choix du moyen (Jèko) la refuse en 422, on n'insiste pas à chaque poll.
 
   async function refresh() {
     try {
@@ -33,7 +35,8 @@ export function OrderStatus({ orderId }: { orderId: string }) {
       if (o.status !== "PENDING" && pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
       // En attente : (re)demander le checkout — idempotent — pour afficher les
       // références de virement ou le lien de paiement de l'agrégateur.
-      if (o.status === "PENDING" && !checkout) {
+      if (o.status === "PENDING" && !checkoutTried.current) {
+        checkoutTried.current = true;
         setCheckout(await (guest ? api.guestOrderCheckout(orderId, gtoken!) : api.payCheckout(orderId)).catch(() => null));
       }
     } catch (e) { setError(e instanceof Error ? e.message : t("pay.loadError")); }
@@ -101,6 +104,11 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             {checkout?.instructions && <p className="banner" style={{ whiteSpace: "pre-wrap" }}>🏦 {checkout.instructions}</p>}
             {checkout?.paymentUrl && (
               <button className="block" onClick={() => { location.href = checkout.paymentUrl!; }}>{t("pay.payNow")}</button>
+            )}
+            {/* Fournisseur qui exige le choix du moyen (Jèko) : la reprise passe
+                par l'écran d'achat, qui porte le sélecteur d'opérateur. */}
+            {!checkout && order.product?.courseId && (
+              <button className="block" onClick={() => navigate(routes.purchase(order.product!.courseId!))}>{t("pay.retry")}</button>
             )}
           </div>
         )}

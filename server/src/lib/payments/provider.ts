@@ -9,7 +9,7 @@
  */
 import type { Currency } from "../../domain/payments/money.js";
 
-export type ProviderKey = "cinetpay" | "flutterwave" | "paydunya" | "intouch" | "manual";
+export type ProviderKey = "cinetpay" | "flutterwave" | "paydunya" | "intouch" | "jeko" | "manual";
 
 export type CheckoutInput = {
   /** Notre identifiant de Paiement — devient la référence de transaction chez
@@ -20,6 +20,9 @@ export type CheckoutInput = {
   description: string;
   returnUrl: string;
   customer?: { email?: string; name?: string };
+  /** Moyen de paiement choisi par l'acheteur, quand le fournisseur l'exige à
+   *  la création (Jèko : wave/orange/mtn/moov/djamo). Ignoré sinon. */
+  method?: string;
 };
 
 export type CheckoutResult = {
@@ -50,6 +53,10 @@ export type WebhookVerification = {
 
 export interface PaymentProvider {
   readonly key: ProviderKey;
+  /** Moyens de paiement que l'ACHETEUR doit choisir AVANT le checkout (le
+   *  fournisseur les exige à la création). Absent/vide : la page hébergée du
+   *  fournisseur porte le choix — l'écran d'achat n'affiche rien. */
+  readonly checkoutMethods?: readonly string[];
   /** Configuration présente ? Un fournisseur non configuré reste listé dans le
    *  registre mais refuse proprement le checkout. */
   available(): boolean;
