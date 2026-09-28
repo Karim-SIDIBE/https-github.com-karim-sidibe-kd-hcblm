@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, createOrderPaymentLink, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, revokeEntitlement, startCheckout, upsertPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, createOrderPaymentLink, deleteProduct, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, renameProduct, revokeEntitlement, startCheckout, upsertPrice, withdrawPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -23,6 +23,14 @@ function rawBodyOf(req: FastifyRequest): string {
   return (req as unknown as { rawBody?: string }).rawBody ?? "";
 }
 
+/** Les MUTATIONS tarifaires (produits, prix) engagent l'argent de la
+ *  plateforme : réservées au Super Admin, comme les réglages. */
+function assertSuperAdmin(req: FastifyRequest) {
+  if (req.principal!.role !== "SUPER_ADMIN") {
+    throw new PaymentError(403, "super_admin_only", "La modification des tarifs est réservée au Super Admin");
+  }
+}
+
 export async function paymentRoutes(app: FastifyInstance) {
   // --- produits & prix (outillage staff minimal du socle ; admin complet : PAY-2)
   app.get("/payments/products", { preHandler: authenticate }, async () => ({ data: await listProducts() }));
@@ -34,13 +42,32 @@ export async function paymentRoutes(app: FastifyInstance) {
       courseId: z.string().optional(),
       seatCount: z.number().int().positive().optional(),
     }).parse(req.body);
-    try { return reply.status(201).send({ data: await createProduct(body) }); } catch (err) { return handle(reply, err); }
+    try { assertSuperAdmin(req); return reply.status(201).send({ data: await createProduct(body) }); } catch (err) { return handle(reply, err); }
   });
 
   app.put("/payments/products/:id/prices/:currency", { preHandler: guard("order:manage") }, async (req, reply) => {
     const { id, currency } = z.object({ id: z.string(), currency: z.string() }).parse(req.params);
     const { amountMajor } = z.object({ amountMajor: z.union([z.string(), z.number()]) }).parse(req.body);
-    try { return { data: await upsertPrice(id, currency, amountMajor) }; } catch (err) { return handle(reply, err); }
+    try { assertSuperAdmin(req); return { data: await upsertPrice(id, currency, amountMajor, req.principal!) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Retire un prix de la vente (devise « non vendu » ; signalé si le cours
+  // redevient gratuit faute de dernier prix actif).
+  app.delete("/payments/products/:id/prices/:currency", { preHandler: guard("order:manage") }, async (req, reply) => {
+    const { id, currency } = z.object({ id: z.string(), currency: z.string() }).parse(req.params);
+    try { assertSuperAdmin(req); return { data: await withdrawPrice(req.principal!, id, currency) }; } catch (err) { return handle(reply, err); }
+  });
+
+  app.patch("/payments/products/:id", { preHandler: guard("order:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    const { title } = z.object({ title: z.string().min(1).max(200) }).parse(req.body);
+    try { assertSuperAdmin(req); return { data: await renameProduct(req.principal!, id, title) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Suppression : uniquement un produit sans AUCUNE commande (nettoyage de test).
+  app.delete("/payments/products/:id", { preHandler: guard("order:manage") }, async (req, reply) => {
+    const { id } = z.object({ id: z.string() }).parse(req.params);
+    try { assertSuperAdmin(req); return { data: await deleteProduct(req.principal!, id) }; } catch (err) { return handle(reply, err); }
   });
 
   // --- commandes -----------------------------------------------------------------

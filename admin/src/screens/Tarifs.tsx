@@ -5,7 +5,7 @@
  * automatique), constat des virements en attente (fournisseur manual), et
  * bloc « Offrir l'accès » réservé au Super Admin (droits GIFT, révocables).
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { api, auth, ApiError, type CourseSummary, type Org, type PayGift, type PayOrderRow, type PayProduct } from "../lib/api";
 import { modal } from "../lib/modal";
 
@@ -51,17 +51,67 @@ export function Tarifs() {
     finally { setBusy(false); }
   }
 
-  // --- prix par devise (saisie en unités majeures) ---
-  const priceRefs = useRef<Record<string, string>>({});
+  // --- prix par devise (saisie en unités majeures, pré-remplie du prix actuel) ---
+  /** Valeur éditable d'un prix : « 50000 » (XOF/XAF), « 77,00 » (EUR). */
+  const majorStr = (amountMinor: number, currency: string) => currency === "EUR"
+    ? `${Math.trunc(amountMinor / 100)},${String(amountMinor % 100).padStart(2, "0")}`
+    : String(amountMinor);
+  const [edits, setEdits] = useState<Record<string, string>>({});
   async function savePrice(p: PayProduct, currency: string) {
-    const raw = priceRefs.current[`${p.id}:${currency}`];
+    const raw = edits[`${p.id}:${currency}`];
     if (!raw?.trim()) return;
     setBusy(true); setNote(null);
     try {
-      await api.paySetPrice(p.id, currency, raw.trim());
-      setNote(`✓ Prix ${currency} de « ${p.title} » enregistré.`);
+      const saved = await api.paySetPrice(p.id, currency, raw.trim());
+      setNote(`✓ Prix ${currency} de « ${p.title} » : ${saved.display ?? raw.trim()} (journalisé dans l'audit).`);
+      setEdits((e) => { const n = { ...e }; delete n[`${p.id}:${currency}`]; return n; });
       await load();
     } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Prix invalide"}`); }
+    finally { setBusy(false); }
+  }
+
+  /** Retire une devise de la vente (le montant est conservé — re-saisir un
+   *  prix la remet en vente). Avertit si le COURS redeviendrait gratuit. */
+  async function withdrawPrice(p: PayProduct, currency: string) {
+    const lastOfCourse = p.type === "COURSE" && p.prices.filter((x) => x.active !== false).length === 1;
+    const ok = await modal.confirm({
+      title: `Ne plus vendre « ${p.title} » en ${currency} ?`,
+      body: lastOfCourse
+        ? "⚠️ C'est le DERNIER prix de ce cours : sans prix, le cours devient GRATUIT et librement accessible à tous les apprenants. Confirmez seulement si c'est voulu."
+        : `La devise ${currency} passera « non vendu » ; le montant est conservé et re-saisir un prix la remet en vente.`,
+      danger: lastOfCourse, okLabel: "Ne plus vendre",
+    });
+    if (!ok) return;
+    setBusy(true); setNote(null);
+    try {
+      const r = await api.payWithdrawPrice(p.id, currency);
+      setNote(r.courseNowFree
+        ? `⚠️ Prix ${currency} retiré — « ${p.title} » n'a plus aucun prix : le cours est maintenant GRATUIT (journalisé).`
+        : `✓ « ${p.title} » n'est plus vendu en ${currency} (journalisé).`);
+      await load();
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Retrait impossible"}`); }
+    finally { setBusy(false); }
+  }
+
+  async function renameProduct(p: PayProduct) {
+    const title = await modal.prompt({ title: "Renommer le produit", body: "Titre affiché aux acheteurs (catalogue, reçus, liens de paiement à venir) :", initial: p.title, okLabel: "Renommer" });
+    if (!title?.trim() || title.trim() === p.title) return;
+    setBusy(true); setNote(null);
+    try { await api.payRenameProduct(p.id, title.trim()); setNote(`✓ Produit renommé « ${title.trim()} » (journalisé).`); await load(); }
+    catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Renommage impossible"}`); }
+    finally { setBusy(false); }
+  }
+
+  async function removeProduct(p: PayProduct) {
+    const ok = await modal.confirm({
+      title: `Supprimer « ${p.title} » ?`,
+      body: "Uniquement possible si AUCUNE commande n'y fait référence (nettoyage d'un produit de test). Un produit déjà vendu ne se supprime pas : retirez plutôt ses prix.",
+      danger: true, okLabel: "Supprimer",
+    });
+    if (!ok) return;
+    setBusy(true); setNote(null);
+    try { await api.payDeleteProduct(p.id); setNote(`✓ Produit « ${p.title} » supprimé (journalisé).`); await load(); }
+    catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Suppression impossible"}`); }
     finally { setBusy(false); }
   }
 
@@ -106,31 +156,49 @@ export function Tarifs() {
       <div className="card">
         <div className="card-b">
           <div className="row between"><h3 style={{ margin: 0 }}>💳 Produits & prix par devise</h3></div>
-          <p className="muted" style={{ fontSize: 12.5 }}>Un cours sans produit (ou sans prix) reste <b>gratuit</b> pour les apprenants. Les prix se rédigent par devise — aucune conversion automatique.</p>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            Un cours sans produit (ou sans prix) reste <b>gratuit</b> pour les apprenants. Les prix se rédigent par devise — aucune conversion automatique.
+            {isSuper
+              ? " Chaque modification (prix, retrait, renommage, suppression) est journalisée dans l'audit."
+              : " La modification des tarifs est réservée au Super Admin — lecture seule ici."}
+          </p>
           {products.length === 0 && <p className="muted">Aucun produit — la plateforme est entièrement gratuite.</p>}
           {products.map((p) => (
             <div key={p.id} style={{ borderTop: "1px solid var(--border, #e3e6ec)", padding: "10px 0" }}>
               <div className="row between">
                 <b>{p.type === "COURSE" ? "🎓" : "🏢"} {p.title}</b>
-                <span className="pill pill--info">{p.type === "COURSE" ? "Cours" : `Lot de ${p.seatCount} sièges`}</span>
+                <span style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <span className="pill pill--info">{p.type === "COURSE" ? "Cours" : `Lot de ${p.seatCount} sièges`}</span>
+                  {isSuper && <button className="btn btn--sm" disabled={busy} title="Renommer le titre affiché" onClick={() => void renameProduct(p)}>✏️ Renommer</button>}
+                  {isSuper && <button className="btn btn--sm" disabled={busy} title="Supprimer (uniquement sans commandes)" onClick={() => void removeProduct(p)}>🗑 Supprimer</button>}
+                </span>
               </div>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 8 }}>
                 {CURRENCIES.map((cur) => {
                   const price = p.prices.find((x) => x.currency === cur);
+                  const k = `${p.id}:${cur}`;
+                  const current = price ? majorStr(price.amountMinor, cur) : "";
+                  const val = edits[k] ?? current;
+                  const changed = val.trim() !== "" && val.trim() !== current;
                   return (
-                    <div key={cur} style={{ minWidth: 170 }}>
+                    <div key={cur} style={{ minWidth: 190 }}>
                       <span style={lbl}>{cur}{price ? ` — actuel : ${price.display ?? price.amountMinor}` : " — non vendu"}</span>
-                      <div style={{ display: "flex", gap: 6 }}>
-                        <input style={inp} placeholder={cur === "EUR" ? "ex. 25,00" : "ex. 15000"} defaultValue="" onChange={(e) => { priceRefs.current[`${p.id}:${cur}`] = e.target.value; }} />
-                        <button className="btn btn--sm" disabled={busy} onClick={() => void savePrice(p, cur)}>OK</button>
-                      </div>
+                      {isSuper ? (
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input style={inp} placeholder={cur === "EUR" ? "ex. 25,00" : "ex. 15000"} value={val} onChange={(e) => setEdits((s) => ({ ...s, [k]: e.target.value }))} />
+                          <button className="btn btn--sm btn--primary" disabled={busy || !changed} title="Enregistrer le nouveau prix" onClick={() => void savePrice(p, cur)}>💾</button>
+                          {price && <button className="btn btn--sm" disabled={busy} title={`Ne plus vendre en ${cur}`} onClick={() => void withdrawPrice(p, cur)}>✕</button>}
+                        </div>
+                      ) : (
+                        <span className="muted" style={{ fontSize: 13 }}>{price ? price.display : "—"}</span>
+                      )}
                     </div>
                   );
                 })}
               </div>
             </div>
           ))}
-          <div style={{ borderTop: "1px solid var(--border, #e3e6ec)", marginTop: 10, paddingTop: 10 }}>
+          {isSuper && <div style={{ borderTop: "1px solid var(--border, #e3e6ec)", marginTop: 10, paddingTop: 10 }}>
             <b>➕ Nouveau produit</b>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "end" }}>
               <div><span style={lbl}>Type</span>
@@ -151,7 +219,7 @@ export function Tarifs() {
               )}
               <button className="btn btn--sm btn--primary" disabled={busy || !nTitle || (nType === "COURSE" && !nCourse)} onClick={() => void createProduct()}>Créer</button>
             </div>
-          </div>
+          </div>}
         </div>
       </div>
 

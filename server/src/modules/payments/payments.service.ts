@@ -53,19 +53,82 @@ export async function createProduct(input: { type: "COURSE" | "SEATS"; title: st
   });
 }
 
-/** Un prix rédigé PAR DEVISE (montant saisi en unités majeures). */
-export async function upsertPrice(productId: string, currency: string, amountMajor: string | number) {
+/** Un prix rédigé PAR DEVISE (montant saisi en unités majeures). Rédiger un
+ *  prix sur une devise retirée la remet en vente. Journalisé (ancien → nouveau)
+ *  quand l'acteur est fourni. */
+export async function upsertPrice(productId: string, currency: string, amountMajor: string | number, actor?: Principal) {
   if (!isCurrency(currency)) throw new PaymentError(422, "bad_currency", "Devise attendue : XOF, XAF ou EUR");
   const product = await prisma.product.findUnique({ where: { id: productId } });
   if (!product) throw new PaymentError(404, "product_not_found", "Produit introuvable");
   let amountMinor: number;
   try { amountMinor = toAmountMinor(amountMajor, currency); }
   catch (e) { throw new PaymentError(422, "bad_amount", e instanceof Error ? e.message : "Montant invalide"); }
-  return prisma.price.upsert({
+  const previous = await prisma.price.findUnique({ where: { productId_currency: { productId, currency } } });
+  const price = await prisma.price.upsert({
     where: { productId_currency: { productId, currency } },
     update: { amountMinor, active: true },
     create: { productId, currency, amountMinor },
   });
+  if (actor) {
+    await audit({
+      actorId: actor.id, action: "payment.price.set", targetType: "Price", targetId: price.id,
+      meta: { productId, productTitle: product.title, currency, fromMinor: previous?.active ? previous.amountMinor : null, toMinor: amountMinor },
+    });
+  }
+  return { ...price, display: formatAmount(amountMinor, currency) };
+}
+
+/** Retire un prix de la vente (la devise passe « non vendu » — le montant est
+ *  conservé, re-rédiger un prix la remet en vente). Si c'était le DERNIER prix
+ *  actif d'un produit COURS, le cours redevient GRATUIT pour les apprenants :
+ *  la conséquence est signalée à l'appelant et journalisée. */
+export async function withdrawPrice(principal: Principal, productId: string, currency: string) {
+  if (!isCurrency(currency)) throw new PaymentError(422, "bad_currency", "Devise attendue : XOF, XAF ou EUR");
+  const product = await prisma.product.findUnique({ where: { id: productId }, include: { prices: true } });
+  if (!product) throw new PaymentError(404, "product_not_found", "Produit introuvable");
+  const price = product.prices.find((p) => p.currency === currency && p.active);
+  if (!price) throw new PaymentError(409, "price_not_active", `Ce produit n'est pas vendu en ${currency}`);
+  await prisma.price.update({ where: { id: price.id }, data: { active: false } });
+  const courseNowFree = product.type === "COURSE" && product.active
+    && !product.prices.some((p) => p.active && p.id !== price.id);
+  await audit({
+    actorId: principal.id, action: "payment.price.withdraw", targetType: "Price", targetId: price.id,
+    meta: { productId, productTitle: product.title, currency, amountMinor: price.amountMinor, courseNowFree },
+  });
+  return { productId, currency, withdrawn: true, courseNowFree };
+}
+
+/** Renomme le titre affiché d'un produit (factures, catalogue, liens de
+ *  paiement à venir — les commandes passées gardent leur reçu tel quel). */
+export async function renameProduct(principal: Principal, productId: string, title: string) {
+  const product = await prisma.product.findUnique({ where: { id: productId } });
+  if (!product) throw new PaymentError(404, "product_not_found", "Produit introuvable");
+  const next = title.trim();
+  const updated = await prisma.product.update({ where: { id: productId }, data: { title: next } });
+  await audit({
+    actorId: principal.id, action: "payment.product.rename", targetType: "Product", targetId: productId,
+    meta: { from: product.title, to: next },
+  });
+  return updated;
+}
+
+/** Supprime un produit auquel AUCUNE commande ne fait référence (nettoyage
+ *  d'un produit de test ou créé par erreur). Un produit déjà vendu ne se
+ *  supprime jamais : retirer ses prix suffit à arrêter la vente. */
+export async function deleteProduct(principal: Principal, productId: string) {
+  const product = await prisma.product.findUnique({
+    where: { id: productId }, include: { _count: { select: { orders: true } } },
+  });
+  if (!product) throw new PaymentError(404, "product_not_found", "Produit introuvable");
+  if (product._count.orders > 0) {
+    throw new PaymentError(409, "product_has_orders", `${product._count.orders} commande(s) référencent ce produit — il ne peut pas être supprimé (retirez plutôt ses prix)`);
+  }
+  await prisma.product.delete({ where: { id: productId } }); // prix supprimés en cascade
+  await audit({
+    actorId: principal.id, action: "payment.product.delete", targetType: "Product", targetId: productId,
+    meta: { title: product.title, type: product.type },
+  });
+  return { id: productId, deleted: true };
 }
 
 export async function listProducts() {
