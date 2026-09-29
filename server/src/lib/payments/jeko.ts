@@ -26,13 +26,14 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "../../config/env.js";
+import { integrationValue } from "../runtime-config.js";
 import { ProviderError, headerValue, type CheckoutInput, type CheckoutResult, type PaymentProvider, type ProviderStatus, type WebhookVerification } from "./provider.js";
 
 const BASE = () => env.JEKO_BASE_URL;
 
 const KEY_HEADERS = () => ({
-  "X-API-KEY": env.JEKO_API_KEY ?? "",
-  "X-API-KEY-ID": env.JEKO_API_KEY_ID ?? "",
+  "X-API-KEY": integrationValue("JEKO_API_KEY") ?? "",
+  "X-API-KEY-ID": integrationValue("JEKO_API_KEY_ID") ?? "",
 });
 
 /** Moyens acceptés par payment_requests (doc « Les trois produits »). */
@@ -130,7 +131,7 @@ export async function createJekoPaymentLink(input: { title: string; amountMinor:
     method: "POST",
     headers: { "content-type": "application/json", ...KEY_HEADERS() },
     body: JSON.stringify({
-      storeId: env.JEKO_STORE_ID,
+      storeId: integrationValue("JEKO_STORE_ID"),
       title,
       amountCents: toJekoCents(input.amountMinor),
       currency: "XOF",
@@ -180,7 +181,7 @@ export const jekoProvider: PaymentProvider = {
   checkoutMethods: JEKO_METHODS,
 
   available() {
-    return Boolean(env.JEKO_API_KEY && env.JEKO_API_KEY_ID && env.JEKO_STORE_ID && env.JEKO_WEBHOOK_SECRET);
+    return Boolean(integrationValue("JEKO_API_KEY") && integrationValue("JEKO_API_KEY_ID") && integrationValue("JEKO_STORE_ID") && integrationValue("JEKO_WEBHOOK_SECRET"));
   },
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
@@ -204,7 +205,7 @@ export const jekoProvider: PaymentProvider = {
       method: "POST",
       headers: { "content-type": "application/json", ...KEY_HEADERS() },
       body: JSON.stringify({
-        storeId: env.JEKO_STORE_ID,
+        storeId: integrationValue("JEKO_STORE_ID"),
         amountCents: toJekoCents(input.amountMinor),
         currency: "XOF",
         reference,
@@ -232,7 +233,7 @@ export const jekoProvider: PaymentProvider = {
 
   verifyWebhook(headers, rawBody): WebhookVerification {
     const presented = headerValue(headers, "jeko-signature");
-    const secret = env.JEKO_WEBHOOK_SECRET;
+    const secret = integrationValue("JEKO_WEBHOOK_SECRET");
     const signatureOk = Boolean(secret && presented && jekoSignaturesMatch(expectedJekoSignature(rawBody, secret), presented));
 
     let body: JekoTransaction | null = null;

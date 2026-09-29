@@ -24,7 +24,21 @@ const Row = ({ k, v }: { k: string; v: string }) => (
 );
 
 export function Settings() {
-  const issuer = useAsync<Issuer>(() => api.issuer(), []);
+  const [issTick, setIssTick] = useState(0);
+  const issuer = useAsync<Issuer>(() => api.issuer(), [issTick]);
+  const [issName, setIssName] = useState("");
+  const [issUrl, setIssUrl] = useState("");
+  const [issBusy, setIssBusy] = useState(false);
+  const [issMsg, setIssMsg] = useState<string | null>(null);
+  async function saveIssuer() {
+    setIssBusy(true); setIssMsg(null);
+    try {
+      if (issName.trim()) await api.setSetting("credential_issuer_name", issName.trim());
+      if (issUrl.trim()) await api.setSetting("credential_issuer_url", issUrl.trim());
+      setIssMsg("✅ Émetteur mis à jour — appliqué aux prochains badges, certificats et pages de vérification.");
+      setIssName(""); setIssUrl(""); setIssTick((t) => t + 1);
+    } catch (e: any) { setIssMsg(`✗ ${e?.message || "Enregistrement impossible"}`); } finally { setIssBusy(false); }
+  }
   const webhooks = useAsync<Webhook[]>(() => api.webhooks().catch(() => []), []);
 
   const [name, setName] = useState("");
@@ -97,7 +111,6 @@ export function Settings() {
             <div className="card-b" style={{ paddingTop: 4 }}>
               <Row k="Nom de la plateforme" v={BRAND.name} />
               <Row k="Opéré par" v={BRAND.operator} />
-              <Row k="Émetteur (certificats)" v={BRAND.issuer} />
               <div className="row between" style={{ padding: "9px 0" }}>
                 <span className="muted" style={{ fontSize: 12.5 }}>Couleur</span>
                 <span className="row" style={{ gap: 7 }}><span style={{ width: 16, height: 16, borderRadius: 4, background: BRAND.theme, display: "inline-block", border: "1px solid var(--line)" }} /><b style={{ fontSize: 13 }}>{BRAND.theme}</b></span>
@@ -107,12 +120,20 @@ export function Settings() {
           </div>
 
           <div className="card">
-            <div className="card-h"><h3>Émetteur des certificats</h3></div>
+            <div className="card-h"><h3>Émetteur des certificats</h3>{isSuperAdmin && <span className="pill pill--soft">modifiable</span>}</div>
             <div className="card-b" style={{ paddingTop: 4 }}>
               {issuer.loading ? <span className="muted">Chargement…</span> : issuer.error ? <span style={{ color: "var(--danger)" }}>{issuer.error}</span> : issuer.data && (<>
                 <Row k="Nom" v={issuer.data.name} />
                 <Row k="URL" v={issuer.data.url} />
-                <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Open Badges 2.0 / 3.0 · <code>CREDENTIAL_ISSUER_NAME</code> côté serveur.</p>
+                <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Imprimé sur les badges Open Badges, les certificats signés (VC) et les pages publiques de vérification. Les certificats déjà émis ne sont pas réécrits.</p>
+                {isSuperAdmin && (
+                  <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid var(--line)", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <div><label style={lbl}>Nouveau nom <span className="muted" style={{ fontWeight: 400 }}>(vide = inchangé)</span></label><input style={field} value={issName} placeholder={issuer.data.name} onChange={(e) => setIssName(e.target.value)} /></div>
+                    <div><label style={lbl}>Nouvelle URL <span className="muted" style={{ fontWeight: 400 }}>(vide = inchangée)</span></label><input style={field} value={issUrl} placeholder={issuer.data.url} onChange={(e) => setIssUrl(e.target.value)} /></div>
+                    <button className="btn btn--sm btn--primary" style={{ alignSelf: "flex-start" }} disabled={issBusy || (!issName.trim() && !issUrl.trim())} onClick={() => void saveIssuer()}>{issBusy ? "…" : "Enregistrer"}</button>
+                    {issMsg && <p style={{ fontSize: 12.5, margin: 0, fontWeight: 600, color: issMsg.startsWith("✅") ? "var(--green)" : "var(--danger)" }}>{issMsg}</p>}
+                  </div>
+                )}
               </>)}
             </div>
           </div>

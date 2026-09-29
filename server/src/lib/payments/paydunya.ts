@@ -21,15 +21,16 @@
  */
 import { createHash, timingSafeEqual } from "node:crypto";
 import { env } from "../../config/env.js";
+import { integrationValue } from "../runtime-config.js";
 import { toAmountMajor } from "../../domain/payments/money.js";
 import { ProviderError, type CheckoutInput, type CheckoutResult, type PaymentProvider, type ProviderStatus, type WebhookVerification } from "./provider.js";
 
 const BASE = () => env.PAYDUNYA_BASE_URL;
 
 const KEY_HEADERS = () => ({
-  "PAYDUNYA-MASTER-KEY": env.PAYDUNYA_MASTER_KEY ?? "",
-  "PAYDUNYA-PRIVATE-KEY": env.PAYDUNYA_PRIVATE_KEY ?? "",
-  "PAYDUNYA-TOKEN": env.PAYDUNYA_TOKEN ?? "",
+  "PAYDUNYA-MASTER-KEY": integrationValue("PAYDUNYA_MASTER_KEY") ?? "",
+  "PAYDUNYA-PRIVATE-KEY": integrationValue("PAYDUNYA_PRIVATE_KEY") ?? "",
+  "PAYDUNYA-TOKEN": integrationValue("PAYDUNYA_TOKEN") ?? "",
 });
 
 /** data[hash] attendu dans l'IPN : SHA-512 hex de la MASTER KEY. Pur, testé. */
@@ -72,7 +73,7 @@ export const paydunyaProvider: PaymentProvider = {
   key: "paydunya",
 
   available() {
-    return Boolean(env.PAYDUNYA_MASTER_KEY && env.PAYDUNYA_PRIVATE_KEY && env.PAYDUNYA_TOKEN);
+    return Boolean(integrationValue("PAYDUNYA_MASTER_KEY") && integrationValue("PAYDUNYA_PRIVATE_KEY") && integrationValue("PAYDUNYA_TOKEN"));
   },
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
@@ -118,7 +119,7 @@ export const paydunyaProvider: PaymentProvider = {
     const token = f["data.invoice.token"] || f["data.token"] || null;
     const statusRaw = f["data.status"] ?? "";
     const presented = f["data.hash"] ?? "";
-    const master = env.PAYDUNYA_MASTER_KEY;
+    const master = integrationValue("PAYDUNYA_MASTER_KEY");
     const signatureOk = Boolean(master && presented && paydunyaHashesMatch(expectedPaydunyaHash(master), presented));
     return {
       signatureOk,

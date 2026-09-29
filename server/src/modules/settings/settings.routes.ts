@@ -12,6 +12,7 @@ import { authenticate, guard } from "../../lib/auth.js";
 import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { aiAvailable, callClaudeText } from "../../lib/ai/client.js";
+import { setIssuerOverride } from "../../lib/runtime-config.js";
 
 /** Whitelisted keys and their value schema — no free-form writes. */
 const KNOWN = {
@@ -30,11 +31,19 @@ const KNOWN = {
   /// d'organisation (virement B2B) ni le constat manuel. Modifiable par le
   /// Super Admin (console Paiements), sans redéploiement.
   b2c_online_cap: z.number().int().min(0).max(2_000_000),
+  /// Émetteur des certificats (badges Open Badges, VC signés, pages publiques
+  /// de vérification, PDF). Modifiable par le Super Admin — la variable d'env
+  /// CREDENTIAL_ISSUER_NAME/URL reste le repli tant que rien n'est saisi.
+  credential_issuer_name: z.string().trim().min(1).max(200),
+  credential_issuer_url: z.string().trim().url().max(300),
 } as const;
 type SettingKey = keyof typeof KNOWN;
 const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
 
-const DEFAULTS: Record<SettingKey, unknown> = { require_staff_2fa: false, payment_provider: "manual", receipt_legal: "", b2c_online_cap: 150_000 };
+const DEFAULTS: Record<SettingKey, unknown> = {
+  require_staff_2fa: false, payment_provider: "manual", receipt_legal: "", b2c_online_cap: 150_000,
+  credential_issuer_name: env.CREDENTIAL_ISSUER_NAME, credential_issuer_url: env.CREDENTIAL_ISSUER_URL,
+};
 
 export async function getSetting<T>(key: SettingKey): Promise<T> {
   const row = await prisma.setting.findUnique({ where: { key } });
@@ -67,6 +76,9 @@ export async function settingsRoutes(app: FastifyInstance) {
       update: { value: parsed as never, updatedById: req.principal!.id },
     });
     await audit({ actorId: req.principal!.id, action: "setting.update", targetType: "Setting", targetId: key, ip: req.ip, meta: { value: parsed } });
+    // L'émetteur des certificats est lu en synchrone (badges, VC, PDF) via un
+    // cache mémoire — on le rafraîchit immédiatement dans ce processus.
+    if (key === "credential_issuer_name" || key === "credential_issuer_url") setIssuerOverride(key, String(parsed));
     return { data: { key, value: parsed } };
   });
 

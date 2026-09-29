@@ -8,6 +8,7 @@
  *     downstream as a VC-JWT.
  */
 import { env } from "../../config/env.js";
+import { issuerName, issuerUrl } from "../runtime-config.js";
 
 const base = () => env.PUBLIC_BASE_URL.replace(/\/$/, "");
 
@@ -20,8 +21,8 @@ export function issuerDocument() {
     "@context": "https://w3id.org/openbadges/v2",
     type: "Issuer",
     id: issuerId(),
-    name: env.CREDENTIAL_ISSUER_NAME,
-    url: env.CREDENTIAL_ISSUER_URL,
+    name: issuerName(),
+    url: issuerUrl(),
   };
 }
 
@@ -100,7 +101,7 @@ export function verifiableCredential(params: {
     ],
     id: credentialUrl(params.credentialId),
     type: ["VerifiableCredential", "OpenBadgeCredential"],
-    issuer: { id: issuerId(), name: env.CREDENTIAL_ISSUER_NAME, url: env.CREDENTIAL_ISSUER_URL },
+    issuer: { id: issuerId(), name: issuerName(), url: issuerUrl() },
     issuanceDate: params.issuedAt.toISOString(),
     ...(params.expiresAt ? { expirationDate: params.expiresAt.toISOString() } : {}),
     credentialSubject: {

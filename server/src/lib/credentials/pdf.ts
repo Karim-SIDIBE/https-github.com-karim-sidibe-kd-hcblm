@@ -18,6 +18,7 @@ import { resolve } from "node:path";
 import PDFDocument from "pdfkit";
 import QRCode from "qrcode";
 import { env } from "../../config/env.js";
+import { issuerName } from "../runtime-config.js";
 
 export type CertificateData = {
   recipientName: string;
@@ -163,7 +164,7 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
   } else {
     // ----- fallback drawn mode (no asset for this level) ---------------------
     doc.rect(20, 20, W - 40, H - 40).lineWidth(2).stroke(style.accent);
-    doc.fillColor(style.accent).fontSize(14).text(env.CREDENTIAL_ISSUER_NAME.toUpperCase(), 50, 60, { width: W - 100, align: "center" });
+    doc.fillColor(style.accent).fontSize(14).text(issuerName().toUpperCase(), 50, 60, { width: W - 100, align: "center" });
     doc.moveDown(0.5).fillColor("#111").fontSize(32).text("Certificat de formation", { width: W - 100, align: "center" });
     doc.moveDown(0.2).fontSize(14).fillColor("#444").text("Attestation de Compétences", { width: W - 100, align: "center" });
     doc.moveDown(1).fontSize(13).text("Ce certificat est fièrement décerné à :", { width: W - 100, align: "center" });

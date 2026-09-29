@@ -15,6 +15,7 @@
  */
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { env } from "../../config/env.js";
+import { integrationValue } from "../runtime-config.js";
 import { toAmountMajor, toAmountMinor, isCurrency } from "../../domain/payments/money.js";
 import { ProviderError, headerValue, type CheckoutInput, type CheckoutResult, type PaymentProvider, type ProviderStatus, type WebhookVerification } from "./provider.js";
 
@@ -54,7 +55,7 @@ export const cinetpayProvider: PaymentProvider = {
   key: "cinetpay",
 
   available() {
-    return Boolean(env.CINETPAY_API_KEY && env.CINETPAY_SITE_ID && env.CINETPAY_SECRET_KEY);
+    return Boolean(integrationValue("CINETPAY_API_KEY") && integrationValue("CINETPAY_SITE_ID") && integrationValue("CINETPAY_SECRET_KEY"));
   },
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
@@ -66,8 +67,8 @@ export const cinetpayProvider: PaymentProvider = {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        apikey: env.CINETPAY_API_KEY,
-        site_id: env.CINETPAY_SITE_ID,
+        apikey: integrationValue("CINETPAY_API_KEY"),
+        site_id: integrationValue("CINETPAY_SITE_ID"),
         transaction_id: input.paymentId,
         amount: toAmountMajor(input.amountMinor, input.currency),
         currency: input.currency,
@@ -92,7 +93,7 @@ export const cinetpayProvider: PaymentProvider = {
     // Un même événement rejoué porte les mêmes trans_id + trans_date → dédupliqué.
     const eventId = `${fields.cpm_trans_id ?? "?"}:${fields.cpm_trans_date ?? "?"}`;
     const presented = headerValue(headers, "x-token");
-    const secret = env.CINETPAY_SECRET_KEY;
+    const secret = integrationValue("CINETPAY_SECRET_KEY");
     const signatureOk = Boolean(secret && presented && tokensMatch(computeCinetpayToken(fields, secret), presented));
     let amountMinor: number | undefined;
     if (fields.cpm_amount && isCurrency(fields.cpm_currency ?? "")) {
@@ -112,7 +113,7 @@ export const cinetpayProvider: PaymentProvider = {
     const res = await fetch(`${BASE()}/v2/payment/check`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ apikey: env.CINETPAY_API_KEY, site_id: env.CINETPAY_SITE_ID, transaction_id: providerRef }),
+      body: JSON.stringify({ apikey: integrationValue("CINETPAY_API_KEY"), site_id: integrationValue("CINETPAY_SITE_ID"), transaction_id: providerRef }),
     }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `CinetPay injoignable : ${e.message}`); });
     const json = await res.json().catch(() => null) as { code?: string; data?: { status?: string } } | null;
     const s = json?.data?.status?.toUpperCase();

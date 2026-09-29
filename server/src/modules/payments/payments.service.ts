@@ -25,6 +25,7 @@ import { signOrderToken, verifyOrderToken } from "../../lib/auth/jwt.js";
 import { sendEmail } from "../../lib/notify/send.js";
 import { magicLinkFor } from "../auth/auth.service.js";
 import { getSetting } from "../settings/settings.routes.js";
+import { PROVIDER_CONFIG_FIELDS, integrationSource, integrationValue, setIntegrationSecrets } from "../../lib/runtime-config.js";
 
 export class PaymentError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -919,4 +920,50 @@ export async function paymentsStats(days: number) {
 export async function providersOverview() {
   const active = (await getActiveProvider()).key;
   return Object.values(PROVIDERS).map((p) => ({ key: p.key, available: p.available(), active: p.key === active, checkoutMethods: p.checkoutMethods ?? null }));
+}
+
+// --- configuration des agrégateurs EN CONSOLE (Super Admin) --------------------
+// Les clés saisies ici sont chiffrées au repos et PRIMENT sur les variables
+// d'environnement (deploy/.env), qui restent le repli. Effet immédiat, sans
+// redéploiement. Aucune valeur secrète ne ressort jamais par l'API.
+
+/** État de configuration par agrégateur : champs, provenance, indices non
+ *  secrets — jamais les valeurs des secrets. */
+export function providersConfig() {
+  return Object.entries(PROVIDER_CONFIG_FIELDS).map(([provider, fields]) => ({
+    provider,
+    fields: fields.map((f) => {
+      const source = integrationSource(f.key);
+      const value = source ? integrationValue(f.key) : undefined;
+      return {
+        key: f.key, label: f.label, secret: f.secret, source,
+        // Indice affichable : les identifiants non secrets en entier, rien
+        // pour les secrets (pas même un fragment).
+        hint: !f.secret && value ? value : null,
+      };
+    }),
+  }));
+}
+
+/** Écrit la configuration console d'un agrégateur. `values[clé]` : chaîne non
+ *  vide = nouvelle valeur ; null = retirer la valeur console (retour au repli
+ *  .env) ; champ absent = inchangé. Audité (clés seulement, jamais les valeurs). */
+export async function setProviderConfig(principal: Principal, provider: string, values: Record<string, string | null>) {
+  const fields = PROVIDER_CONFIG_FIELDS[provider];
+  if (!fields) throw new PaymentError(404, "provider_unknown", `Agrégateur inconnu : ${provider}`);
+  const allowed = new Set(fields.map((f) => f.key));
+  const entries: Record<string, string | null> = {};
+  for (const [key, raw] of Object.entries(values)) {
+    if (!allowed.has(key)) throw new PaymentError(422, "bad_field", `Champ inconnu pour ${provider} : ${key}`);
+    if (raw === null) { entries[key] = null; continue; }
+    const v = raw.trim();
+    if (v) entries[key] = v; // chaîne vide = inchangé (l'écran renvoie les champs laissés vides)
+  }
+  if (!Object.keys(entries).length) throw new PaymentError(422, "nothing_to_save", "Aucune valeur à enregistrer");
+  await setIntegrationSecrets(entries, principal.id);
+  await audit({
+    actorId: principal.id, action: "payment.provider.configure", targetType: "Setting", targetId: provider,
+    meta: { provider, set: Object.keys(entries).filter((k) => entries[k] !== null), cleared: Object.keys(entries).filter((k) => entries[k] === null) },
+  });
+  return { provider, saved: true };
 }

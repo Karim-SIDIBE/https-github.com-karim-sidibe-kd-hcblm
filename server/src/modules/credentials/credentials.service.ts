@@ -17,6 +17,7 @@ import {
 import { certificatePdf } from "../../lib/credentials/pdf.js";
 import type { PageBrand } from "../../lib/credentials/page.js";
 import { env } from "../../config/env.js";
+import { issuerName } from "../../lib/runtime-config.js";
 import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { badgeTypeForBlock } from "../../domain/engine/badges.js";
@@ -298,7 +299,7 @@ export async function verificationData(id: string) {
     return {
       id: f.id,
       brand: pageBrand(),
-      issuerName: env.CREDENTIAL_ISSUER_NAME,
+      issuerName: issuerName(),
       holderName: f.participant.user.name,
       courseTitle: f.participant.module.title,
       achievementName: fa.badge?.name ?? f.achievementType,
@@ -318,7 +319,7 @@ export async function verificationData(id: string) {
   return {
     id: c.id,
     brand: pageBrand(),
-    issuerName: env.CREDENTIAL_ISSUER_NAME,
+    issuerName: issuerName(),
     holderName: c.enrollment.user.name,
     courseTitle: c.enrollment.courseVersion.title,
     achievementName: a.badge?.name ?? c.achievementType,
