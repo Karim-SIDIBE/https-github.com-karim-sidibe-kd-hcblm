@@ -81,7 +81,17 @@ async function req<T>(method: string, path: string, body?: unknown, retried = fa
     auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée");
   }
   const json = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, json.error || "error", json.message || "Erreur serveur");
+  if (!res.ok) {
+    // Les réponses validation_error (400) et content_invalid (422) du serveur
+    // portent leurs détails dans `issues` sans champ `message` : les rendre
+    // lisibles plutôt qu'un « Erreur serveur » générique.
+    let message = json.message as string | undefined;
+    if (!message && Array.isArray(json.issues) && json.issues.length > 0) {
+      const parts = json.issues.slice(0, 3).map((i: { path?: string; message?: string }) => [i.path, i.message].filter(Boolean).join(" — "));
+      message = `Saisie invalide : ${parts.join(" · ")}${json.issues.length > 3 ? ` (+${json.issues.length - 3} autres)` : ""}`;
+    }
+    throw new ApiError(res.status, json.error || "error", message || `Erreur serveur (HTTP ${res.status})`);
+  }
   return (raw ? json : json.data ?? json) as T;
 }
 
