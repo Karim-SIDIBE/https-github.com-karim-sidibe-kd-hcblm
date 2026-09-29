@@ -611,7 +611,7 @@ export type Issuer = { name: string; url: string; id: string };
 export type Webhook = { id: string; url: string; events?: string[]; organizationId?: string | null; active?: boolean; secret?: string; createdAt?: string };
 
 export type ValidationIssue = { level: "error" | "warning"; rule: string; path: string; message: string };
-export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { ok: boolean; issues: ValidationIssue[] } };
+export type ValidateResult = { shape: { ok: boolean; issues?: ValidationIssue[] }; policy?: { publishable: boolean; issues: ValidationIssue[] } };
 
 export type CourseVersionFull = { id: string; version: number; status: string; title: string; level: string; domainLabel?: string; passThreshold?: number; publishedAt: string | null; updatedAt: string; content: { blocks?: { index: number; type: string; title: string; payload?: Record<string, unknown> }[] } };
 export type CourseFull = { id: string; slug: string; versions: CourseVersionFull[] };
