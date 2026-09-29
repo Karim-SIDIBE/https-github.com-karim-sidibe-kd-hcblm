@@ -118,7 +118,10 @@ export function OrderStatus({ orderId }: { orderId: string }) {
             <p className="banner" style={{ background: "var(--ok-bg, #E7F4EA)" }}>✅ {t("pay.paidHint")}</p>
             {guest ? (
               // Sans session : la connexion passe par le lien magique de l'e-mail.
-              <p className="banner">📧 {t("pay.checkEmail")}</p>
+              <>
+                <p className="banner">📧 {t("pay.checkEmail")}</p>
+                <p className="meta" style={{ marginTop: 4 }}>{t("pay.checkSpam")}</p>
+              </>
             ) : (
               <button className="block" disabled={enrolling} onClick={() => void enterCourse()}>
                 {enrolling ? t("enr.enrolling") : t("pay.enterCourse")}

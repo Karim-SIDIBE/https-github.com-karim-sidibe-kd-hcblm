@@ -247,16 +247,24 @@ export const jekoProvider: PaymentProvider = {
     }
 
     const amountMinor = body.amount ? fromJekoCents(body.amount.amount) : null;
+    // Corrélation : le webhook peut porter PLUSIEURS identifiants À LA FOIS —
+    // constaté en production (recette Wave du 29/09/2026) : un checkout
+    // redirect est réalisé chez Jèko comme un lien de paiement interne, le
+    // webhook présente donc un paymentLinkId inconnu de nous EN PLUS de
+    // l'id/référence de la demande. On fournit tous les candidats dans
+    // l'ordre ; le service retient le premier qui correspond à un paiement
+    // réel en base (jamais le premier présent).
+    const candidates = [
+      body.transactionDetails?.paymentLinkId ? linkRefOf(body.transactionDetails.paymentLinkId) : null,
+      body.transactionDetails?.id ?? null,
+      body.transactionDetails?.reference ? paymentIdOfReference(body.transactionDetails.reference) : null,
+    ].filter((c, i, all): c is string => Boolean(c) && all.indexOf(c) === i);
     return {
       signatureOk,
       // L'id de transaction Jèko est la clé d'idempotence documentée.
       eventId: body.id ?? `notify:${Date.now().toString(36)}`,
-      // Corrélation : un paiement de LIEN porte paymentLinkId (providerRef
-      // stocké « pl:<id> ») ; sinon l'id de la demande (= providerRef du
-      // checkout) ; secours : le préfixe paymentId de notre référence.
-      providerRef: (body.transactionDetails?.paymentLinkId ? linkRefOf(body.transactionDetails.paymentLinkId) : null)
-        ?? body.transactionDetails?.id
-        ?? (body.transactionDetails?.reference ? paymentIdOfReference(body.transactionDetails.reference) : null),
+      providerRef: candidates[0] ?? null,
+      providerRefCandidates: candidates,
       // Le statut annoncé n'accorde rien : le service contre-vérifie toujours
       // par fetchStatus avant tout règlement.
       status: mapJekoStatus(body.status),

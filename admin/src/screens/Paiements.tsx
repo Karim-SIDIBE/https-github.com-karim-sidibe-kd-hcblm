@@ -7,7 +7,7 @@
  * La création des produits/prix reste dans « Tarifs & accès ».
  */
 import { useEffect, useState } from "react";
-import { api, auth, ApiError, type PayOrderRow, type PayReconciliation, type PayStats } from "../lib/api";
+import { api, auth, ApiError, type PayEventRow, type PayOrderRow, type PayReconciliation, type PayStats } from "../lib/api";
 import { modal } from "../lib/modal";
 
 const inp: React.CSSProperties = { width: "100%", padding: "8px 10px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 8, fontSize: 13.5 };
@@ -80,7 +80,12 @@ export function Paiements() {
   async function loadReco() { try { setReco(await api.payReconciliation()); } catch { setReco(null); } }
   useEffect(() => { void loadReco(); }, []);
 
-  async function refreshAll() { await Promise.all([loadOrders(), loadReco(), api.payStats(days).then(setStats).catch(() => null)]); }
+  // --- historique des webhooks (constat automatique) ---
+  const [events, setEvents] = useState<PayEventRow[] | null>(null);
+  async function loadEvents() { try { setEvents(await api.payEvents(30)); } catch { setEvents([]); } }
+  useEffect(() => { void loadEvents(); }, []);
+
+  async function refreshAll() { await Promise.all([loadOrders(), loadReco(), loadEvents(), api.payStats(days).then(setStats).catch(() => null)]); }
 
   async function markPaid(o: { id: string; display?: string; product?: { title: string } }) {
     const reference = await modal.prompt({ title: "Constater le règlement", body: `Commande « ${o.product?.title ?? o.id} »${o.display ? ` — ${o.display}` : ""}. Référence du virement reçue (obligatoire, journalisée) :`, okLabel: "Constater" });
@@ -166,6 +171,11 @@ export function Paiements() {
                   <span className="muted" style={{ fontSize: 12 }}>{p.available ? "configuré" : "non configuré (clés absentes)"}</span>
                   {isSuper && p.key !== "manual" && <button className="btn btn--sm" title="Saisir les clés de cet agrégateur (chiffrées en base — effet immédiat)" onClick={() => openCfg(p.key)}>⚙️</button>}
                 </div>
+                {p.key === "manual" && (
+                  <span className="muted" style={{ fontSize: 11, display: "block", marginTop: 4 }}>
+                    Le virement B2B reste toujours disponible, quel que soit ce choix — l'activer ici ne fait que suspendre l'achat en ligne B2C.
+                  </span>
+                )}
               </div>
             ))}
           </div>
@@ -253,6 +263,11 @@ export function Paiements() {
                 {o.product?.title} · <b>{o.display}</b> · {o.buyerUser?.email ?? o.buyerOrg?.name ?? "—"}
                 <span className="muted"> ({new Date(o.createdAt).toLocaleDateString("fr-FR")})</span>
                 <span className={`pill ${STATUS_PILL[o.status] ?? "pill--info"}`} style={{ marginLeft: 6 }}>{o.status}</span>
+                {o.status === "PAID" && o.payments?.[0] && (
+                  <span className="muted" style={{ fontSize: 12, marginLeft: 6 }}>
+                    réglée via {PROVIDER_LABEL[o.payments[0].provider.toLowerCase()] ?? o.payments[0].provider}{o.payments[0].method && o.payments[0].provider !== "MANUAL" ? ` · ${o.payments[0].method}` : ""}
+                  </span>
+                )}
               </span>
               {o.status === "PENDING" && (
                 <span style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -261,6 +276,39 @@ export function Paiements() {
                   <button className="btn btn--sm btn--primary" disabled={busy} onClick={() => void markPaid(o)}>✓ Constater</button>
                 </span>
               )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-b">
+          <div className="row between">
+            <h3 style={{ margin: 0 }}>📡 Webhooks des agrégateurs</h3>
+            <button className="btn btn--sm" disabled={busy} onClick={() => void loadEvents()}>Actualiser</button>
+          </div>
+          <p className="muted" style={{ fontSize: 12.5 }}>
+            Chaque notification de paiement reçue d'un agrégateur, dans l'ordre d'arrivée — c'est le <b>constat automatique</b> : un événement « réglé » a confirmé la commande et émis le droit d'accès sans intervention. « Ignoré » = aucun paiement correspondant retrouvé ; « signature invalide » = clé webhook incorrecte ou tentative de fraude (rien n'est accordé).
+          </p>
+          {!events ? <p className="muted">Chargement…</p> : events.length === 0 ? <p className="muted">Aucun webhook reçu pour le moment.</p> : events.map((e) => (
+            <div key={e.id} className="row between" style={{ borderTop: "1px solid var(--border, #e3e6ec)", padding: "6px 0", fontSize: 13, gap: 8 }}>
+              <span style={{ minWidth: 0 }}>
+                <span className="muted">{new Date(e.receivedAt).toLocaleString("fr-FR")}</span>
+                {" "}<b>{PROVIDER_LABEL[e.provider.toLowerCase()] ?? e.provider}</b>
+                {e.order
+                  ? <> · {e.order.productTitle} · <b>{e.order.display}</b></>
+                  : <span className="muted"> · non corrélé</span>}
+                <span className="muted" style={{ fontSize: 11.5 }}> · évt {e.eventId.length > 24 ? `${e.eventId.slice(0, 24)}…` : e.eventId}</span>
+              </span>
+              <span className={`pill ${!e.signatureOk ? "pill--red" : e.outcome === "settled" || e.outcome === "already_settled" ? "pill--green" : e.outcome === "ignored" || e.outcome === "mismatch" ? "pill--warn" : "pill--info"}`} style={{ flexShrink: 0 }}>
+                {!e.signatureOk ? "signature invalide"
+                  : e.outcome === "settled" ? "réglé automatiquement"
+                  : e.outcome === "already_settled" ? "déjà réglé"
+                  : e.outcome === "ignored" ? "ignoré (non corrélé)"
+                  : e.outcome === "mismatch" ? "montant incohérent"
+                  : e.outcome === "failed" ? "paiement échoué"
+                  : e.outcome ?? "reçu"}
+              </span>
             </div>
           ))}
         </div>

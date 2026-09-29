@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, createOrderPaymentLink, deleteProduct, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersConfig, providersOverview, recheckOrder, renameProduct, revokeEntitlement, setProviderConfig, startCheckout, upsertPrice, withdrawPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, createOrderPaymentLink, deleteProduct, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listPaymentEvents, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersConfig, providersOverview, recheckOrder, renameProduct, revokeEntitlement, setProviderConfig, startCheckout, upsertPrice, withdrawPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -87,6 +87,12 @@ export async function paymentRoutes(app: FastifyInstance) {
   app.get("/payments/orders", { preHandler: guard("order:read") }, async (req) => {
     const { status } = z.object({ status: z.enum(["PENDING", "PAID", "FAILED"]).optional() }).parse(req.query ?? {});
     return { data: await listOrders(status) };
+  });
+
+  // Historique des webhooks d'agrégateurs (constat automatique) — console staff.
+  app.get("/payments/events", { preHandler: guard("order:read") }, async (req) => {
+    const { limit } = z.object({ limit: z.coerce.number().int().min(1).max(100).default(30) }).parse(req.query ?? {});
+    return { data: await listPaymentEvents(limit) };
   });
 
   // Commandes d'une organisation (portail entreprise, PAY-3) — admins de l'org.
