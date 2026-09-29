@@ -7,6 +7,7 @@ import rateLimit from "@fastify/rate-limit";
 import multipart from "@fastify/multipart";
 import { ZodError } from "zod";
 import { env, isDev } from "./config/env.js";
+import { loadRuntimeConfig } from "./lib/runtime-config.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { courseRoutes } from "./modules/courses/courses.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
@@ -106,6 +107,12 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Multipart uploads (media assets), capped by MEDIA_MAX_BYTES.
   await app.register(multipart, { limits: { fileSize: env.MEDIA_MAX_BYTES } });
+
+  // Configuration d'exploitation saisie en console (secrets d'agrégateurs
+  // chiffrés, émetteur des certificats) : chargée en mémoire au boot — les
+  // variables d'environnement restent le repli si la base est indisponible.
+  try { await loadRuntimeConfig(); }
+  catch (e) { app.log.warn(`runtime-config non chargée (repli variables d'env) : ${e instanceof Error ? e.message : e}`); }
 
   // Observability: record per-request metrics (rate/latency/errors) and expose
   // them for Prometheus. Off unless METRICS_ENABLED; the route label is the

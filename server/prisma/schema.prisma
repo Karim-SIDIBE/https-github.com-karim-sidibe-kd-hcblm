@@ -555,6 +555,18 @@ model JobRun {
   @@index([startedAt])
 }
 
+/// Secret d'intégration saisi dans la console Super Admin (clés d'agrégateurs
+/// de paiement…). Valeur CHIFFRÉE au repos (lib/crypto/field, AES-256-GCM) ;
+/// la valeur console PRIME sur la variable d'environnement homonyme, qui reste
+/// le repli — les déploiements configurés par .env continuent de fonctionner.
+model IntegrationSecret {
+  key         String   @id
+  value       String
+  updatedById String?
+  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+}
+
 /// Platform-wide settings (key → JSON value). E.g. "require_staff_2fa".
 model Setting {
   key         String   @id

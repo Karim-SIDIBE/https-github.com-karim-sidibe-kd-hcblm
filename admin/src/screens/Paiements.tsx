@@ -32,6 +32,35 @@ export function Paiements() {
     finally { setBusy(false); }
   }
 
+  // --- configuration des agrégateurs (Super Admin — clés chiffrées en base) ---
+  type CfgField = { key: string; label: string; secret: boolean; source: "console" | "env" | null; hint: string | null };
+  const [cfg, setCfg] = useState<{ provider: string; fields: CfgField[] }[]>([]);
+  const [cfgOpen, setCfgOpen] = useState<string | null>(null);
+  const [cfgValues, setCfgValues] = useState<Record<string, string>>({});
+  const [cfgBusy, setCfgBusy] = useState(false);
+  async function loadCfg() { if (!isSuper) return; try { setCfg(await api.payProvidersConfig()); } catch { /* note globale */ } }
+  function openCfg(provider: string) { setCfgValues({}); setCfgOpen(cfgOpen === provider ? null : provider); }
+  async function saveCfg(provider: string) {
+    const values: Record<string, string | null> = {};
+    for (const [k, v] of Object.entries(cfgValues)) if (v.trim()) values[k] = v.trim();
+    if (!Object.keys(values).length) { setNote("✗ Renseignez au moins un champ (les champs laissés vides restent inchangés)."); return; }
+    setCfgBusy(true); setNote(null);
+    try {
+      await api.paySetProviderConfig(provider, values);
+      setNote(`✓ Configuration ${PROVIDER_LABEL[provider] ?? provider} enregistrée — chiffrée en base, active immédiatement (sans redéploiement).`);
+      setCfgValues({}); setCfgOpen(null);
+      await Promise.all([loadProviders(), loadCfg()]);
+    } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Enregistrement impossible"}`); }
+    finally { setCfgBusy(false); }
+  }
+  async function clearCfgField(provider: string, field: CfgField) {
+    if (!(await modal.confirm({ title: `Retirer « ${field.label} » de la console ?`, body: "La valeur chiffrée en base est supprimée ; la variable de deploy/.env (si présente) redevient le repli.", okLabel: "Retirer" }))) return;
+    setCfgBusy(true); setNote(null);
+    try { await api.paySetProviderConfig(provider, { [field.key]: null }); await Promise.all([loadProviders(), loadCfg()]); setNote(`✓ « ${field.label} » retiré de la console.`); }
+    catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Retrait impossible"}`); }
+    finally { setCfgBusy(false); }
+  }
+
   // --- conversion ---
   const [days, setDays] = useState(30);
   const [stats, setStats] = useState<PayStats | null>(null);
@@ -99,6 +128,7 @@ export function Paiements() {
       setLegalLoaded(true);
     }).catch(() => setLegalLoaded(true));
     void loadProviders();
+    void loadCfg();
   }, []);
   async function saveLegal() {
     setBusy(true); setNote(null);
@@ -132,10 +162,47 @@ export function Paiements() {
                     ? <span className="pill pill--green">actif</span>
                     : isSuper && <button className="btn btn--sm" disabled={busy || !p.available} onClick={() => void switchProvider(p.key)}>Activer</button>}
                 </div>
-                <span className="muted" style={{ fontSize: 12 }}>{p.available ? "configuré" : "non configuré (clés absentes)"}</span>
+                <div className="row between" style={{ gap: 6 }}>
+                  <span className="muted" style={{ fontSize: 12 }}>{p.available ? "configuré" : "non configuré (clés absentes)"}</span>
+                  {isSuper && p.key !== "manual" && <button className="btn btn--sm" title="Saisir les clés de cet agrégateur (chiffrées en base — effet immédiat)" onClick={() => openCfg(p.key)}>⚙️</button>}
+                </div>
               </div>
             ))}
           </div>
+          {cfgOpen && (() => {
+            const pc = cfg.find((c) => c.provider === cfgOpen);
+            if (!pc) return null;
+            return (
+              <div style={{ border: "1px solid var(--border, #e3e6ec)", borderRadius: 10, padding: 14, marginTop: 12 }}>
+                <div className="row between" style={{ marginBottom: 4 }}>
+                  <b>⚙️ Configuration {PROVIDER_LABEL[pc.provider] ?? pc.provider}</b>
+                  <button className="btn btn--sm" onClick={() => setCfgOpen(null)}>✕ Fermer</button>
+                </div>
+                <p className="muted" style={{ fontSize: 12 }}>
+                  Les valeurs saisies ici sont <b>chiffrées en base</b> et prennent effet <b>immédiatement</b>, sans redéploiement. Elles priment sur les variables de <code>deploy/.env</code>, qui restent le repli. Champ laissé vide = valeur inchangée.
+                  {" "}URL de webhook à déclarer chez l'agrégateur : <code>https://api.declick.digital/api/v1/payments/webhooks/{pc.provider}</code>
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  {pc.fields.map((f) => (
+                    <div key={f.key} className="row" style={{ gap: 8, alignItems: "center" }}>
+                      <span style={{ width: 210, fontSize: 12.5, fontWeight: 600 }}>{f.label}</span>
+                      <input
+                        style={{ flex: 1, padding: "8px 10px", border: "1px solid var(--border, #d7dbe3)", borderRadius: 8, fontSize: 13 }}
+                        type={f.secret ? "password" : "text"}
+                        autoComplete="off"
+                        placeholder={f.source === "console" ? (f.secret ? "•••••• (console — laisser vide pour conserver)" : `${f.hint} (console)`) : f.source === "env" ? (f.secret ? "•••••• (deploy/.env — laisser vide pour conserver)" : `${f.hint} (deploy/.env)`) : "non configuré"}
+                        value={cfgValues[f.key] ?? ""}
+                        onChange={(e) => setCfgValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                      />
+                      <span className={`pill ${f.source ? (f.source === "console" ? "pill--green" : "pill--info") : "pill--soft"}`} style={{ fontSize: 10.5, width: 70, textAlign: "center" }}>{f.source ?? "absent"}</span>
+                      {f.source === "console" && <button className="btn btn--sm" disabled={cfgBusy} title="Retirer la valeur console (retour au repli deploy/.env)" onClick={() => void clearCfgField(pc.provider, f)}>✕</button>}
+                    </div>
+                  ))}
+                </div>
+                <button className="btn btn--sm btn--primary" style={{ marginTop: 10 }} disabled={cfgBusy} onClick={() => void saveCfg(pc.provider)}>{cfgBusy ? "…" : "💾 Enregistrer (chiffré)"}</button>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

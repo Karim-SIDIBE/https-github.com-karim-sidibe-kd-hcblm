@@ -21,6 +21,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { env } from "../../config/env.js";
+import { integrationValue } from "../runtime-config.js";
 import { ProviderError, type CheckoutInput, type CheckoutResult, type PaymentProvider, type ProviderStatus, type WebhookVerification } from "./provider.js";
 
 function secretsMatch(expected: string, presented: string): boolean {
@@ -62,7 +63,7 @@ export const intouchProvider: PaymentProvider = {
   key: "intouch",
 
   available() {
-    return Boolean(env.INTOUCH_AGENCY_CODE && env.INTOUCH_SECURE_CODE && env.INTOUCH_DOMAIN && env.INTOUCH_NOTIFY_SECRET);
+    return Boolean(integrationValue("INTOUCH_AGENCY_CODE") && integrationValue("INTOUCH_SECURE_CODE") && integrationValue("INTOUCH_DOMAIN") && integrationValue("INTOUCH_NOTIFY_SECRET"));
   },
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
@@ -84,7 +85,7 @@ export const intouchProvider: PaymentProvider = {
 
   verifyWebhook(_headers, rawBody): WebhookVerification {
     const { query, fields } = parseIntouchNotification(rawBody);
-    const secret = env.INTOUCH_NOTIFY_SECRET;
+    const secret = integrationValue("INTOUCH_NOTIFY_SECRET");
     const presented = query.s ?? "";
     const signatureOk = Boolean(secret && presented && secretsMatch(secret, presented));
     // Notre url_notification porte toujours order_number=<paymentId> — la
@@ -104,10 +105,12 @@ export const intouchProvider: PaymentProvider = {
   async fetchStatus(providerRef): Promise<{ status: ProviderStatus; raw?: unknown }> {
     // Sans gabarit d'API de statut (fourni à l'onboarding), aucune vérité
     // automatique — UNKNOWN n'accorde jamais rien (voir handleProviderWebhook).
-    if (!this.available() || !env.INTOUCH_STATUS_URL) return { status: "UNKNOWN" };
-    const url = env.INTOUCH_STATUS_URL.replace("{orderNumber}", encodeURIComponent(providerRef));
+    const statusUrl = integrationValue("INTOUCH_STATUS_URL");
+    if (!this.available() || !statusUrl) return { status: "UNKNOWN" };
+    const url = statusUrl.replace("{orderNumber}", encodeURIComponent(providerRef));
     const headers: Record<string, string> = {};
-    if (env.INTOUCH_STATUS_AUTH) headers.authorization = `Basic ${Buffer.from(env.INTOUCH_STATUS_AUTH).toString("base64")}`;
+    const statusAuth = integrationValue("INTOUCH_STATUS_AUTH");
+    if (statusAuth) headers.authorization = `Basic ${Buffer.from(statusAuth).toString("base64")}`;
     const res = await fetch(url, { headers })
       .catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `InTouch injoignable : ${e.message}`); });
     const json = await res.json().catch(() => null) as { status?: string; data?: { status?: string } } | null;

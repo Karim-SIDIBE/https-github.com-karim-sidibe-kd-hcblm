@@ -8,6 +8,7 @@
  */
 import { timingSafeEqual } from "node:crypto";
 import { env } from "../../config/env.js";
+import { integrationValue } from "../runtime-config.js";
 import { toAmountMajor } from "../../domain/payments/money.js";
 import { ProviderError, headerValue, type CheckoutInput, type CheckoutResult, type PaymentProvider, type ProviderStatus, type WebhookVerification } from "./provider.js";
 
@@ -22,7 +23,7 @@ export const flutterwaveProvider: PaymentProvider = {
   key: "flutterwave",
 
   available() {
-    return Boolean(env.FLUTTERWAVE_SECRET_KEY && env.FLUTTERWAVE_WEBHOOK_HASH);
+    return Boolean(integrationValue("FLUTTERWAVE_SECRET_KEY") && integrationValue("FLUTTERWAVE_WEBHOOK_HASH"));
   },
 
   async createCheckout(input: CheckoutInput): Promise<CheckoutResult> {
@@ -32,7 +33,7 @@ export const flutterwaveProvider: PaymentProvider = {
     }
     const res = await fetch(`${BASE()}/v3/payments`, {
       method: "POST",
-      headers: { authorization: `Bearer ${env.FLUTTERWAVE_SECRET_KEY}`, "content-type": "application/json" },
+      headers: { authorization: `Bearer ${integrationValue("FLUTTERWAVE_SECRET_KEY")}`, "content-type": "application/json" },
       body: JSON.stringify({
         tx_ref: input.paymentId,
         amount: toAmountMajor(input.amountMinor, input.currency),
@@ -51,7 +52,7 @@ export const flutterwaveProvider: PaymentProvider = {
 
   verifyWebhook(headers, rawBody): WebhookVerification {
     const presented = headerValue(headers, "verif-hash");
-    const secret = env.FLUTTERWAVE_WEBHOOK_HASH;
+    const secret = integrationValue("FLUTTERWAVE_WEBHOOK_HASH");
     const signatureOk = Boolean(secret && presented && hashesMatch(secret, presented));
     let body: { event?: string; data?: { id?: number | string; tx_ref?: string; status?: string; amount?: number; currency?: string; payment_type?: string } } = {};
     try { body = JSON.parse(rawBody); } catch { /* corps illisible → événement inconnu */ }
@@ -70,7 +71,7 @@ export const flutterwaveProvider: PaymentProvider = {
   async fetchStatus(providerRef): Promise<{ status: ProviderStatus; raw?: unknown }> {
     if (!this.available()) return { status: "UNKNOWN" };
     const res = await fetch(`${BASE()}/v3/transactions/verify_by_reference?tx_ref=${encodeURIComponent(providerRef)}`, {
-      headers: { authorization: `Bearer ${env.FLUTTERWAVE_SECRET_KEY}` },
+      headers: { authorization: `Bearer ${integrationValue("FLUTTERWAVE_SECRET_KEY")}` },
     }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Flutterwave injoignable : ${e.message}`); });
     const json = await res.json().catch(() => null) as { status?: string; data?: { status?: string } } | null;
     const s = json?.data?.status;

@@ -9,7 +9,7 @@ import { z } from "zod";
 import { authenticate, guard } from "../../lib/auth.js";
 import { env } from "../../config/env.js";
 import { ProviderError } from "../../lib/payments/provider.js";
-import { PaymentError, courseCatalog, createOrderPaymentLink, deleteProduct, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersOverview, recheckOrder, renameProduct, revokeEntitlement, startCheckout, upsertPrice, withdrawPrice } from "./payments.service.js";
+import { PaymentError, courseCatalog, createOrderPaymentLink, deleteProduct, guestCatalog, guestCheckout, guestCourseInfo, intouchBridgePage, guestGetOrder, guestReceipt, guestResumeCheckout, createOrder, createProduct, getOrder, giftAccess, handleProviderWebhook, listGifts, listOrders, listOrgOrders, listProducts, markPaidManual, orderReceipt, paymentsReconciliation, paymentsStats, providersConfig, providersOverview, recheckOrder, renameProduct, revokeEntitlement, setProviderConfig, startCheckout, upsertPrice, withdrawPrice } from "./payments.service.js";
 
 function handle(reply: FastifyReply, err: unknown) {
   if (err instanceof PaymentError || err instanceof ProviderError) {
@@ -166,6 +166,17 @@ export async function paymentRoutes(app: FastifyInstance) {
 
   // --- fournisseurs ----------------------------------------------------------------
   app.get("/payments/providers", { preHandler: guard("order:read") }, async () => ({ data: await providersOverview() }));
+
+  // Configuration des agrégateurs EN CONSOLE (Super Admin) : lecture de l'état
+  // (aucun secret ne ressort) et écriture chiffrée, effective immédiatement.
+  app.get("/payments/providers/config", { preHandler: guard("order:manage") }, async (req, reply) => {
+    try { assertSuperAdmin(req); return { data: providersConfig() }; } catch (err) { return handle(reply, err); }
+  });
+  app.put("/payments/providers/:provider/config", { preHandler: guard("order:manage") }, async (req, reply) => {
+    const { provider } = z.object({ provider: z.string() }).parse(req.params);
+    const { values } = z.object({ values: z.record(z.string(), z.string().max(500).nullable()) }).parse(req.body);
+    try { assertSuperAdmin(req); return { data: await setProviderConfig(req.principal!, provider, values) }; } catch (err) { return handle(reply, err); }
+  });
 
   // --- tunnel d'achat invité (PAY-2bis) : routes PUBLIQUES — e-mail seul champ.
   // Rate-limit strict (même cap que l'auth) : anti-spam d'e-mails et
