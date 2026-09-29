@@ -10,6 +10,8 @@ import { z } from "zod";
 import { prisma } from "../../db/prisma.js";
 import { authenticate, guard } from "../../lib/auth.js";
 import { audit } from "../../lib/audit.js";
+import { env } from "../../config/env.js";
+import { aiAvailable, callClaudeText } from "../../lib/ai/client.js";
 
 /** Whitelisted keys and their value schema — no free-form writes. */
 const KNOWN = {
@@ -66,5 +68,41 @@ export async function settingsRoutes(app: FastifyInstance) {
     });
     await audit({ actorId: req.principal!.id, action: "setting.update", targetType: "Setting", targetId: key, ip: req.ip, meta: { value: parsed } });
     return { data: { key, value: parsed } };
+  });
+
+  // --- Assistant IA : état (aucun secret exposé) + test de connexion ----------
+  // Sans clé, TOUTES les fonctions IA (import par bloc, feedback formatif,
+  // tuteur, brouillons) retombent sur des replis déterministes hors-ligne.
+  app.get("/settings/ai-status", { preHandler: guard("user:manage") }, async () => ({
+    data: {
+      configured: aiAvailable(),
+      model: env.AI_MODEL,
+      gradingModel: env.AI_GRADING_MODEL ?? null,
+      embeddings: Boolean(env.VOYAGE_API_KEY), // recherche sémantique (sinon repli lexical)
+    },
+  }));
+
+  // Appel réel minimal (quelques jetons) pour valider la clé depuis la console
+  // juste après l'avoir ajoutée dans deploy/.env — SUPER_ADMIN, audité.
+  app.post("/settings/ai-test", { preHandler: guard("user:manage") }, async (req, reply) => {
+    if (req.principal!.role !== "SUPER_ADMIN") {
+      return reply.status(403).send({ error: "forbidden", message: "Réservé au super-administrateur" });
+    }
+    if (!aiAvailable()) {
+      return reply.status(409).send({ error: "ai_unconfigured", message: "ANTHROPIC_API_KEY absente : ajoutez-la dans deploy/.env puis relancez l'API (up -d api)." });
+    }
+    const t0 = Date.now();
+    try {
+      const text = await callClaudeText({
+        model: env.AI_MODEL, max_tokens: 32,
+        system: [{ type: "text", text: "Réponds exactement : OK" }],
+        messages: [{ role: "user", content: "ping" }],
+      });
+      await audit({ actorId: req.principal!.id, action: "setting.ai_test", targetType: "Setting", targetId: "ai", ip: req.ip, meta: { ok: true, model: env.AI_MODEL, latencyMs: Date.now() - t0 } });
+      return { data: { ok: true, model: env.AI_MODEL, latencyMs: Date.now() - t0, reply: text.trim().slice(0, 40) } };
+    } catch (e) {
+      await audit({ actorId: req.principal!.id, action: "setting.ai_test", targetType: "Setting", targetId: "ai", ip: req.ip, meta: { ok: false, model: env.AI_MODEL } });
+      return reply.status(502).send({ error: "ai_test_failed", message: `Échec de l'appel au modèle ${env.AI_MODEL} : ${e instanceof Error ? e.message : "erreur inconnue"}` });
+    }
   });
 }
