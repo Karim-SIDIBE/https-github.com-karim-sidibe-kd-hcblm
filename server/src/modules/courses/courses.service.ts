@@ -8,6 +8,7 @@
 import { CourseStatus, type CourseLevel, type Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { formatAmount, type Currency } from "../../domain/payments/money.js";
+import { competencyLabels } from "../../domain/competencies.js";
 import { validateShape, validatePolicy } from "../../domain/validation.js";
 import type { CourseContent } from "../../domain/content-model.js";
 import { randomBytes } from "node:crypto";
@@ -85,7 +86,7 @@ export async function listCatalog(userId: string, memberOrgIds: string[]) {
   const courses = await prisma.course.findMany({
     where: { OR: [{ organizationId: null }, { organizationId: { in: memberOrgIds } }], versions: { some: { status: "PUBLISHED" } } },
     orderBy: { updatedAt: "desc" },
-    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true } } },
+    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true, content: true } } },
   });
   const enrolled = new Set((await prisma.enrollment.findMany({ where: { userId }, select: { courseId: true } })).map((e) => e.courseId));
   // Cours payants (spec paiement) : produit actif + prix actifs → le catalogue
@@ -110,6 +111,8 @@ export async function listCatalog(userId: string, memberOrgIds: string[]) {
     .filter((c) => c.versions.length > 0)
     .map((c) => ({
       courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level as string, enrolled: enrolled.has(c.id),
+      // Surfaces apprenant : libellés de compétences, jamais les codes (interne/SIRH).
+      competencies: competencyLabels(c.versions[0]!.content),
       paid: paywalls.has(c.id), entitled: !paywalls.has(c.id) || entitled.has(c.id), prices: paywalls.get(c.id) ?? [],
     }));
 }

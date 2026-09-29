@@ -39,6 +39,9 @@ export type CredentialPageData = {
   revocationReason: string | null;
   /** VC-JWT signature verified against the platform's public keys. */
   signatureValid: boolean;
+  /** Libellés des compétences attestées (jamais les codes — réservés au JSON
+   *  Open Badge `targetCode` pour les SIRH). Absent/vide → ligne omise. */
+  competencies?: string[];
 };
 
 const esc = (s: string) =>
@@ -134,6 +137,7 @@ export function renderCredentialPage(d: CredentialPageData): string {
         ${row("Titulaire", esc(d.holderName))}
         ${row("Certification", esc(d.achievementName))}
         ${row("Parcours", esc(d.courseTitle))}
+        ${d.competencies?.length ? row("Compétences attestées", d.competencies.map((c) => esc(c)).join("<br>")) : ""}
         ${row("Niveau", `Niveau ${d.level}`)}
         ${row("Délivré le", esc(date))}
         ${d.expiresOn ? row("Valable jusqu'au", esc(d.expiresOn.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }))) : ""}

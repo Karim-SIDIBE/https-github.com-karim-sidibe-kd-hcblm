@@ -169,6 +169,14 @@ export function Course({ eid }: { eid: string }) {
   return (
     <div className="stack">
       <div><div className="eyebrow">{t("course.title")}</div><h1 style={{ marginTop: 6 }}>{bundle.course.title}</h1></div>
+      {/* Compétences visées : les LIBELLÉS du référentiel — jamais les codes
+          D1.C1 (usage interne / SIRH), qui ne parlent pas à l'apprenant. */}
+      {(bundle.content.competencies?.length ?? 0) > 0 && (
+        <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+          <span className="meta" style={{ alignSelf: "center" }}>{t("skills.title")} :</span>
+          {bundle.content.competencies.map((c) => <span key={c.code} className="chip">{c.label}</span>)}
+        </div>
+      )}
       {msg && <p className="meta">{msg}</p>}
 
       {cohortName && (

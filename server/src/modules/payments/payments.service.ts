@@ -17,6 +17,7 @@ import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { isStaff } from "../../domain/auth/permissions.js";
 import { formatAmount, isCurrency, toAmountMajor, toAmountMinor, type Currency } from "../../domain/payments/money.js";
+import { competencyLabels } from "../../domain/competencies.js";
 import { ProviderError, type ProviderKey } from "../../lib/payments/provider.js";
 import { PROVIDERS, PROVIDER_ENUM, getActiveProvider } from "../../lib/payments/registry.js";
 import { JEKO_LINK_PREFIX, createJekoPaymentLink, fetchJekoPaymentLink, linkIdOf, linkRefOf } from "../../lib/payments/jeko.js";
@@ -722,12 +723,12 @@ export async function guestCourseInfo(idOrSlug: string) {
   const paywall = await coursePaywall(courseId);
   const [version, course] = await Promise.all([
     prisma.courseVersion.findFirst({
-      where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { title: true, level: true },
+      where: { courseId, status: "PUBLISHED" }, orderBy: { version: "desc" }, select: { title: true, level: true, content: true },
     }),
     prisma.course.findUnique({ where: { id: courseId }, select: { slug: true } }),
   ]);
   if (!version) throw new PaymentError(404, "course_not_found", "Parcours introuvable");
-  return { courseId, slug: course?.slug ?? null, title: version.title, level: version.level, ...paywall, checkoutMethods: paywall.paid ? await activeCheckoutMethods() : null };
+  return { courseId, slug: course?.slug ?? null, title: version.title, level: version.level, competencies: competencyLabels(version.content), ...paywall, checkoutMethods: paywall.paid ? await activeCheckoutMethods() : null };
 }
 
 /** Catalogue PUBLIC (site vitrine / achat sans compte, PAY-2ter) : les cours
@@ -738,7 +739,7 @@ export async function guestCatalog() {
   const courses = await prisma.course.findMany({
     where: { organizationId: null, versions: { some: { status: "PUBLISHED" } } },
     orderBy: { updatedAt: "desc" },
-    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true } } },
+    include: { versions: { where: { status: "PUBLISHED" }, orderBy: { version: "desc" }, take: 1, select: { title: true, level: true, content: true } } },
   });
   const products = await prisma.product.findMany({
     where: { courseId: { in: courses.map((c) => c.id) }, active: true },
@@ -750,6 +751,8 @@ export async function guestCatalog() {
     .filter((c) => c.versions.length > 0)
     .map((c) => ({
       courseId: c.id, slug: c.slug, title: c.versions[0]!.title, level: c.versions[0]!.level,
+      // Vitrine / achat sans compte : libellés de compétences (jamais les codes).
+      competencies: competencyLabels(c.versions[0]!.content),
       paid: paywalls.has(c.id), prices: paywalls.get(c.id) ?? [],
     }));
 }

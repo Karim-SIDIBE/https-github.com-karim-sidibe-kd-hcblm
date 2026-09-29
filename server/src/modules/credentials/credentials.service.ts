@@ -22,6 +22,17 @@ import { readFileSync, existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { badgeTypeForBlock } from "../../domain/engine/badges.js";
 import { f2fShape } from "../../domain/engine/f2f.js";
+import { competencyLabels } from "../../domain/competencies.js";
+
+/** Libellés des compétences depuis l'alignement Open Badge de l'assertion
+ *  stockée (targetName = libellé ; targetCode reste réservé aux SIRH).
+ *  null si l'assertion n'en porte pas — l'appelant a alors un repli. */
+function alignmentLabels(a: { badge?: { alignment?: { targetName?: string }[] } }): string[] | null {
+  const list = a.badge?.alignment;
+  if (!Array.isArray(list) || list.length === 0) return null;
+  const out = list.map((x) => (typeof x?.targetName === "string" ? x.targetName.trim() : "")).filter(Boolean);
+  return out.length ? out : null;
+}
 import type { CourseContent, Block } from "../../domain/content-model.js";
 
 export class CredentialError extends Error {
@@ -312,7 +323,7 @@ export async function verificationData(id: string) {
       signatureValid: !("error" in v),
     };
   }
-  const a = c.assertion as { badge?: { name?: string } };
+  const a = c.assertion as { badge?: { name?: string; alignment?: { targetName?: string }[] } };
   const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3 } | null;
   const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
   const v = await verify({ credentialId: id });
@@ -323,6 +334,9 @@ export async function verificationData(id: string) {
     holderName: c.enrollment.user.name,
     courseTitle: c.enrollment.courseVersion.title,
     achievementName: a.badge?.name ?? c.achievementType,
+    // Page humaine : libellés des compétences attestées (alignement du badge,
+    // sans les codes) — repli sur les compétences du contenu de cours.
+    competencies: alignmentLabels(a) ?? competencyLabels(content),
     level,
     issuedOn: c.issuedAt,
     expiresOn: c.expiresAt,
@@ -356,7 +370,7 @@ export async function certificate(id: string): Promise<Buffer> {
       templateDir: "assets/certificates/face2face",
     });
   }
-  const a = c.assertion as { badge?: { name?: string } };
+  const a = c.assertion as { badge?: { name?: string; alignment?: { targetName?: string }[] } };
   // Level selects the branded template (N1/N2/N3); domain feeds the paragraph.
   const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3; domain?: { label?: string } } | null;
   const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
@@ -365,6 +379,8 @@ export async function certificate(id: string): Promise<Buffer> {
     achievementName: a.badge?.name ?? c.achievementType,
     courseTitle: c.enrollment.courseVersion.title,
     domainLabel: content?.domain?.label ?? "",
+    // Certificat : libellés des compétences (jamais les codes — usage SIRH).
+    competencies: alignmentLabels(a) ?? competencyLabels(content),
     level,
     licenseId: c.id,
     issuedOn: c.issuedAt,

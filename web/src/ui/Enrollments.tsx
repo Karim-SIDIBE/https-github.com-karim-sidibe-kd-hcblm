@@ -105,6 +105,11 @@ export function Enrollments() {
                   <h3 style={{ margin: 0 }}>{c.title}</h3>
                   <span className="chip">{levelLabel(c.level)}</span>
                 </div>
+                {(c.competencies?.length ?? 0) > 0 && (
+                  <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+                    {c.competencies!.map((s) => <span key={s} className="chip">{s}</span>)}
+                  </div>
+                )}
                 {c.paid && !c.entitled && c.prices?.[0] && <p className="muted" style={{ margin: "6px 0 0" }}>💳 {c.prices[0].display}</p>}
                 {/* Droit déjà détenu (achat, cadeau, licence) → « Enrôler » : le
                     client ne doit JAMAIS revoir « Acheter » sur un cours acquis. */}

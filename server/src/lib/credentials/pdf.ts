@@ -33,6 +33,9 @@ export type CertificateData = {
   issuedOn: Date;
   /** Échéance de validité (A3 : délivrance + 3 ans). Absente → aucune mention. */
   expiresOn?: Date | null;
+  /** Libellés des compétences attestées (tâche UX : jamais les codes D1.C1 —
+   *  ils restent dans l'Open Badge `targetCode` pour les SIRH). Vide → rien. */
+  competencies?: string[];
   verifyUrl: string;
   /** Test hook: override the template directory (defaults to assets/certificates). */
   templateDir?: string;
@@ -138,6 +141,31 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     const lineH = pSize * 1.55;
     lines.forEach((runs, i) => centeredRuns(doc, f, runs, H * 0.505 + i * lineH, pSize, "#1c1c1c"));
 
+    // Compétences attestées — bloc discret centré SOUS le paragraphe
+    // d'attestation (libellés du référentiel, jamais les codes).
+    if (d.competencies?.length) {
+      // Zone sûre : sous le paragraphe (il finit vers 0.63 H), au-dessus de la
+      // zone signature/date (≈0.70 H) et à droite du QR (il finit vers
+      // 0.14 W) — vérifié visuellement sur le gabarit N1. Une ligne si elle
+      // tient, sinon deux lignes centrées (fitSize ne tronque pas : sous le
+      // minimum, le texte déborderait).
+      const maxW = W * 0.62;
+      const lineW = (runs: Run[], size: number) =>
+        runs.reduce((s, r) => s + doc.font(r.bold ? f.bold : f.regular).fontSize(size).widthOfString(r.text), 0);
+      const one: Run[] = [{ text: "Compétences attestées : " }, { text: d.competencies.join(" · "), bold: true }];
+      let cSize = fitSize(doc, f, [one], 9, 7, maxW);
+      if (lineW(one, cSize) <= maxW) {
+        centeredRuns(doc, f, one, H * 0.66, cSize, "#444444");
+      } else {
+        const mid = Math.ceil(d.competencies.length / 2);
+        const l1: Run[] = [{ text: "Compétences attestées : " }, { text: d.competencies.slice(0, mid).join(" · "), bold: true }];
+        const l2: Run[] = [{ text: d.competencies.slice(mid).join(" · "), bold: true }];
+        cSize = fitSize(doc, f, [l1, l2], 8.5, 6.5, maxW);
+        centeredRuns(doc, f, l1, H * 0.652, cSize, "#444444");
+        centeredRuns(doc, f, l2, H * 0.652 + cSize * 1.45, cSize, "#444444");
+      }
+    }
+
     // Date + licence values, centered over the template's ruled lines.
     doc.font(f.bold).fontSize(13.5).fillColor("#111");
     doc.text(dateStr, W * style.dateX - doc.widthOfString(dateStr) / 2, H * 0.765, { lineBreak: false });
@@ -172,6 +200,10 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     doc.moveDown(0.8).font(f.regular).fontSize(13).fillColor("#333")
       .text(`Formation « ${d.courseTitle} » — domaine « ${d.domainLabel || "—"} » (niveau ${d.level})`, { width: W - 100, align: "center" });
     doc.moveDown(0.3).fontSize(12).fillColor("#555").text(d.achievementName, { width: W - 100, align: "center" });
+    if (d.competencies?.length) {
+      doc.moveDown(0.4).fontSize(10).fillColor("#444")
+        .text(`Compétences attestées : ${d.competencies.join(" · ")}`, 50, doc.y, { width: W - 100, align: "center" });
+    }
     doc.moveDown(1).fontSize(11).fillColor("#666").text(`Date de délivrance : ${dateStr}`, { width: W - 100, align: "center" });
     if (d.expiresOn) doc.moveDown(0.2).text(`Valable jusqu'au ${d.expiresOn.toLocaleDateString("fr-FR")}`, { width: W - 100, align: "center" });
     doc.moveDown(0.2).text(`N° de licence : ${d.licenseId}`, { width: W - 100, align: "center" });

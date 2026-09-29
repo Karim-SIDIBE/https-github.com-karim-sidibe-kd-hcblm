@@ -50,6 +50,11 @@ export function GuestCatalog() {
             <h3 style={{ margin: 0 }}>{c.title}</h3>
             <span className="chip">{levelLabel(c.level)}</span>
           </div>
+          {(c.competencies?.length ?? 0) > 0 && (
+            <div className="row" style={{ gap: 6, flexWrap: "wrap", marginTop: 8 }}>
+              {c.competencies!.map((s) => <span key={s} className="chip">{s}</span>)}
+            </div>
+          )}
           {c.paid && c.prices[0] && <p className="muted" style={{ margin: "6px 0 0" }}>💳 {c.prices[0].display}</p>}
           {c.paid
             ? <button className="block" style={{ marginTop: 10 }} onClick={() => navigate(routes.purchase(c.slug || c.courseId))}>{t("pay.buy")}</button>
