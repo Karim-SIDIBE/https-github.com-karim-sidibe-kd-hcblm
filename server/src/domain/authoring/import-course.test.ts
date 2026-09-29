@@ -305,6 +305,21 @@ test("garanties de barrière : jetons PAM réinjectés + carte de rappel + docum
   assert.deepEqual(policy.issues.filter((i) => i.level === "error"), []);
 });
 
+test("unités auditables dérivées : quiz = micro-session, scénarios/terrain = activités longues, journal = 1 longue + 6 micro-tâches", () => {
+  const { content } = importCourseFromElements(fixture(), scaffold());
+  const units = (i: number) => (content.blocks[i] as { units?: { type: string; children?: { type: string }[] }[] }).units ?? [];
+  const count = (i: number) => units(i).reduce((a, u) => {
+    a[u.type] = (a[u.type] ?? 0) + 1;
+    for (const ch of u.children ?? []) a[ch.type] = (a[ch.type] ?? 0) + 1;
+    return a;
+  }, {} as Record<string, number>);
+  assert.deepEqual(count(0), { "micro-session": 1 }); // Bloc 0 = une micro-session unique
+  assert.deepEqual(count(1), { "micro-session": 3 }); // diag + MS 1.1 + cas (25 min ⇒ micro-session)
+  assert.deepEqual(count(2), { "micro-session": 1, "long-activity": 2 }); // MS 2.1 + scénarios + terrain
+  assert.deepEqual(count(3), { "micro-session": 3 }); // MS 3.1 (auto-éval embarquée) + plan + final
+  assert.deepEqual(count(4), { "micro-session": 4, "long-activity": 1, "micro-task": 6 }); // sections + journal
+});
+
 test("couverture : l'essentiel de la fixture est réparti, le reste part en notes par bloc", () => {
   const r = importCourseFromElements(fixture(), scaffold());
   assert.ok(r.coverage.mappedPct >= 85, `couverture ${r.coverage.mappedPct} % < 85 %`);

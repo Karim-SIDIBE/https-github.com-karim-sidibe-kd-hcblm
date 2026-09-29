@@ -16,20 +16,34 @@ type Content = {
 const field: React.CSSProperties = { width: "100%", padding: "9px 11px", border: "1px solid var(--line-strong)", borderRadius: 8, fontFamily: "inherit", fontSize: 13.5 };
 const lbl: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 700, color: "var(--fg-1)", margin: "0 0 5px" };
 
-export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
+/** Message affiché après un import Word (couverture + ajustements). */
+export function importResultMessage(r: { paragraphs: number; aiGenerated: boolean; coverage?: { mappedPct: number; mappedElements: number; totalElements: number; fixups: string[] } }): string {
+  const cov = r.coverage;
+  if (!cov) {
+    return r.aiGenerated
+      ? `Document importé (${r.paragraphs} paragraphes) — réparti par l'IA. Relisez chaque bloc, ajustez et liez les vidéos.`
+      : `Document importé (${r.paragraphs} paragraphes). Titre, objectif et titres de blocs pré-remplis ; le texte de chaque bloc est déposé dans « Texte importé » à répartir. Liez ensuite les vidéos.`;
+  }
+  const fixups = cov.fixups?.length ? ` ${cov.fixups.length} ajustement(s) automatique(s) — détail dans le Journal d'audit et les jetons {{moment_ancrage}} à relire.` : "";
+  return `Document importé : ${cov.mappedPct} % du contenu réparti automatiquement (${cov.mappedElements}/${cov.totalElements} éléments — blocs, micro-sessions, vidéos, quiz, cas, journal…). Le reste est déposé dans « Texte importé » de chaque bloc. Relisez, liez les vidéos, puis validez.${fixups}`;
+}
+
+export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initialNotes, initialMsg, initialTab }: {
   initial: Content; courseId?: string; isNew: boolean; onClose: () => void; onSaved: () => void;
+  /** Restes d'un import Word fait en amont (page Cours) + message de couverture. */
+  initialNotes?: Record<number, string>; initialMsg?: string; initialTab?: "form" | "content" | "json";
 }) {
   const [content, setContent] = useState<Content>(() => structuredClone(initial));
   const [slug, setSlug] = useState("");
-  const [tab, setTab] = useState<"form" | "content" | "json">("form");
+  const [tab, setTab] = useState<"form" | "content" | "json">(initialTab ?? "form");
   const [preview, setPreview] = useState(false);
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(initial, null, 2));
   const [jsonErr, setJsonErr] = useState<string | null>(null);
   const [result, setResult] = useState<ValidateResult | null>(null);
   const [busy, setBusy] = useState<string>("");
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<string | null>(initialMsg ?? null);
   const [versionId, setVersionId] = useState<string | null>(null);
-  const [blockNotes, setBlockNotes] = useState<Record<number, string>>({});
+  const [blockNotes, setBlockNotes] = useState<Record<number, string>>(() => initialNotes ?? {});
 
   async function importDoc(file: File) {
     setBusy("import"); setMsg(null); setResult(null);
@@ -38,13 +52,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
       setContent(r.content);
       setBlockNotes(r.blockNotes ?? {});
       setTab("content");
-      const cov = r.coverage;
-      const fixups = cov?.fixups?.length ? ` ${cov.fixups.length} ajustement(s) automatique(s) — détail dans le Journal d'audit et les jetons {{moment_ancrage}} à relire.` : "";
-      setMsg(cov
-        ? `Document importé : ${cov.mappedPct} % du contenu réparti automatiquement (${cov.mappedElements}/${cov.totalElements} éléments — blocs, micro-sessions, vidéos, quiz, cas, journal…). Le reste est déposé dans « Texte importé » de chaque bloc. Relisez, liez les vidéos, puis validez.${fixups}`
-        : r.aiGenerated
-          ? `Document importé (${r.paragraphs} paragraphes) — réparti par l'IA. Relisez chaque bloc, ajustez et liez les vidéos.`
-          : `Document importé (${r.paragraphs} paragraphes). Titre, objectif et titres de blocs pré-remplis ; le texte de chaque bloc est déposé dans « Texte importé » à répartir. Liez ensuite les vidéos.`);
+      setMsg(importResultMessage(r));
     } catch (e: any) { setMsg(e?.message || "Import échoué"); } finally { setBusy(""); }
   }
   function exportJson() {
@@ -64,8 +72,10 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
   const set = (fn: (c: Content) => void) => setContent((prev) => { const n = structuredClone(prev); fn(n); return n; });
 
   const b4 = content.blocks.find((b) => b.type === "CERTIFICATION");
-  const rubric = b4?.payload?.rubric as { criteria: { label: string; weightPoints: number }[]; threshold: number } | undefined;
+  type Criterion = { label: string; weightPoints: number; competencyCode?: string; minPoints?: number; origin?: "annexe" | "socle" };
+  const rubric = b4?.payload?.rubric as { criteria: Criterion[]; threshold: number } | undefined;
   const weightSum = (rubric?.criteria ?? []).reduce((s, c) => s + (Number(c.weightPoints) || 0), 0);
+  const rub = (c: Content) => c.blocks.find((x) => x.type === "CERTIFICATION")!.payload.rubric as { criteria: Criterion[]; threshold: number };
 
   function applyJson() {
     try { const parsed = JSON.parse(jsonDraft); setContent(parsed); setJsonErr(null); setTab("form"); }
@@ -196,6 +206,8 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
                 <div style={{ flex: 1 }}><label style={lbl}>Niveau</label><select style={field} value={content.level} onChange={(e) => set((c) => { c.level = Number(e.target.value); })}><option value={1}>Niveau 1</option><option value={2}>Niveau 2</option><option value={3}>Niveau 3</option></select></div>
                 <div style={{ flex: 1 }}><label style={lbl}>Seuil quiz final (%)</label><input style={field} type="number" min={0} max={100} value={content.passThreshold} onChange={(e) => set((c) => { c.passThreshold = Number(e.target.value); })} /></div>
               </div>
+              <div><label style={lbl}>Titre du certificat <span className="muted" style={{ fontWeight: 400 }}>(imprimé sur le certificat et le badge)</span></label>
+                <input style={field} value={(content as any).certificate?.title ?? ""} onChange={(e) => set((c) => { ((c as any).certificate ??= { title: "", openBadges2: true }).title = e.target.value; })} /></div>
               <div>
                 <label style={lbl}>Domaine de compétence <span className="muted" style={{ fontWeight: 400 }}>(référentiel KOMPETENCES AFRICA)</span></label>
                 <select style={field} value={content.domain?.code ?? ""} onChange={(e) => set((c) => {
@@ -278,13 +290,27 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
               <div className="card">
                 <div className="card-h"><h3>Grille Bloc 4</h3><span className={`pill ${weightSum === 100 ? "pill--green" : "pill--red"}`}>Somme : {weightSum}/100</span></div>
                 <div className="card-b" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                  <div className="row" style={{ gap: 8, fontSize: 11, fontWeight: 700, color: "var(--fg-2)" }}>
+                    <span style={{ flex: 1 }}>Critère</span><span style={{ width: 82 }}>Code</span><span style={{ width: 62 }}>Points</span><span style={{ width: 62 }} title="Minimum non compensable (socle §2.3) — vide : aucun">Min.</span><span style={{ width: 92 }}>Origine</span><span style={{ width: 30 }} />
+                  </div>
                   {rubric.criteria.map((cr, j) => (
                     <div className="row" key={j} style={{ gap: 8 }}>
-                      <input style={{ ...field, flex: 1 }} value={cr.label} onChange={(e) => set((c) => { c.blocks.find((x) => x.type === "CERTIFICATION")!.payload.rubric.criteria[j].label = e.target.value; })} />
-                      <input style={{ ...field, width: 70 }} type="number" value={cr.weightPoints} onChange={(e) => set((c) => { c.blocks.find((x) => x.type === "CERTIFICATION")!.payload.rubric.criteria[j].weightPoints = Number(e.target.value); })} />
+                      <input style={{ ...field, flex: 1 }} value={cr.label} onChange={(e) => set((c) => { rub(c).criteria[j].label = e.target.value; })} />
+                      <input style={{ ...field, width: 82 }} value={cr.competencyCode ?? ""} placeholder="D1.C1" onChange={(e) => set((c) => { rub(c).criteria[j].competencyCode = e.target.value; })} />
+                      <input style={{ ...field, width: 62 }} type="number" min={1} value={cr.weightPoints} onChange={(e) => set((c) => { rub(c).criteria[j].weightPoints = Number(e.target.value); })} />
+                      <input style={{ ...field, width: 62 }} type="number" min={0} value={cr.minPoints ?? ""} placeholder="—" onChange={(e) => set((c) => { const x = rub(c).criteria[j]; if (e.target.value === "") delete x.minPoints; else x.minPoints = Number(e.target.value); })} />
+                      <select style={{ ...field, width: 92 }} value={cr.origin ?? ""} onChange={(e) => set((c) => { const x = rub(c).criteria[j]; if (!e.target.value) delete x.origin; else x.origin = e.target.value as "annexe" | "socle"; })}>
+                        <option value="">—</option><option value="annexe">annexe</option><option value="socle">socle</option>
+                      </select>
+                      <button type="button" className="btn btn--sm" disabled={rubric.criteria.length <= 1} onClick={() => set((c) => { rub(c).criteria.splice(j, 1); })}>✕</button>
                     </div>
                   ))}
-                  <span className="muted" style={{ fontSize: 11.5 }}>La somme des points doit faire 100 (règle de la barrière de publication).</span>
+                  <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                    <button type="button" className="btn btn--sm" onClick={() => set((c) => { rub(c).criteria.push({ label: "", weightPoints: 10 }); })}>+ Critère</button>
+                    <span style={{ marginLeft: "auto" }} className="muted">Seuil :</span>
+                    <input style={{ ...field, width: 70 }} type="number" min={0} max={100} value={rubric.threshold} onChange={(e) => set((c) => { rub(c).threshold = Number(e.target.value); })} title="70 points à tous les niveaux (socle §1)" />
+                  </div>
+                  <span className="muted" style={{ fontSize: 11.5 }}>La somme des points doit faire 100 et le seuil vaut 70 à tous les niveaux (socle §1) — règles de la barrière. Bandes de notation détaillées : onglet « JSON (avancé) ».</span>
                 </div>
               </div>
             )}
