@@ -13,9 +13,10 @@ type Rubric = { criteria: { label: string; weightPoints: number; minPoints?: num
 // côté serveur) : en dessous, ni preuve citable ni bande haute possibles.
 const SECTION_MIN_WORDS = 30;
 const wordsOf = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
-// Affichage apprenant (P7) : les codes du référentiel (S1, S2…) en tête des
-// libellés de critères sont retirés — la compétence elle-même suffit.
-const critLabel = (l: string) => l.replace(/^S\d+\s*[—-]\s*/, "");
+// Affichage apprenant (P7 + règle UX) : les codes du référentiel (S1, S2…,
+// D1.C1…) en tête des libellés de critères sont retirés — la compétence
+// elle-même suffit ; les codes restent un usage interne / SIRH.
+const critLabel = (l: string) => l.replace(/^(?:S\d+|D\d+\.C\d+)\s*[—:-]\s*/, "");
 type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
 type ProjectState = {
   sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[];

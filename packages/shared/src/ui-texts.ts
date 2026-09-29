@@ -78,6 +78,9 @@ const fr: UiDict = {
   "gc.empty": "Aucun parcours publié pour le moment.",
   "gc.freeNote": "Accès libre — connectez-vous pour vous inscrire.",
   "gc.haveAccount": "Déjà un compte ?",
+  // Compétences : toujours les LIBELLÉS côté apprenant (les codes D1.C1…
+  // restent un usage interne / SIRH — règle UX posée par le client).
+  "skills.title": "Compétences visées",
   "enr.enrollOwned": "Enrôler → (accès déjà acquis)",
   "login.browseCatalog": "🛒 Découvrir les parcours et acheter sans compte",
 
@@ -428,6 +431,7 @@ const en: UiDict = {
   "gc.empty": "No published course yet.",
   "gc.freeNote": "Free access — sign in to enrol.",
   "gc.haveAccount": "Already have an account?",
+  "skills.title": "Skills you will build",
   "enr.enrollOwned": "Enrol → (access already owned)",
   "login.browseCatalog": "🛒 Browse the courses and buy without an account",
 

@@ -15,13 +15,13 @@ export type EnrollmentSummary = {
   startedAt: string;
 };
 
-export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; paid?: boolean; entitled?: boolean; prices?: { currency: string; display: string }[] };
+export type CatalogItem = { courseId: string; slug: string; title: string; level: string; enrolled: boolean; competencies?: string[]; paid?: boolean; entitled?: boolean; prices?: { currency: string; display: string }[] };
 export type CourseCatalog = { paid: boolean; entitled: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[]; checkoutMethods?: string[] | null };
 export type PayOrder = { id: string; status: "PENDING" | "PAID" | "FAILED" | "CANCELLED" | "REFUNDED"; amountMinor: number; currency: string; display?: string; product?: { title: string; courseId?: string | null } };
 export type CheckoutInfo = { paymentId: string; provider: string; paymentUrl: string | null; instructions: string | null };
-export type GuestCourseInfo = { courseId: string; slug: string | null; title: string; level: string; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[]; checkoutMethods?: string[] | null };
+export type GuestCourseInfo = { courseId: string; slug: string | null; title: string; level: string; competencies?: string[]; paid: boolean; product: { id: string; title: string } | null; prices: { currency: string; amountMinor: number; display: string }[]; checkoutMethods?: string[] | null };
 /** Entrée du catalogue public (PAY-2ter) — consultable sans compte. */
-export type GuestCatalogItem = { courseId: string; slug: string; title: string; level: string; paid: boolean; prices: { currency: string; display: string }[] };
+export type GuestCatalogItem = { courseId: string; slug: string; title: string; level: string; competencies?: string[]; paid: boolean; prices: { currency: string; display: string }[] };
 export type GuestCheckout =
   | { alreadyEntitled: true }
   | ({ alreadyEntitled: false; orderId: string; orderToken: string; display: string } & CheckoutInfo);

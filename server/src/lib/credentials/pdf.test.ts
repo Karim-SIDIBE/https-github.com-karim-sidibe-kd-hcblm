@@ -45,3 +45,19 @@ test("certificatePdf shrinks long names and formation titles to fit", async () =
   });
   assert.equal(buf.subarray(0, 5).toString(), "%PDF-");
 });
+
+test("certificatePdf renders the attested competency LABELS (never codes)", async () => {
+  const dir = await mkdtemp(join(tmpdir(), "cert-comp-"));
+  await writeFile(join(dir, "niveau-1.png"), await QRCode.toBuffer("bg", { width: 200 }));
+  const competencies = [
+    "Clarté et structuration du message",
+    "Écoute active et reformulation",
+    "Communication écrite professionnelle",
+    "Ancrage des compétences en contexte réel",
+  ];
+  for (const templateDir of [dir, await mkdtemp(join(tmpdir(), "cert-comp-fb-"))]) {
+    const buf = await certificatePdf({ ...data, templateDir, competencies });
+    assert.equal(buf.subarray(0, 5).toString(), "%PDF-");
+    assert.ok(buf.length > 2000);
+  }
+});

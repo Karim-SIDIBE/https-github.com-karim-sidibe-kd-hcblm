@@ -200,6 +200,12 @@ function GuestPurchase({ courseId }: { courseId: string }) {
       <h1>{t("pay.title")}</h1>
       <article className="card">
         <h2 style={{ marginTop: 0 }}>{info.product.title}</h2>
+        {(info.competencies?.length ?? 0) > 0 && (
+          <div className="row" style={{ gap: 6, flexWrap: "wrap", margin: "0 0 10px" }}>
+            <span className="muted" style={{ alignSelf: "center" }}>{t("skills.title")} :</span>
+            {info.competencies!.map((s) => <span key={s} className="chip">{s}</span>)}
+          </div>
+        )}
         <CurrencyPicker offered={offered} active={active} onPick={pick} label={t("pay.currency")} />
         <p style={{ fontSize: 26, fontWeight: 800, margin: "6px 0" }}>{price.display}</p>
         <p className="muted" style={{ marginTop: 0 }}>{t("pay.oneTime")}</p>
