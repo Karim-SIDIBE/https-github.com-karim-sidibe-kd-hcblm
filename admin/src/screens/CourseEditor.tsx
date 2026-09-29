@@ -137,7 +137,8 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initi
   }, [result]);
   const errors = issues.filter((i) => i.level === "error");
   const warnings = issues.filter((i) => i.level === "warning");
-  const conform = result != null && result.shape.ok && (result.policy?.ok ?? false);
+  // NB : le serveur nomme ce verdict `publishable` (domain/validation.ts).
+  const conform = result != null && result.shape.ok && (result.policy?.publishable ?? false);
 
   return (
     <div className="content">
