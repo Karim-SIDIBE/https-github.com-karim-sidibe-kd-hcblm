@@ -182,7 +182,8 @@ export type CaptionsStatus = { state: "idle" | "running" | "done" | "error"; err
 export type Seats = { seats: number; used: number; available: number };
 export type ReportSchedule = { id: string; courseId: string; recipients: string[]; frequency: "WEEKLY" | "MONTHLY"; format: string; active: boolean; lastSentAt: string | null; createdAt: string };
 export type BankQuestion = { id: string; question: any; subArea: string; level: string; status: string; origin: string; note: string; sourceCourseId: string | null; createdAt: string };
-export type ImportDocResult = { content: any; blockNotes: Record<number, string>; aiGenerated: boolean; provider: string; paragraphs: number };
+export type ImportCoverage = { totalElements: number; mappedElements: number; mappedPct: number; fixups: string[]; perBlock: Record<number, { mapped: number; total: number }> };
+export type ImportDocResult = { content: any; blockNotes: Record<number, string>; coverage?: ImportCoverage; aiGenerated: boolean; provider: string; paragraphs: number };
 export type OrgMember = { id: string; orgRole: "OWNER" | "ADMIN" | "MEMBER"; createdAt: string; user: { id: string; name: string; email: string; role: string; disabledAt: string | null } };
 
 export type AuditRow = { id: string; actorId: string | null; action: string; targetType: string | null; targetId: string | null; ip: string | null; at: string; meta?: Record<string, unknown> | null; actor?: { name: string; email: string } | null };

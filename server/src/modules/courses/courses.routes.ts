@@ -114,7 +114,7 @@ export async function courseRoutes(app: FastifyInstance) {
       const scan = await scanUpload(buf, { filename: file.filename, mime: file.mimetype });
       if (!scan.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${scan.reason}` });
       const result = await importCourseFromDoc(buf);
-      await audit({ actorId: req.principal!.id, action: "course.import_doc", targetType: "Course", targetId: "draft", ip: req.ip, meta: { paragraphs: result.paragraphs, aiGenerated: result.aiGenerated } });
+      await audit({ actorId: req.principal!.id, action: "course.import_doc", targetType: "Course", targetId: "draft", ip: req.ip, meta: { paragraphs: result.paragraphs, aiGenerated: result.aiGenerated, mappedPct: result.coverage?.mappedPct ?? null } });
       return reply.send({ data: result });
     } catch (err) { return mapErr(reply, err); }
   });
