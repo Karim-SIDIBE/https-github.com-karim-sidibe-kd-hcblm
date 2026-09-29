@@ -1569,6 +1569,10 @@ model PaymentEvent {
   paymentId   String?
   processedAt DateTime?
   receivedAt  DateTime          @default(now())
+  /// Issue du traitement, pour l'historique en console : rejected (signature),
+  /// ignored (paiement introuvable), mismatch (montant/devise), settled,
+  /// already_settled, failed, pending, unknown. Null = événements antérieurs.
+  outcome     String?
 
   @@unique([provider, eventId])
   @@index([receivedAt])

@@ -95,6 +95,22 @@ test("verifyWebhook : secours de corrélation par le préfixe de la référence"
   assert.equal(v.providerRef, "cmpayXYZ");
 });
 
+test("verifyWebhook : TOUS les identifiants sont proposés en candidats, dans l'ordre", () => {
+  // Cas RÉEL (recette Wave, 29/09/2026) : un checkout redirect est réalisé chez
+  // Jèko comme un lien de paiement interne → le webhook porte un paymentLinkId
+  // inconnu de nous EN PLUS de l'id et de la référence de la demande. Retenir
+  // le premier identifiant présent (pl:…) laissait le paiement introuvable :
+  // le service doit pouvoir essayer les suivants.
+  const raw = JSON.stringify({
+    id: "8095879179", status: "success", paymentMethod: "wave",
+    amount: { amount: 10_000, currency: "XOF" },
+    transactionDetails: { id: "req-42", reference: "cmpayABC-1a2b", paymentLinkId: "ec60ca1c-bcc4" },
+  });
+  const v = jekoProvider.verifyWebhook({}, raw) as import("./provider.js").WebhookVerification;
+  assert.deepEqual(v.providerRefCandidates, ["pl:ec60ca1c-bcc4", "req-42", "cmpayABC"]);
+  assert.equal(v.providerRef, "pl:ec60ca1c-bcc4"); // compat : premier candidat
+});
+
 test("createCheckout : refuse proprement sans configuration (aucun réseau)", async () => {
   await assert.rejects(
     () => jekoProvider.createCheckout({ paymentId: "p1", amountMinor: 1000, currency: "XOF", description: "test", returnUrl: "https://x", method: "wave" }),

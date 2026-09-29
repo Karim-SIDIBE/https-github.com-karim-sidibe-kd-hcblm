@@ -425,6 +425,7 @@ async function notifyOrderPaid(orderId: string) {
       `• Référence de commande : ${order.id}`, "",
       connect, "",
       "Votre reçu PDF est disponible depuis la page de suivi de votre commande.",
+      "Si ce message est arrivé dans vos courriers indésirables (spams), marquez-le « non spam » pour bien recevoir les prochains.",
       `— ${env.BRAND_NAME}`,
     ].join("\n");
     await sendEmail(user.email, `Votre accès — ${order.product.title}`, body);
@@ -511,7 +512,7 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
   // l'événement légitime qui suivra (déni de service sur le règlement).
   if (!v.signatureOk) {
     const rejected = await prisma.paymentEvent.create({
-      data: { provider: providerId, eventId: `invalid:${crypto.randomUUID()}`, signatureOk: false, rawPayload: { claimedEventId: v.eventId, raw: rawBody.slice(0, 10_000) } },
+      data: { provider: providerId, eventId: `invalid:${crypto.randomUUID()}`, signatureOk: false, outcome: "rejected", rawPayload: { claimedEventId: v.eventId, raw: rawBody.slice(0, 10_000) } },
     });
     await audit({ action: "payment.webhook.rejected", targetType: "PaymentEvent", targetId: rejected.id, ip, meta: { provider: key, reason: "signature_invalid", claimedEventId: v.eventId } });
     return { httpStatus: 401, body: { error: "signature_invalid", message: "Signature du webhook invalide — événement journalisé et ignoré" } };
@@ -531,18 +532,26 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
 
   // La référence du webhook est notre id (CinetPay, Flutterwave, InTouch) OU la
   // référence fournisseur stockée au checkout (PayDunya : token de facture).
-  const payment = v.providerRef
-    ? await prisma.payment.findFirst({ where: { provider: providerId, OR: [{ id: v.providerRef }, { providerRef: v.providerRef }] }, include: { order: true } })
-    : null;
+  // Jèko peut en présenter PLUSIEURS (paymentLinkId + id/référence de la
+  // demande) : chaque candidat est essayé dans l'ordre, le premier qui
+  // correspond à un paiement réel en base l'emporte — recette Wave du
+  // 29/09/2026 : retenir le premier candidat PRÉSENT laissait le paiement
+  // introuvable et la commande en attente de constat manuel.
+  const candidates = v.providerRefCandidates?.length ? v.providerRefCandidates : (v.providerRef ? [v.providerRef] : []);
+  let payment = null as Awaited<ReturnType<typeof prisma.payment.findFirst<{ include: { order: true } }>>>;
+  for (const ref of candidates) {
+    payment = await prisma.payment.findFirst({ where: { provider: providerId, OR: [{ id: ref }, { providerRef: ref }] }, include: { order: true } });
+    if (payment) break;
+  }
   if (!payment) {
-    await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { processedAt: new Date() } });
-    await audit({ action: "payment.webhook.ignored", targetType: "PaymentEvent", targetId: eventRowId, ip, meta: { provider: key, providerRef: v.providerRef, reason: "payment_not_found" } });
+    await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { processedAt: new Date(), outcome: "ignored" } });
+    await audit({ action: "payment.webhook.ignored", targetType: "PaymentEvent", targetId: eventRowId, ip, meta: { provider: key, providerRefCandidates: candidates, reason: "payment_not_found" } });
     return { httpStatus: 202, body: { data: { ignored: true } } };
   }
 
   // Cohérence montant/devise annoncés vs figés sur le paiement.
   if ((v.amountMinor !== undefined && v.amountMinor !== payment.amountMinor) || (v.currency && v.currency !== payment.currency)) {
-    await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { paymentId: payment.id, processedAt: new Date() } });
+    await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { paymentId: payment.id, processedAt: new Date(), outcome: "mismatch" } });
     await audit({ action: "payment.webhook.mismatch", targetType: "Payment", targetId: payment.id, ip, meta: { provider: key, announced: { amountMinor: v.amountMinor, currency: v.currency }, expected: { amountMinor: payment.amountMinor, currency: payment.currency } } });
     return { httpStatus: 409, body: { error: "amount_mismatch", message: "Montant/devise du webhook incohérents avec le paiement — non réglé, à réconcilier" } };
   }
@@ -567,9 +576,37 @@ export async function handleProviderWebhook(key: ProviderKey, headers: Record<st
     if (others === 0) await prisma.order.updateMany({ where: { id: payment.orderId, status: "PENDING" }, data: { status: "FAILED" } });
   }
 
-  await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { paymentId: payment.id, processedAt: new Date() } });
+  await prisma.paymentEvent.update({ where: { id: eventRowId }, data: { paymentId: payment.id, processedAt: new Date(), outcome: result.toLowerCase() } });
   await audit({ action: "payment.webhook.processed", targetType: "Payment", targetId: payment.id, ip, meta: { provider: key, eventId: v.eventId, result } });
   return { httpStatus: 200, body: { data: { processed: true, result } } };
+}
+
+/** Historique des webhooks d'agrégateurs pour la console (Paiements) : chaque
+ *  événement reçu — réglé, ignoré, rejeté (signature), doublon… — avec la
+ *  commande touchée quand elle a été retrouvée. Les payloads bruts restent en
+ *  base (diagnostic) mais ne sortent PAS par l'API : ils peuvent contenir des
+ *  identifiants de payeur. */
+export async function listPaymentEvents(limit = 30) {
+  const events = await prisma.paymentEvent.findMany({ orderBy: { receivedAt: "desc" }, take: Math.min(Math.max(limit, 1), 100) });
+  const paymentIds = [...new Set(events.map((e) => e.paymentId).filter((x): x is string => Boolean(x)))];
+  const payments = paymentIds.length
+    ? await prisma.payment.findMany({ where: { id: { in: paymentIds } }, include: { order: { include: { product: { select: { title: true } } } } } })
+    : [];
+  const byId = new Map(payments.map((p) => [p.id, p]));
+  return events.map((e) => {
+    const p = e.paymentId ? byId.get(e.paymentId) : undefined;
+    return {
+      id: e.id,
+      provider: e.provider,
+      eventId: e.eventId,
+      signatureOk: e.signatureOk,
+      outcome: e.outcome,
+      receivedAt: e.receivedAt,
+      order: p?.order
+        ? { id: p.order.id, productTitle: p.order.product.title, status: p.order.status, display: formatAmount(p.order.amountMinor, p.order.currency as Currency) }
+        : null,
+    };
+  });
 }
 
 // --- catalogue & contrôle d'accès (PAY-2) --------------------------------------

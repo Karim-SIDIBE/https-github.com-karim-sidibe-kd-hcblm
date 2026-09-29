@@ -210,7 +210,8 @@ export type IntegrationsStatus = {
 };
 export type PayPrice = { id: string; currency: string; amountMinor: number; active: boolean; display?: string };
 export type PayProduct = { id: string; type: "COURSE" | "SEATS"; title: string; courseId: string | null; seatCount: number | null; active: boolean; prices: PayPrice[] };
-export type PayOrderRow = { id: string; status: string; quantity: number; amountMinor: number; currency: string; display: string; createdAt: string; product?: { title: string; type: string }; buyerUser?: { email: string; name: string } | null; buyerOrg?: { name: string } | null };
+export type PayOrderRow = { id: string; status: string; quantity: number; amountMinor: number; currency: string; display: string; createdAt: string; product?: { title: string; type: string }; buyerUser?: { email: string; name: string } | null; buyerOrg?: { name: string } | null; payments?: { provider: string; method?: string | null }[] };
+export type PayEventRow = { id: string; provider: string; eventId: string; signatureOk: boolean; outcome: string | null; receivedAt: string; order: { id: string; productTitle: string; status: string; display: string } | null };
 export type PayRecheck = { orderId: string; status: string; results: { paymentId: string; provider: string; check: string; action: string }[] };
 export type PayStats = {
   days: number; created: number; paid: number; pending: number; failed: number; conversionPct: number | null;
@@ -376,6 +377,7 @@ export const api = {
   payRevoke: (entitlementId: string) => req<{ id: string; revoked: boolean; seatsClamped: boolean }>("DELETE", `/payments/entitlements/${entitlementId}`),
   payProviders: () => req<{ key: string; available: boolean; active: boolean }[]>("GET", "/payments/providers"),
   payOrders: (status?: string) => req<PayOrderRow[]>("GET", `/payments/orders${status ? `?status=${status}` : ""}`),
+  payEvents: (limit = 30) => req<PayEventRow[]>("GET", `/payments/events?limit=${limit}`),
   // --- console paiements (PAY-4) ---
   payRecheck: (orderId: string) => req<PayRecheck>("POST", `/payments/orders/${orderId}/recheck`),
   payStats: (days: number) => req<PayStats>("GET", `/payments/stats?days=${days}`),

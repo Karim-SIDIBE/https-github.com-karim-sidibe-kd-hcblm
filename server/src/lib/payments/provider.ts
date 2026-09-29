@@ -41,6 +41,12 @@ export type WebhookVerification = {
   eventId: string;
   /** Référence de transaction retrouvée dans le payload (= notre paymentId). */
   providerRef: string | null;
+  /** Quand le payload porte PLUSIEURS identifiants possibles (Jèko : un
+   *  checkout redirect est réalisé en interne comme un lien de paiement, le
+   *  webhook présente paymentLinkId ET l'id/référence de la demande), le
+   *  service les essaie DANS L'ORDRE contre la base et retient le premier qui
+   *  correspond à un paiement réel. Absent → [providerRef] seul. */
+  providerRefCandidates?: string[];
   /** Statut annoncé par le webhook — TOUJOURS contre-vérifié par fetchStatus
    *  avant d'accorder quoi que ce soit (règle « le webhook fait foi, mais
    *  vérifié deux fois » ; pour CinetPay la doc l'exige explicitement). */
