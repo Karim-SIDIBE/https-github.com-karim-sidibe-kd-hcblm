@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, auth, courseTitle, type CourseFull } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
-import { CourseEditor, importResultMessage } from "./CourseEditor";
+import { CourseEditor, importResultMessage, slugify } from "./CourseEditor";
 import { modal } from "../lib/modal";
 
 const CAN_REVIEW = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
@@ -108,7 +108,7 @@ function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onE
 }
 
 type Mode = { t: "list" } | { t: "structure"; id: string }
-  | { t: "editor"; isNew: boolean; courseId?: string; initial: any; notes?: Record<number, string>; msg?: string; tab?: "form" | "content" };
+  | { t: "editor"; isNew: boolean; courseId?: string; initial: any; notes?: Record<number, string>; msg?: string; tab?: "form" | "content"; slug?: string };
 
 export function Cours({ ctx }: { ctx: CourseCtx }) {
   const [mode, setMode] = useState<Mode>({ t: "list" });
@@ -131,14 +131,14 @@ export function Cours({ ctx }: { ctx: CourseCtx }) {
     setImporting(true);
     try {
       const r = await api.importCourseDoc(file);
-      setMode({ t: "editor", isNew: true, initial: r.content, notes: r.blockNotes ?? {}, msg: importResultMessage(r), tab: "content" });
+      setMode({ t: "editor", isNew: true, initial: r.content, notes: r.blockNotes ?? {}, msg: importResultMessage(r), tab: "content", slug: slugify((r.content as { title?: string }).title ?? "") });
     } catch (e) {
       await modal.alert({ title: "Import échoué", body: e instanceof Error ? e.message : "Vérifiez le fichier (.docx) et réessayez." });
     } finally { setImporting(false); }
   }
 
   if (mode.t === "editor")
-    return <CourseEditor initial={mode.initial} courseId={mode.courseId} isNew={mode.isNew} initialNotes={mode.notes} initialMsg={mode.msg} initialTab={mode.tab} onClose={() => setMode({ t: "list" })} onSaved={() => { /* keep editor open to allow publish */ }} />;
+    return <CourseEditor initial={mode.initial} courseId={mode.courseId} isNew={mode.isNew} initialNotes={mode.notes} initialMsg={mode.msg} initialTab={mode.tab} initialSlug={mode.slug} onClose={() => setMode({ t: "list" })} onSaved={() => { /* keep editor open to allow publish */ }} />;
   if (mode.t === "structure")
     return <Structure id={mode.id} onBack={() => setMode({ t: "list" })} onEdit={(content, courseId) => setMode({ t: "editor", isNew: false, courseId, initial: content })} />;
 

@@ -16,6 +16,14 @@ type Content = {
 const field: React.CSSProperties = { width: "100%", padding: "9px 11px", border: "1px solid var(--line-strong)", borderRadius: 8, fontFamily: "inherit", fontSize: 13.5 };
 const lbl: React.CSSProperties = { display: "block", fontSize: 12, fontWeight: 700, color: "var(--fg-1)", margin: "0 0 5px" };
 
+/** Identifiant d'URL sûr dérivé d'un titre (minuscules, sans accents, tirets). */
+export function slugify(title: string): string {
+  return title
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "").slice(0, 80).replace(/-+$/, "");
+}
+
 /** Message affiché après un import Word (couverture + ajustements). */
 export function importResultMessage(r: { paragraphs: number; aiGenerated: boolean; coverage?: { mappedPct: number; mappedElements: number; totalElements: number; fixups: string[] } }): string {
   const cov = r.coverage;
@@ -28,13 +36,13 @@ export function importResultMessage(r: { paragraphs: number; aiGenerated: boolea
   return `Document importé : ${cov.mappedPct} % du contenu réparti automatiquement (${cov.mappedElements}/${cov.totalElements} éléments — blocs, micro-sessions, vidéos, quiz, cas, journal…). Le reste est déposé dans « Texte importé » de chaque bloc. Relisez, liez les vidéos, puis validez.${fixups}`;
 }
 
-export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initialNotes, initialMsg, initialTab }: {
+export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initialNotes, initialMsg, initialTab, initialSlug }: {
   initial: Content; courseId?: string; isNew: boolean; onClose: () => void; onSaved: () => void;
   /** Restes d'un import Word fait en amont (page Cours) + message de couverture. */
-  initialNotes?: Record<number, string>; initialMsg?: string; initialTab?: "form" | "content" | "json";
+  initialNotes?: Record<number, string>; initialMsg?: string; initialTab?: "form" | "content" | "json"; initialSlug?: string;
 }) {
   const [content, setContent] = useState<Content>(() => structuredClone(initial));
-  const [slug, setSlug] = useState("");
+  const [slug, setSlug] = useState(initialSlug ?? "");
   const [tab, setTab] = useState<"form" | "content" | "json">(initialTab ?? "form");
   const [preview, setPreview] = useState(false);
   const [jsonDraft, setJsonDraft] = useState(() => JSON.stringify(initial, null, 2));
@@ -52,6 +60,8 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initi
       setContent(r.content);
       setBlockNotes(r.blockNotes ?? {});
       setTab("content");
+      // Pré-remplir l'identifiant depuis le titre importé (modifiable ensuite).
+      if (isNew) setSlug((s) => (s.trim() ? s : slugify((r.content as Content).title || "")));
       setMsg(importResultMessage(r));
     } catch (e: any) { setMsg(e?.message || "Import échoué"); } finally { setBusy(""); }
   }
@@ -89,8 +99,15 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initi
   /** Persist current edits to a new DRAFT version; returns its id (or null). */
   async function saveDraft(): Promise<string | null> {
     if (isNew) {
-      if (!slug.trim()) { setMsg("Indiquez un identifiant (slug) pour le nouveau cours."); return null; }
-      const c = await api.createCourse(slug.trim(), content);
+      // Normaliser la saisie (majuscules, accents, espaces) plutôt que la refuser.
+      const s = slugify(slug);
+      if (!s) {
+        setTab("form");
+        setMsg("Indiquez un identifiant (slug) pour le nouveau cours — champ « Identifiant (slug) » ouvert ci-dessous, onglet Formulaire.");
+        return null;
+      }
+      if (s !== slug) setSlug(s);
+      const c = await api.createCourse(s, content);
       const full = await api.course(c.id);
       const vid = (full.versions[0] as any)?.id ?? null; setVersionId(vid); return vid;
     } else if (courseId) {
