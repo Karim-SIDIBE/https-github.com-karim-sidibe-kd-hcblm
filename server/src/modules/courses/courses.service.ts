@@ -13,7 +13,7 @@ import type { CourseContent } from "../../domain/content-model.js";
 import { randomBytes } from "node:crypto";
 import { indexCourseVersion } from "../search/search.service.js";
 import { draftCourseContent, draftCourseFromDoc, type CourseBrief } from "../../lib/ai/authoring.js";
-import { docxToParagraphs } from "../../lib/docx.js";
+import { docxToDocElements } from "../../lib/docx.js";
 
 function slugify(s: string): string {
   return s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase()
@@ -173,12 +173,12 @@ export async function draftCourse(brief: CourseBrief, authorId?: string, organiz
  * designer reviews, links videos, then saves through the normal create flow.
  */
 export async function importCourseFromDoc(buf: Buffer) {
-  const paras = docxToParagraphs(buf);
-  if (paras.length === 0) throw new ContentInvalidError([{ level: "error", rule: "import", path: "document", message: "Document vide ou illisible." }] as never);
-  const { content, blockNotes, aiGenerated, provider } = await draftCourseFromDoc(paras);
+  const elements = docxToDocElements(buf);
+  if (elements.length === 0) throw new ContentInvalidError([{ level: "error", rule: "import", path: "document", message: "Document vide ou illisible." }] as never);
+  const { content, blockNotes, coverage, aiGenerated, provider } = await draftCourseFromDoc(elements);
   const shape = validateShape(content);
   if (!shape.ok) throw new ContentInvalidError(shape.issues as never); // scaffold should never fail
-  return { content: shape.content, blockNotes, aiGenerated, provider, paragraphs: paras.length };
+  return { content: shape.content, blockNotes, coverage, aiGenerated, provider, paragraphs: elements.length };
 }
 
 /** Save edits to an existing DRAFT version (shape-validated). */

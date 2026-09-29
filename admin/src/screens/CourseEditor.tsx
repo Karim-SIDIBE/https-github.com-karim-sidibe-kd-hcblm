@@ -38,9 +38,13 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved }: {
       setContent(r.content);
       setBlockNotes(r.blockNotes ?? {});
       setTab("content");
-      setMsg(r.aiGenerated
-        ? `Document importé (${r.paragraphs} paragraphes) — réparti par l'IA. Relisez chaque bloc, ajustez et liez les vidéos.`
-        : `Document importé (${r.paragraphs} paragraphes). Titre, objectif et titres de blocs pré-remplis ; le texte de chaque bloc est déposé dans « Texte importé » à répartir. Liez ensuite les vidéos.`);
+      const cov = r.coverage;
+      const fixups = cov?.fixups?.length ? ` ${cov.fixups.length} ajustement(s) automatique(s) — détail dans le Journal d'audit et les jetons {{moment_ancrage}} à relire.` : "";
+      setMsg(cov
+        ? `Document importé : ${cov.mappedPct} % du contenu réparti automatiquement (${cov.mappedElements}/${cov.totalElements} éléments — blocs, micro-sessions, vidéos, quiz, cas, journal…). Le reste est déposé dans « Texte importé » de chaque bloc. Relisez, liez les vidéos, puis validez.${fixups}`
+        : r.aiGenerated
+          ? `Document importé (${r.paragraphs} paragraphes) — réparti par l'IA. Relisez chaque bloc, ajustez et liez les vidéos.`
+          : `Document importé (${r.paragraphs} paragraphes). Titre, objectif et titres de blocs pré-remplis ; le texte de chaque bloc est déposé dans « Texte importé » à répartir. Liez ensuite les vidéos.`);
     } catch (e: any) { setMsg(e?.message || "Import échoué"); } finally { setBusy(""); }
   }
   function exportJson() {

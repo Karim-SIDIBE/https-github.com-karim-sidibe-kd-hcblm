@@ -10,7 +10,8 @@
 import { env } from "../../config/env.js";
 import { aiAvailable, callClaudeText, extractJson, type ClaudeRequest } from "./client.js";
 import { CourseContent, LEVEL_PASS_THRESHOLD, MOMENT_ANCRAGE_TOKEN, type CourseContent as CourseContentT } from "../../domain/content-model.js";
-import { segmentImportedDoc, type DocParagraph } from "../../domain/authoring/import-doc.js";
+import { importCourseFromElements, type ImportCoverage } from "../../domain/authoring/import-course.js";
+import type { DocElement } from "../docx.js";
 
 const T = MOMENT_ANCRAGE_TOKEN;
 
@@ -187,96 +188,70 @@ export async function draftCourseContent(brief: CourseBrief): Promise<DraftResul
 
 // --- import from a Word document --------------------------------------------
 
-export type ImportResult = DraftResult & { blockNotes: Record<number, string> };
+export type ImportResult = DraftResult & { blockNotes: Record<number, string>; coverage?: ImportCoverage };
 
-const FROM_DOC_SYSTEM =
-  "Tu es ingénieur pédagogique. On te donne (1) un SQUELETTE JSON de parcours (5 blocs fixes) et " +
-  "(2) le TEXTE BRUT d'un document de cours. Répartis le contenu du texte dans les bons champs du squelette " +
-  "(titres, micro-sessions, points clés, énoncés de quiz, options, feedbacks, étude de cas, plan d'action, journal). " +
-  "Tu NE changes NI la structure, NI les clés, NI les seuils, NI les jetons {{moment_ancrage}}. " +
-  "N'invente pas de vidéos (laisse url et mediaId vides). Réponds UNIQUEMENT en JSON.";
+const FROM_NOTES_SYSTEM =
+  "Tu es ingénieur pédagogique. On te donne le JSON d'UN bloc de parcours déjà rempli et un RESTE de texte " +
+  "du document source non réparti automatiquement. Tu renvoies le MÊME bloc JSON, structure et clés identiques, " +
+  "en intégrant ce que ce texte apporte aux champs existants (titres, aides, feedbacks, points clés, descriptions). " +
+  "Tu NE changes NI la structure, NI les clés, NI les identifiants, NI les seuils, NI les jetons {{moment_ancrage}}. " +
+  "N'invente pas de vidéos (url et mediaId restent vides). Réponds UNIQUEMENT en JSON.";
 
-function buildFromDocRequest(scaffold: CourseContentT, rawText: string): ClaudeRequest {
+function buildBlockRequest(block: unknown, notes: string): ClaudeRequest {
   return {
     model: env.AI_MODEL,
-    max_tokens: 24000,
-    system: [{ type: "text", text: FROM_DOC_SYSTEM, cache_control: { type: "ephemeral" } }],
-    messages: [{ role: "user", content: `Squelette:\n${JSON.stringify(scaffold)}\n\nTexte du document:\n${rawText.slice(0, 24000)}` }],
+    max_tokens: 16000,
+    system: [{ type: "text", text: FROM_NOTES_SYSTEM, cache_control: { type: "ephemeral" } }],
+    // Un appel PAR BLOC : chaque bloc voyage avec son propre texte, en entier —
+    // plus aucune troncature globale du document.
+    messages: [{ role: "user", content: `Bloc:\n${JSON.stringify(block)}\n\nTexte non réparti du bloc:\n${notes.slice(0, 60_000)}` }],
   };
 }
 
 /** Default neutral brief for an import — the designer sets the real domain after. */
 const IMPORT_BRIEF: CourseBrief = { domainCode: "D1", domainLabel: "À définir", level: 1 };
 
-const MS_BLOCK_TYPES = new Set(["COMPREHENSION", "PRACTICE", "ANCHORING"]);
-
 /**
- * Build a DRAFT course from imported paragraphs.
- * Deterministic backbone: a valid scaffold enriched from the document. The
- * coarse pass fills title/objective/block titles + a per-block bucket of raw
- * text (`blockNotes`). The fine pass maps K-HCBLM house conventions
- * (MICRO-SESSION X.Y, Vidéo N, MESSAGE CLÉ, EXEMPLE AFRICAIN, ERREUR À ÉVITER,
- * durations) into real micro-session + video fields — no AI. When an AI key is
- * configured it additionally maps the rest; otherwise the scaffold stands and
- * the designer dispatches the leftover notes by hand. The PAM exercise
- * touchpoint is preserved (first Comprehension micro-session).
+ * Construit un brouillon complet depuis les éléments structurés du document
+ * (paragraphes + tableaux). Colonne vertébrale : le parseur DÉTERMINISTE du
+ * gabarit K-HCBLM (domain/authoring/import-course) — blocs, micro-sessions,
+ * vidéos et scripts, les 4 quiz complets, étude de cas, scénarios, application
+ * terrain, auto-évaluation, plan d'action, Bloc 4 (sections + journal), cartes
+ * de rappel, compétences du référentiel. Quand une clé IA est configurée, les
+ * restes de CHAQUE bloc partent dans un appel dédié (aucune troncature) ; un
+ * échec IA sur un bloc n'invalide jamais les autres ni la base déterministe.
  */
-export async function draftCourseFromDoc(paras: DocParagraph[]): Promise<ImportResult> {
-  const seg = segmentImportedDoc(paras);
+export async function draftCourseFromDoc(elements: DocElement[]): Promise<ImportResult> {
   const scaffold = buildScaffold(IMPORT_BRIEF);
-  if (seg.title) scaffold.title = seg.title;
-  if (seg.objective) scaffold.objective = seg.objective;
+  const det = importCourseFromElements(elements, scaffold);
+  let content = det.content;
+  let aiGenerated = false;
+  let provider = "analyse déterministe (gabarit K-HCBLM)";
 
-  for (const b of scaffold.blocks) {
-    const t = seg.blockTitles[b.index];
-    if (t) b.title = t;
-    const obj = seg.blockObjectives[b.index];
-    if (obj) b.objective = obj;
-    const pl = b.payload as any;
-
-    // Fine pass: rebuild micro-sessions from the document (skip X.0 = quiz/diagnostic).
-    const parsed = (seg.blockSessions[b.index] ?? []).filter((s) => s.minor > 0);
-    if (MS_BLOCK_TYPES.has(b.type) && parsed.length && Array.isArray(pl.microSessions)) {
-      pl.microSessions = parsed.map((s, i) => {
-        const withPam = b.type === "COMPREHENSION" && i === 0; // preserve the PAM exercise touchpoint
-        const sess = ms(s.id, s.video.title || s.title || `Micro-session ${s.id}`, withPam) as any;
-        if (s.durationEstimate) sess.durationEstimate = s.durationEstimate;
-        if (s.video.title) sess.video.title = s.video.title;
-        if (s.video.keyMessage) sess.video.keyMessage = s.video.keyMessage;
-        if (s.video.africanExample) sess.video.africanExample = s.video.africanExample;
-        if (s.video.errorToAvoid) sess.video.errorToAvoid = s.video.errorToAvoid;
-        return sess;
-      });
-    }
-
-    // Bloc 0: map the "déclencheur" session's video into the trigger video.
-    if (b.type === "ONBOARDING" && pl.triggerVideo) {
-      const trig = (seg.blockSessions[b.index] ?? []).find((s) => s.video.title || s.video.keyMessage);
-      if (trig) {
-        if (trig.video.title) pl.triggerVideo.title = trig.video.title;
-        if (trig.video.keyMessage) pl.triggerVideo.keyMessage = trig.video.keyMessage;
-        if (trig.video.africanExample) pl.triggerVideo.africanExample = trig.video.africanExample;
-        if (trig.video.errorToAvoid) pl.triggerVideo.errorToAvoid = trig.video.errorToAvoid;
+  if (aiAvailable()) {
+    const enriched = structuredClone(content);
+    let applied = 0;
+    for (const [idxStr, note] of Object.entries(det.blockNotes)) {
+      const idx = Number(idxStr);
+      if (note.length < 400) continue; // trop peu de reste pour mériter un appel
+      const pos = enriched.blocks.findIndex((b) => b.index === idx);
+      if (pos < 0) continue;
+      const before = enriched.blocks[pos]!;
+      try {
+        const text = await callClaudeText(buildBlockRequest(before, note));
+        enriched.blocks[pos] = extractJson(text) as never;
+        CourseContent.parse(enriched); // le bloc enrichi doit rester conforme
+        applied++;
+      } catch {
+        enriched.blocks[pos] = before; // on garde la base déterministe
       }
     }
-  }
-
-  let content = scaffold;
-  let aiGenerated = false;
-  let provider = "scaffold (import)";
-  if (aiAvailable()) {
-    try {
-      const rawText = paras.map((p) => p.text).join("\n");
-      const text = await callClaudeText(buildFromDocRequest(scaffold, rawText));
-      const parsed = CourseContent.parse(extractJson(text)); // must satisfy the gate
-      // keep the document-derived title/objective if the model dropped them
-      if (!parsed.objective && seg.objective) parsed.objective = seg.objective;
-      content = parsed;
+    if (applied > 0) {
+      content = CourseContent.parse(enriched);
       aiGenerated = true;
-      provider = env.AI_MODEL;
-    } catch {
-      provider = "scaffold (import · ai-fallback)";
+      provider = `${env.AI_MODEL} (complément par bloc : ${applied})`;
     }
   }
-  return { content, blockNotes: seg.blockNotes, aiGenerated, provider };
+
+  return { content, blockNotes: det.blockNotes, coverage: det.coverage, aiGenerated, provider };
 }
