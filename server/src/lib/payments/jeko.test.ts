@@ -6,9 +6,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
-  JEKO_METHODS, createJekoPaymentLink, expectedJekoSignature, fromJekoCents, jekoProvider,
-  jekoReference, jekoSignaturesMatch, linkIdOf, linkRefOf, linkStatusOf, mapJekoStatus,
-  paymentIdOfReference, toJekoCents,
+  JEKO_METHODS, createJekoPaymentLink, expectedJekoSignature, fromJekoCents, jekoErrorDetail,
+  jekoProvider, jekoReference, jekoSignaturesMatch, linkIdOf, linkRefOf, linkStatusOf,
+  mapJekoStatus, paymentIdOfReference, toJekoCents,
 } from "./jeko.js";
 
 test("toJekoCents : 1 XOF (unité mineure) = 100 centimes — multiple de 100 garanti", () => {
@@ -127,6 +127,20 @@ test("verifyWebhook : un paiement de LIEN se corrèle par paymentLinkId (préfix
   });
   const v = jekoProvider.verifyWebhook({}, raw) as import("./provider.js").WebhookVerification;
   assert.equal(v.providerRef, "pl:lnk-42"); // le lien prime sur l'id de demande
+});
+
+test("jekoErrorDetail : tableau errors[] de validation, repli message, sinon null", () => {
+  // Forme réelle constatée en recette (storeId non UUID).
+  assert.equal(
+    jekoErrorDetail({ errors: [{ message: "The storeId field must be a valid UUID", rule: "uuid", field: "storeId" }] }),
+    "The storeId field must be a valid UUID",
+  );
+  assert.equal(jekoErrorDetail({ errors: [{ message: "a" }, { message: "b" }] }), "a ; b");
+  assert.equal(jekoErrorDetail({ message: "Store not found" }), "Store not found");
+  assert.equal(jekoErrorDetail({ errors: [] , message: "repli" }), "repli"); // tableau vide → message
+  assert.equal(jekoErrorDetail({ errors: [{ rule: "uuid" }] }), null); // entrées sans message
+  assert.equal(jekoErrorDetail(null), null);
+  assert.equal(jekoErrorDetail("texte brut"), null);
 });
 
 test("createJekoPaymentLink : refuse proprement sans configuration (aucun réseau)", async () => {
