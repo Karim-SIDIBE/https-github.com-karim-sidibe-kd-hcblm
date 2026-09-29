@@ -473,6 +473,7 @@ export const api = {
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Téléversement échoué");
     return j.data as MediaAsset;
   },
+  courseScaffold: (level = 1) => req<any>("GET", `/courses/scaffold?level=${level}`),
   async importCourseDoc(file: File): Promise<ImportDocResult> {
     const fd = new FormData();
     fd.append("file", file);

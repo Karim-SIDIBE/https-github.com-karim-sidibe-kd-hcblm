@@ -455,7 +455,15 @@ export function importCourseFromElements(elements: DocElement[], scaffold: Cours
     mappedTotal += consumed.size;
   }
 
-  // 4) Garanties de barrière : jetons PAM aux points de contact obligatoires.
+  // 4) Unités auditables (typologie v2.1) dérivées du contenu importé, selon
+  //    le comptage du gabarit : un quiz est une micro-session ; une étude de
+  //    cas de 25 min ou moins aussi ; scénarios et application terrain sont
+  //    des activités longues ; le journal du Bloc 4 est UNE activité longue
+  //    distribuée en 6 micro-tâches. L'auto-évaluation, embarquée dans sa
+  //    micro-session (3.1), n'ajoute pas d'unité. Ajustable dans l'éditeur.
+  for (const bl of content.blocks) deriveUnits(bl);
+
+  // 5) Garanties de barrière : jetons PAM aux points de contact obligatoires.
   const allSessions = content.blocks.flatMap((bl) => ("microSessions" in bl.payload ? bl.payload.microSessions : []));
   if (!allSessions.some((s) => s.exercise?.prompt.includes(T))) {
     const first = content.blocks.find((bl) => bl.type === "COMPREHENSION");
@@ -501,6 +509,63 @@ export function importCourseFromElements(elements: DocElement[], scaffold: Cours
       perBlock,
     },
   };
+}
+
+// --- unités auditables dérivées ------------------------------------------------
+
+type DerivedUnit = { label: string; type: "micro-session" | "long-activity" | "micro-task"; durationMin?: number; children?: DerivedUnit[] };
+
+const minOf = (est: string | undefined, dflt: number) => {
+  const m = /\d+/.exec(est ?? "");
+  return m ? Number(m[0]) : dflt;
+};
+
+function deriveUnits(block: CourseContentT["blocks"][number]) {
+  const u: DerivedUnit[] = [];
+  const push = (label: string, type: DerivedUnit["type"], durationMin: number) => u.push({ label, type, durationMin });
+  if (block.type === "ONBOARDING") {
+    push(`Micro-session 0.1 — ${block.title}`, "micro-session", minOf(block.durationEstimate, 20));
+  }
+  const p = block.payload as Record<string, unknown>;
+  if (block.type === "COMPREHENSION") {
+    const dq = block.payload.diagnosticQuiz;
+    push(dq.title || "Quiz diagnostique", "micro-session", minOf(dq.durationEstimate, 15));
+  }
+  if ("microSessions" in block.payload) {
+    for (const s of block.payload.microSessions) push(`Micro-session ${s.id} — ${s.title}`, "micro-session", minOf(s.durationEstimate, 20));
+  }
+  const cases = [block.type === "COMPREHENSION" ? block.payload.caseStudy : undefined, block.type === "ANCHORING" ? block.payload.transversalCase : undefined];
+  for (const cs of cases) {
+    if (!cs) continue;
+    const mins = minOf(cs.durationEstimate, 25);
+    push(cs.subtitle ? `${cs.title} — ${cs.subtitle}` : cs.title, mins <= 25 ? "micro-session" : "long-activity", mins);
+  }
+  if (block.type === "PRACTICE") {
+    const pl = block.payload;
+    if (pl.guidedScenarios.length) push(pl.guidedScenariosTitle || "Mises en situation guidées", "long-activity", minOf(pl.guidedScenariosDuration, 30));
+    if (pl.interBlockQuiz) push(pl.interBlockQuiz.title || "Quiz interbloc", "micro-session", minOf(pl.interBlockQuiz.durationEstimate, 15));
+    push(pl.fieldApplication.title || "Application terrain", "long-activity", minOf(pl.fieldApplication.durationEstimate, 35));
+  }
+  if (block.type === "ANCHORING") {
+    const pl = block.payload;
+    push(pl.actionPlan30d.title || "Plan d'action 30 jours", "micro-session", minOf(pl.actionPlan30d.durationEstimate, 20));
+    push(pl.finalQuiz.title || "Quiz final", "micro-session", minOf(pl.finalQuiz.durationEstimate, 15));
+  }
+  if (block.type === "CERTIFICATION") {
+    const pl = block.payload;
+    pl.sections.forEach((s, i) => {
+      if (i === 3) {
+        u.push({
+          label: s.title || "Journal de pratique", type: "long-activity", durationMin: pl.journal.entries.length * 5,
+          children: pl.journal.entries.map((e) => ({ label: `Journal J+${e.day}`, type: "micro-task", durationMin: 5 })),
+        });
+        return;
+      }
+      push(s.title || `Section ${i + 1}`, "micro-session", minOf(s.durationEstimate, 15));
+    });
+  }
+  void p;
+  if (u.length) (block as { units?: DerivedUnit[] }).units = u;
 }
 
 // --- Bloc 0 -------------------------------------------------------------------

@@ -19,6 +19,7 @@ import {
   validateContent,
 } from "./courses.service.js";
 import { guard, authenticate } from "../../lib/auth.js";
+import { buildScaffold } from "../../lib/ai/authoring.js";
 import { resolveTenant, memberOrgIds } from "../../lib/tenant.js";
 import { importFromCourse } from "../bank/bank.service.js";
 import { audit } from "../../lib/audit.js";
@@ -86,6 +87,17 @@ export async function courseRoutes(app: FastifyInstance) {
   });
 
   // AI-assisted draft from a brief → validated DRAFT course.
+  // Gabarit NEUTRE conforme (rien n'est persisté) : le point de départ d'un
+  // « Nouveau cours » vierge dans l'éditeur — champs marqués « à compléter ».
+  app.get("/courses/scaffold", { preHandler: guard("course:create") }, async (req) => {
+    const q = z.object({
+      level: z.coerce.number().int().min(1).max(3).default(1),
+      domainCode: z.string().trim().min(1).default("D1"),
+      domainLabel: z.string().trim().min(1).default("À définir"),
+    }).parse(req.query ?? {});
+    return { data: buildScaffold({ domainCode: q.domainCode, domainLabel: q.domainLabel, level: q.level as 1 | 2 | 3 }) };
+  });
+
   app.post("/courses/draft", { preHandler: guard("course:create") }, async (req, reply) => {
     const brief = z.object({
       domainCode: z.string().trim().min(1),

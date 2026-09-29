@@ -2,7 +2,7 @@ import { useState } from "react";
 import { api, auth, courseTitle, type CourseFull } from "../lib/api";
 import { ago, useAsync } from "../lib/ui";
 import type { CourseCtx } from "../App";
-import { CourseEditor } from "./CourseEditor";
+import { CourseEditor, importResultMessage } from "./CourseEditor";
 import { modal } from "../lib/modal";
 
 const CAN_REVIEW = ["SUPER_ADMIN", "COURSE_ADMIN", "REVIEWER"];
@@ -107,27 +107,38 @@ function Structure({ id, onBack, onEdit }: { id: string; onBack: () => void; onE
   );
 }
 
-type Mode = { t: "list" } | { t: "structure"; id: string } | { t: "editor"; isNew: boolean; courseId?: string; initial: any };
+type Mode = { t: "list" } | { t: "structure"; id: string }
+  | { t: "editor"; isNew: boolean; courseId?: string; initial: any; notes?: Record<number, string>; msg?: string; tab?: "form" | "content" };
 
 export function Cours({ ctx }: { ctx: CourseCtx }) {
   const [mode, setMode] = useState<Mode>({ t: "list" });
   const [loadingNew, setLoadingNew] = useState(false);
+  const [importing, setImporting] = useState(false);
 
   async function newCourse() {
-    // Start from the canonical course as a gate-passing template.
-    const template = ctx.courses[0];
-    if (!template) return;
+    // Gabarit NEUTRE conforme fourni par le serveur — champs « à compléter ».
     setLoadingNew(true);
     try {
-      const full = await api.course(template.id);
-      const content = structuredClone(full.versions[0].content) as any;
-      content.title = "Nouveau parcours";
+      const content = await api.courseScaffold(1);
       setMode({ t: "editor", isNew: true, initial: content });
+    } catch (e) {
+      await modal.alert({ title: "Gabarit indisponible", body: e instanceof Error ? e.message : "Réessayez." });
     } finally { setLoadingNew(false); }
   }
 
+  /** Import Word DIRECT depuis la page Cours : ouvre l'éditeur pré-rempli. */
+  async function importWord(file: File) {
+    setImporting(true);
+    try {
+      const r = await api.importCourseDoc(file);
+      setMode({ t: "editor", isNew: true, initial: r.content, notes: r.blockNotes ?? {}, msg: importResultMessage(r), tab: "content" });
+    } catch (e) {
+      await modal.alert({ title: "Import échoué", body: e instanceof Error ? e.message : "Vérifiez le fichier (.docx) et réessayez." });
+    } finally { setImporting(false); }
+  }
+
   if (mode.t === "editor")
-    return <CourseEditor initial={mode.initial} courseId={mode.courseId} isNew={mode.isNew} onClose={() => setMode({ t: "list" })} onSaved={() => { /* keep editor open to allow publish */ }} />;
+    return <CourseEditor initial={mode.initial} courseId={mode.courseId} isNew={mode.isNew} initialNotes={mode.notes} initialMsg={mode.msg} initialTab={mode.tab} onClose={() => setMode({ t: "list" })} onSaved={() => { /* keep editor open to allow publish */ }} />;
   if (mode.t === "structure")
     return <Structure id={mode.id} onBack={() => setMode({ t: "list" })} onEdit={(content, courseId) => setMode({ t: "editor", isNew: false, courseId, initial: content })} />;
 
@@ -139,7 +150,13 @@ export function Cours({ ctx }: { ctx: CourseCtx }) {
           <h1>Cours</h1>
           <div className="sub">Parcours certifiants — structure, versions et statut de publication.</div>
         </div>
-        <button className="btn btn--primary" disabled={loadingNew || ctx.courses.length === 0} onClick={newCourse}>{loadingNew ? "…" : "+ Nouveau cours"}</button>
+        <div className="row" style={{ gap: 8 }}>
+          <label className="btn" style={{ cursor: "pointer" }} title="Charger un document de parcours Word (.docx) : l'éditeur s'ouvre pré-rempli — rien n'est créé tant que vous n'enregistrez pas.">
+            {importing ? "…" : "⬆ Importer un parcours (Word)"}
+            <input type="file" accept=".docx" style={{ display: "none" }} disabled={importing} onChange={(e) => { const f = e.target.files?.[0]; if (f) void importWord(f); e.currentTarget.value = ""; }} />
+          </label>
+          <button className="btn btn--primary" disabled={loadingNew} onClick={newCourse}>{loadingNew ? "…" : "+ Nouveau cours"}</button>
+        </div>
       </div>
 
       <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill,minmax(340px,1fr))" }}>
