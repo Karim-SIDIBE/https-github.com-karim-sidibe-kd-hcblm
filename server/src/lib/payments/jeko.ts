@@ -98,6 +98,22 @@ export function linkStatusOf(link: { allowMultiplePayments?: boolean; canReceive
 
 /** Crée un lien de paiement Jèko À USAGE UNIQUE (titre 10-255, minimum
  *  10 000 centimes = 100 XOF — doc « Liens de paiement »). */
+/** Détail lisible d'une réponse d'erreur Jèko. Deux formes constatées en
+ *  production : `{ errors: [{ message, rule, field }] }` sur les erreurs de
+ *  validation (ex. « The storeId field must be a valid UUID », recette du
+ *  29/09) et `{ message }` ailleurs. Pur, testé. */
+export function jekoErrorDetail(json: unknown): string | null {
+  if (!json || typeof json !== "object") return null;
+  const j = json as { message?: unknown; errors?: unknown };
+  if (Array.isArray(j.errors)) {
+    const msgs = j.errors
+      .map((e) => (e && typeof e === "object" && typeof (e as { message?: unknown }).message === "string" ? (e as { message: string }).message : null))
+      .filter((m): m is string => m !== null);
+    if (msgs.length) return msgs.join(" ; ");
+  }
+  return typeof j.message === "string" ? j.message : null;
+}
+
 export async function createJekoPaymentLink(input: { title: string; amountMinor: number; currency: string }): Promise<{ linkId: string; url: string }> {
   if (!jekoProvider.available()) {
     throw new ProviderError(409, "provider_unconfigured",
@@ -121,9 +137,10 @@ export async function createJekoPaymentLink(input: { title: string; amountMinor:
       allowMultiplePayments: false,
     }),
   }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
-  const json = await res.json().catch(() => null) as { id?: string; link?: string; message?: string } | null;
+  const json = await res.json().catch(() => null) as { id?: string; link?: string } | null;
   if (!res.ok || !json?.id || !json.link) {
-    throw new ProviderError(502, "link_failed", `Jèko a refusé la création du lien (HTTP ${res.status}${json?.message ? ` · ${json.message}` : ""})`);
+    const detail = jekoErrorDetail(json);
+    throw new ProviderError(502, "link_failed", `Jèko a refusé la création du lien (HTTP ${res.status}${detail ? ` · ${detail}` : ""})`);
   }
   return { linkId: json.id, url: json.link };
 }
@@ -201,10 +218,11 @@ export const jekoProvider: PaymentProvider = {
         },
       }),
     }).catch((e: Error) => { throw new ProviderError(502, "provider_unreachable", `Jèko injoignable : ${e.message}`); });
-    const json = await res.json().catch(() => null) as { id?: string; status?: string; redirectUrl?: string; message?: string } | null;
+    const json = await res.json().catch(() => null) as { id?: string; status?: string; redirectUrl?: string } | null;
     if (!res.ok || !json?.id || !json.redirectUrl) {
+      const detail = jekoErrorDetail(json);
       throw new ProviderError(502, "checkout_failed",
-        `Jèko a refusé l'initialisation (HTTP ${res.status}${json?.message ? ` · ${json.message}` : ""})`);
+        `Jèko a refusé l'initialisation (HTTP ${res.status}${detail ? ` · ${detail}` : ""})`);
     }
     // L'ID de la demande de paiement est la référence fournisseur : c'est lui
     // que l'endpoint de statut attend, et lui que le webhook rappelle dans
