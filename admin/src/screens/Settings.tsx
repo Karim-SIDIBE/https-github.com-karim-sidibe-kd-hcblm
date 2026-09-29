@@ -58,6 +58,18 @@ export function Settings() {
     } catch (e: any) { setPurgeMsg(e?.message || "Erreur"); } finally { setPurgeBusy(false); }
   }
 
+  // Assistant IA — état (clé configurée ?) + test de connexion (Super Admin).
+  const ai = useAsync<{ configured: boolean; model: string; gradingModel: string | null; embeddings: boolean }>(() => api.aiStatus(), []);
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiMsg, setAiMsg] = useState<string | null>(null);
+  async function testAi() {
+    setAiBusy(true); setAiMsg(null);
+    try {
+      const r = await api.aiTest();
+      setAiMsg(`✅ Clé valide — ${r.model} a répondu en ${r.latencyMs} ms.`);
+    } catch (e: any) { setAiMsg(`✗ ${e?.message || "Échec du test"}`); } finally { setAiBusy(false); }
+  }
+
   async function createStaff(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true); setMsg(null);
@@ -101,6 +113,30 @@ export function Settings() {
                 <Row k="Nom" v={issuer.data.name} />
                 <Row k="URL" v={issuer.data.url} />
                 <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>Open Badges 2.0 / 3.0 · <code>CREDENTIAL_ISSUER_NAME</code> côté serveur.</p>
+              </>)}
+            </div>
+          </div>
+
+          <div className="card">
+            <div className="card-h"><h3>🤖 Assistant IA</h3>
+              {ai.data && <span className={`pill ${ai.data.configured ? "pill--green" : "pill--soft"}`}>{ai.data.configured ? "configuré" : "repli hors-ligne"}</span>}
+            </div>
+            <div className="card-b" style={{ paddingTop: 4 }}>
+              {ai.loading ? <span className="muted">Chargement…</span> : ai.error ? <span className="muted" style={{ fontSize: 12.5 }}>{ai.error}</span> : ai.data && (<>
+                <Row k="Modèle" v={ai.data.model} />
+                {ai.data.gradingModel && <Row k="Modèle de notation" v={ai.data.gradingModel} />}
+                <Row k="Recherche sémantique" v={ai.data.embeddings ? "embeddings actifs" : "repli lexical"} />
+                <p className="muted" style={{ fontSize: 11.5, marginTop: 8 }}>
+                  {ai.data.configured
+                    ? "L'import de parcours (complément par bloc), le feedback formatif, le tuteur et les brouillons de cours utilisent le modèle réel."
+                    : <>Sans clé, tout fonctionne avec des replis déterministes hors-ligne — l'import de parcours reste 100 % opérationnel. Pour activer l'IA réelle : ajoutez <code>ANTHROPIC_API_KEY</code> dans <code>deploy/.env</code> (mode d'emploi et coûts commentés dans le fichier), puis relancez l'API.</>}
+                </p>
+                {isSuperAdmin && (
+                  <div style={{ marginTop: 10 }}>
+                    <button className="btn btn--sm" disabled={aiBusy} onClick={() => void testAi()}>{aiBusy ? "…" : "⚡ Tester la connexion IA"}</button>
+                    {aiMsg && <p style={{ fontSize: 12.5, margin: "8px 0 0", fontWeight: 600, color: aiMsg.startsWith("✅") ? "var(--green)" : "var(--danger)" }}>{aiMsg}</p>}
+                  </div>
+                )}
               </>)}
             </div>
           </div>

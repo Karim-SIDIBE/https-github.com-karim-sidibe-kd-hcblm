@@ -560,6 +560,8 @@ export const api = {
   // --- platform settings (M3) ---
   settings: () => req<Record<string, unknown>>("GET", "/settings"),
   setSetting: (key: string, value: unknown) => req<{ key: string; value: unknown }>("PUT", `/settings/${key}`, { value }),
+  aiStatus: () => req<{ configured: boolean; model: string; gradingModel: string | null; embeddings: boolean }>("GET", "/settings/ai-status"),
+  aiTest: () => req<{ ok: boolean; model: string; latencyMs: number; reply: string }>("POST", "/settings/ai-test"),
   // --- M4: relances history, forum moderation, integrations ---
   relancesHistory: (courseId: string, p: { page?: number; pageSize?: number }) => reqPaged<Paged<RelanceRow>>(`/analytics/courses/${courseId}/relances`, p),
   threads: (cohortId: string) => req<ForumThreadRow[]>("GET", `/cohorts/${cohortId}/threads`),
