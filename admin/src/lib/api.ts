@@ -85,6 +85,8 @@ async function req<T>(method: string, path: string, body?: unknown, retried = fa
     // Les réponses validation_error (400) et content_invalid (422) du serveur
     // portent leurs détails dans `issues` sans champ `message` : les rendre
     // lisibles plutôt qu'un « Erreur serveur » générique.
+    // (NB : la logique 401→renouvellement de cette fonction est MIROIR de
+    // authFetch() ci-dessous — toute évolution se reporte aux deux.)
     let message = json.message as string | undefined;
     if (!message && Array.isArray(json.issues) && json.issues.length > 0) {
       const parts = json.issues.slice(0, 3).map((i: { path?: string; message?: string }) => [i.path, i.message].filter(Boolean).join(" — "));
@@ -93,6 +95,28 @@ async function req<T>(method: string, path: string, body?: unknown, retried = fa
     throw new ApiError(res.status, json.error || "error", message || `Erreur serveur (HTTP ${res.status})`);
   }
   return (raw ? json : json.data ?? json) as T;
+}
+
+/** fetch AUTHENTIFIÉ pour les appels non-JSON (multipart, blobs, CSV) : même
+ *  renouvellement silencieux du jeton que req(). Sans lui, un téléversement
+ *  ou un export lancé après une pause sur l'écran partait avec un jeton
+ *  d'accès expiré → « Jeton invalide ou expiré » (constaté en production sur
+ *  la Médiathèque le 01/10/2026, l'admin actif n'ayant jamais à se reloguer). */
+async function authFetch(path: string, init: RequestInit = {}, retried = false): Promise<Response> {
+  const t = auth.token();
+  const res = await fetch(`${BASE}${path}`, {
+    ...init,
+    headers: { ...(init.headers as Record<string, string> | undefined), ...(t ? { authorization: `Bearer ${t}` } : {}) },
+  });
+  if (res.status === 401) {
+    const idle = Date.now() - lastActivity > IDLE_LOGOUT_MS;
+    if (!retried && !idle && auth.refreshToken()) {
+      const ok = await (refreshing ??= tryRefresh().finally(() => { refreshing = null; }));
+      if (ok) return authFetch(path, init, true);
+    }
+    auth.clear(); location.reload(); throw new ApiError(401, "unauthorized", "Session expirée");
+  }
+  return res;
 }
 
 // --- auth ---
@@ -416,8 +440,7 @@ export const api = {
     req<ReportSchedule>("POST", "/reports/schedules", b),
   deleteReportSchedule: (id: string) => req<{ id: string }>("DELETE", `/reports/schedules/${id}`),
   async exportCourseXlsx(courseId: string): Promise<Blob> {
-    const t = auth.token();
-    const res = await fetch(`${BASE}/analytics/courses/${courseId}/export.xlsx`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    const res = await authFetch(`/analytics/courses/${courseId}/export.xlsx`);
     if (!res.ok) throw new ApiError(res.status, "error", "Export Excel échoué");
     return res.blob();
   },
@@ -432,15 +455,13 @@ export const api = {
     return req<InsightsCompare>("GET", `/analytics/courses/${courseId}/insights/compare?${p.toString()}`);
   },
   async exportStatements(courseId: string, format: "csv" | "ndjson"): Promise<Blob> {
-    const t = auth.token();
-    const res = await fetch(`${BASE}/lrs/statements?courseId=${encodeURIComponent(courseId)}&limit=1000&format=${format}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    const res = await authFetch(`/lrs/statements?courseId=${encodeURIComponent(courseId)}&limit=1000&format=${format}`);
     if (!res.ok) throw new ApiError(res.status, "error", "Export xAPI échoué");
     return res.blob();
   },
   lrsArchives: () => req<{ name: string; sizeBytes: number; createdAt: string }[]>("GET", "/lrs/archives"),
   async downloadArchive(name: string): Promise<Blob> {
-    const t = auth.token();
-    const res = await fetch(`${BASE}/lrs/archives/${encodeURIComponent(name)}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    const res = await authFetch(`/lrs/archives/${encodeURIComponent(name)}`);
     if (!res.ok) throw new ApiError(res.status, "error", "Téléchargement d'archive échoué");
     return res.blob();
   },
@@ -481,8 +502,7 @@ export const api = {
   async uploadMedia(file: File): Promise<MediaAsset> {
     const fd = new FormData();
     fd.append("file", file);
-    const t = auth.token();
-    const res = await fetch(`${BASE}/media`, { method: "POST", headers: t ? { authorization: `Bearer ${t}` } : {}, body: fd });
+    const res = await authFetch("/media", { method: "POST", body: fd });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Téléversement échoué");
     return j.data as MediaAsset;
@@ -491,8 +511,7 @@ export const api = {
   async importCourseDoc(file: File): Promise<ImportDocResult> {
     const fd = new FormData();
     fd.append("file", file);
-    const t = auth.token();
-    const res = await fetch(`${BASE}/courses/import-doc`, { method: "POST", headers: t ? { authorization: `Bearer ${t}` } : {}, body: fd });
+    const res = await authFetch("/courses/import-doc", { method: "POST", body: fd });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(res.status, j.error || "error", j.message || "Import du document échoué");
     return j.data as ImportDocResult;
@@ -522,9 +541,8 @@ export const api = {
   removeCohortMember: (id: string, userId: string) => req<unknown>("DELETE", `/cohorts/${id}/members/${userId}`),
   unrevokeCredential: (id: string) => req<{ id: string; revoked: boolean }>("POST", `/credentials/${id}/unrevoke`, {}),
   async credentialFile(id: string, kind: "pdf" | "vc"): Promise<Blob> {
-    const t = auth.token();
     const path = kind === "pdf" ? `/credentials/${id}/certificate.pdf` : `/credentials/${id}/vc`;
-    const res = await fetch(`${BASE}${path}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    const res = await authFetch(path);
     if (!res.ok) throw new ApiError(res.status, "error", "Téléchargement échoué");
     return res.blob();
   },
@@ -563,11 +581,10 @@ export const api = {
   // --- audit enrichment (M3) ---
   auditActions: () => req<string[]>("GET", "/audit/actions"),
   async auditCsv(p: { q?: string; action?: string }): Promise<Blob> {
-    const t = auth.token();
     const qs = new URLSearchParams({ format: "csv" });
     if (p.q) qs.set("q", p.q);
     if (p.action) qs.set("action", p.action);
-    const res = await fetch(`${BASE}/audit?${qs}`, { headers: t ? { authorization: `Bearer ${t}` } : {} });
+    const res = await authFetch(`/audit?${qs}`);
     if (!res.ok) throw new ApiError(res.status, "error", "Export échoué");
     return res.blob();
   },
