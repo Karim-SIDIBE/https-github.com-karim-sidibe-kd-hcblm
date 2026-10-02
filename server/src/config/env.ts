@@ -69,7 +69,9 @@ const EnvSchema = z.object({
 
   // --- media pipeline (storage + transcoding). Local FS by default. ---
   MEDIA_DIR: z.string().default(".media"),
-  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(524_288_000), // 500 MB
+  // 800 Mo (demande client du 02/10/2026 — une vidéo de micro-session réelle
+  // sous-titrée dépasse 500 Mo). Ajustable sans code via deploy/.env.
+  MEDIA_MAX_BYTES: z.coerce.number().int().positive().default(838_860_800),
   MEDIA_PUBLIC_BASE_URL: z.string().url().optional(), // CDN base when fronted by one
 
   // --- blended live sessions (Zoom / Microsoft Teams). Optional: manual links. ---
