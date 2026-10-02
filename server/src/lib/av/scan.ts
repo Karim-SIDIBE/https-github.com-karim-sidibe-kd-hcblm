@@ -29,14 +29,24 @@ export function scanBytes(buf: Buffer, _opts: { filename?: string; mime?: string
   return { ok: true, engine: "heuristic" };
 }
 
-/** Stream the buffer to clamd (INSTREAM) and interpret the verdict. */
-function clamavScan(buf: Buffer): Promise<ScanResult> {
-  const failOpen = !env.AV_FAIL_CLOSED; // if clamd is unreachable, allow (heuristic already passed) unless told otherwise
+/** Stream the buffer to clamd (INSTREAM) and interpret the verdict.
+ *  Exporté pour les tests (un faux clamd TCP local) ; les options par défaut
+ *  viennent de l'env. */
+export function clamavScan(buf: Buffer, opts: { host?: string; port?: number; timeoutMs?: number; failOpen?: boolean } = {}): Promise<ScanResult> {
+  const failOpen = opts.failOpen ?? !env.AV_FAIL_CLOSED; // if clamd is unreachable, allow (heuristic already passed) unless told otherwise
   return new Promise((resolve) => {
-    const sock = net.createConnection({ host: env.CLAMAV_HOST!, port: env.CLAMAV_PORT });
+    const sock = net.createConnection({ host: opts.host ?? env.CLAMAV_HOST!, port: opts.port ?? env.CLAMAV_PORT });
     let reply = "";
     const settle = (r: ScanResult) => { sock.destroy(); resolve(r); };
-    sock.setTimeout(env.AV_TIMEOUT_MS);
+    // Dépassement de StreamMaxLength : clamd annonce « INSTREAM size limit
+    // exceeded » PUIS coupe la connexion (reset). Sans ce test, la coupure se
+    // lisait « ClamAV: indisponible » — vécu en production quand la limite
+    // applicative (MEDIA_MAX_BYTES) a dépassé celle de deploy/clamav/clamd.conf.
+    const sizeLimited = (): ScanResult | null =>
+      /size limit/i.test(reply)
+        ? { ok: failOpen, reason: "ClamAV : fichier au-delà de la limite de scan — augmentez StreamMaxLength/MaxScanSize/MaxFileSize dans deploy/clamav/clamd.conf puis recréez le conteneur clamav", engine: "clamav" }
+        : null;
+    sock.setTimeout(opts.timeoutMs ?? env.AV_TIMEOUT_MS);
     sock.on("connect", () => {
       sock.write("zINSTREAM\0");
       const len = Buffer.alloc(4); len.writeUInt32BE(buf.length, 0);
@@ -44,11 +54,11 @@ function clamavScan(buf: Buffer): Promise<ScanResult> {
     });
     sock.on("data", (d) => { reply += d.toString(); });
     sock.on("timeout", () => settle({ ok: failOpen, reason: "ClamAV: délai dépassé", engine: "clamav" }));
-    sock.on("error", () => settle({ ok: failOpen, reason: "ClamAV: indisponible", engine: "clamav" }));
+    sock.on("error", () => settle(sizeLimited() ?? { ok: failOpen, reason: "ClamAV: indisponible", engine: "clamav" }));
     sock.on("end", () => {
       if (/FOUND/.test(reply)) resolve({ ok: false, reason: reply.replace(/\0/g, "").trim(), engine: "clamav" });
       else if (/OK/.test(reply)) resolve({ ok: true, engine: "clamav" });
-      else resolve({ ok: failOpen, reason: reply.trim() || "ClamAV: réponse inconnue", engine: "clamav" });
+      else resolve(sizeLimited() ?? { ok: failOpen, reason: reply.trim() || "ClamAV: réponse inconnue", engine: "clamav" });
     });
   });
 }
