@@ -248,7 +248,7 @@ export type PayReconciliation = {
   paidWithoutEntitlement: { id: string; product: string }[];
   invalidWebhooks: { total: number; recent: { id: string; provider: string; receivedAt: string }[] };
 };
-export type PayGift = { id: string; scope: string; seats: number | null; grantedAt: string; revokedAt: string | null; holderUser?: { email: string; name: string } | null; holderOrg?: { name: string } | null; course?: { slug: string } | null };
+export type PayGift = { id: string; scope: string; seats: number | null; grantedAt: string; revokedAt: string | null; holderUser?: { email: string; name: string } | null; holderOrg?: { name: string } | null; course?: { slug: string } | null; emailSent?: boolean; adminsNotified?: number };
 export type Org = { id: string; name: string; slug: string; seats: number; createdAt: string; _count?: { memberships: number; courses: number } };
 export type Cohort = { id: string; name: string; courseId: string | null; createdAt: string; _count?: { memberships: number; threads: number } };
 export type Session = { id: string; title: string; startsAt: string; durationMin: number; provider: string; status: string; courseId: string | null; joinUrl?: string | null; _count?: { registrations: number } };

@@ -680,6 +680,68 @@ export async function orderReceipt(principal: Principal, orderId: string): Promi
 
 // --- « Offrir l'accès » (GIFT, Super Admin — Q4) --------------------------------
 
+/** E-mail « parcours offert » au bénéficiaire. Jusqu'au 03/10/2026 giftAccess ne
+ *  notifiait personne : le droit existait en base mais l'apprenant ne devinait pas
+ *  son cadeau. Même mécanique que l'e-mail post-paiement : lien magique 72 h pour
+ *  les comptes sans mot de passe. Meilleur-effort — l'offre réussit même si
+ *  l'envoi échoue (le retour `emailSent` l'indique à la console). */
+async function notifyGiftCourse(user: { id: string; email: string; name: string; passwordHash: string | null }, productTitle: string): Promise<boolean> {
+  try {
+    const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
+    const connect = user.passwordHash
+      ? `Retrouvez votre parcours : ${appUrl}`
+      : `Connectez-vous en un clic (lien valable 72 h) : ${appUrl}/#/magic/${await magicLinkFor(user.id)}\n(Vous pourrez définir un mot de passe plus tard via « Mot de passe oublié » — ou continuer par lien.)`;
+    const body = [
+      `Bonjour ${user.name},`, "",
+      `Bonne nouvelle : un accès au parcours « ${productTitle} » vous a été offert.`,
+      "Il est déjà actif sur votre compte — aucune démarche, aucun paiement.", "",
+      connect, "",
+      "Si ce message est arrivé dans vos courriers indésirables (spams), marquez-le « non spam » pour bien recevoir les prochains.",
+      `— ${env.BRAND_NAME}`,
+    ].join("\n");
+    const r = await sendEmail(user.email, `Un accès vous a été offert — ${productTitle}`, body);
+    if (!r.ok) { console.warn(`[payments] e-mail cadeau ${user.email} — échec : ${r.error ?? r.provider}`); return false; }
+    await audit({ action: "gift.email.sent", targetType: "User", targetId: user.id, meta: { to: user.email, product: productTitle, magicLink: !user.passwordHash } });
+    return true;
+  } catch (e) {
+    console.warn(`[payments] e-mail cadeau ${user.email} — échec : ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
+/** Sièges offerts à une organisation : prévenir ses administrateurs (OWNER/ADMIN).
+ *  Meilleur-effort ; compte les e-mails partis. */
+async function notifyGiftSeats(orgId: string, orgName: string, seats: number): Promise<number> {
+  try {
+    const admins = await prisma.organizationMembership.findMany({
+      where: { organizationId: orgId, orgRole: { in: ["OWNER", "ADMIN"] } },
+      include: { user: { select: { id: true, email: true, name: true } } },
+    });
+    let sent = 0;
+    for (const m of admins) {
+      try {
+        const body = [
+          `Bonjour ${m.user.name},`, "",
+          `Bonne nouvelle : ${seats} siège(s) de formation ont été offerts à « ${orgName} ».`,
+          "Ils sont déjà crédités — attribuez-les à vos apprenants depuis votre espace entreprise.", "",
+          "Si ce message est arrivé dans vos courriers indésirables (spams), marquez-le « non spam » pour bien recevoir les prochains.",
+          `— ${env.BRAND_NAME}`,
+        ].join("\n");
+        const r = await sendEmail(m.user.email, `${seats} siège(s) offert(s) — ${orgName}`, body);
+        if (r.ok) sent++;
+        else console.warn(`[payments] e-mail cadeau sièges ${m.user.email} — échec : ${r.error ?? r.provider}`);
+      } catch (e) {
+        console.warn(`[payments] e-mail cadeau sièges ${m.user.email} — échec : ${e instanceof Error ? e.message : String(e)}`);
+      }
+    }
+    if (sent > 0) await audit({ action: "gift.email.sent", targetType: "Organization", targetId: orgId, meta: { seats, admins: sent } });
+    return sent;
+  } catch (e) {
+    console.warn(`[payments] e-mails cadeau sièges (org ${orgId}) — échec : ${e instanceof Error ? e.message : String(e)}`);
+    return 0;
+  }
+}
+
 export async function giftAccess(principal: Principal, input: { productId: string; email?: string; organizationId?: string }) {
   const product = await prisma.product.findUnique({ where: { id: input.productId } });
   if (!product?.active) throw new PaymentError(404, "product_not_found", "Produit introuvable ou inactif");
@@ -693,7 +755,8 @@ export async function giftAccess(principal: Principal, input: { productId: strin
       data: { holderUserId: user.id, scope: "COURSE_ACCESS", courseId: product.courseId, source: "GIFT", grantedById: principal.id },
     });
     await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId } });
-    return { ...ent, holderEmail: user.email };
+    const emailSent = await notifyGiftCourse(user, product.title);
+    return { ...ent, holderEmail: user.email, emailSent };
   }
 
   // SEATS → une organisation, sièges crédités immédiatement.
@@ -709,7 +772,8 @@ export async function giftAccess(principal: Principal, input: { productId: strin
     return created;
   });
   await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderOrgId: org.id, seats } });
-  return { ...ent, holderOrgName: org.name };
+  const adminsNotified = await notifyGiftSeats(org.id, org.name, seats);
+  return { ...ent, holderOrgName: org.name, adminsNotified };
 }
 
 /** Révoque un droit (cadeau retiré, suite de remboursement…). Pour un droit
