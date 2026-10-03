@@ -5,6 +5,7 @@ import { runF2fReminders } from "../f2f/f2f.service.js";
 import { runDueReports } from "../reports/reports.service.js";
 import { runRetentionPurge } from "../rgpd/rgpd.service.js";
 import { dispatchPending } from "../notifications/notifications.service.js";
+import { reapStuckMedia } from "../media/media.service.js";
 import { forwardPending } from "../../lib/lrs/forwarder.js";
 import { archiveGranularStatements } from "../../lib/lrs/retention.js";
 import { flushPendingWebhooks } from "../../lib/webhooks/webhooks.js";
@@ -71,6 +72,12 @@ export async function jobRoutes(app: FastifyInstance) {
   app.post("/jobs/lrs/forward", { preHandler: guard("job:run") }, async (req) => {
     const { batchSize } = z.object({ batchSize: z.number().int().positive().max(500).optional() }).parse(req.body ?? {});
     return { data: await record(req, "lrs-forward", () => forwardPending(batchSize ?? 100)) };
+  });
+
+  // Balai Médiathèque : fiches restées « en traitement » (arrêt du serveur) → Échec.
+  app.post("/jobs/media-janitor/run", { preHandler: guard("job:run") }, async (req) => {
+    const { now, staleMinutes } = z.object({ now: z.string().datetime().optional(), staleMinutes: z.number().int().positive().optional() }).parse(req.body ?? {});
+    return { data: await record(req, "media-janitor", () => reapStuckMedia(now ? new Date(now) : new Date(), staleMinutes)) };
   });
 
   // Pedagogical alerting digest (manual trigger; bypasses the weekly gate).

@@ -27,6 +27,7 @@ import { runRetentionPurge } from "../modules/rgpd/rgpd.service.js";
 import { forwardPending } from "./lrs/forwarder.js";
 import { archiveGranularStatements } from "./lrs/retention.js";
 import { flushPendingWebhooks } from "./webhooks/webhooks.js";
+import { reapStuckMedia } from "../modules/media/media.service.js";
 
 const FAST_MS = 60_000;      // delivery queues
 const SLOW_MS = 3_600_000;   // date-gated jobs
@@ -74,6 +75,8 @@ export function startJobsScheduler(log: Logger = { info: console.log, error: con
     await safe("retention", () => runRetentionPurge(now));
     const x = await safe("lrs-retention", () => archiveGranularStatements(now));
     if (x && x.archived > 0) log.info(`[jobs] rétention xAPI : ${x.archived} statement(s) archivé(s) → ${x.file}`);
+    const mj = await safe("media-janitor", () => reapStuckMedia(now), (r) => r.reaped === 0);
+    if (mj && mj.reaped > 0) log.info(`[jobs] médiathèque : ${mj.reaped} média(s) bloqué(s) passé(s) en Échec`);
     slowBusy = false;
   };
 
