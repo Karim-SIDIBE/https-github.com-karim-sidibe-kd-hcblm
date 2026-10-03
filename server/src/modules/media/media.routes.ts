@@ -3,8 +3,14 @@ import { z } from "zod";
 import { MediaError, assertAssetAccessible, assetIdFromKey, attachCaptions, captionsStatus, createFolder, createFromUpload, deleteFolder, deleteMedia, generateCaptions, getAsset, listFolders, listMedia, playbackManifest, registerExternal, removeCaptions, renameFolder, resolveRendition, updateAsset } from "./media.service.js";
 import * as storage from "../../lib/storage/storage.js";
 import { SubtitleError } from "../../lib/ai/subtitles.js";
-import { scanStreamHead, scanUpload, readAll } from "../../lib/av/scan.js";
+import { scanStreamHead, clamavScanFile } from "../../lib/av/scan.js";
 import { env } from "../../config/env.js";
+import { randomUUID } from "node:crypto";
+import { createReadStream, createWriteStream } from "node:fs";
+import { mkdir, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { authenticate, guard } from "../../lib/auth.js";
 import { verifyMediaToken } from "../../lib/auth/jwt.js";
 import { envelope, pageQuery } from "../../lib/paging.js";
@@ -108,17 +114,24 @@ export async function mediaRoutes(app: FastifyInstance) {
       const { result, body } = await scanStreamHead(file.file, opts);
       if (!result.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${result.reason}` });
       // 2) When a real engine is configured, scan the FULL object via ClamAV — the
-      //    head heuristic alone misses payloads past the first 256 KB. Buffer the
-      //    remaining stream (bounded by MEDIA_MAX_BYTES) and hand the buffer on.
-      let data: typeof body = body;
+      //    head heuristic alone misses payloads past the first 256 KB. JAMAIS en
+      //    mémoire : le flux va dans un fichier temporaire sur disque, clamd le
+      //    scanne par morceaux, puis il repart en flux vers le stockage. (Le
+      //    tampon intégral + sa copie d'envoi dépassaient le mem_limit du
+      //    conteneur dès ~700 Mo → API tuée en plein téléversement.)
       if (env.CLAMAV_HOST) {
-        const buf = Buffer.isBuffer(body) ? body : await readAll(body);
-        if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
-        const full = await scanUpload(buf, opts);
-        if (!full.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${full.reason}` });
-        data = buf;
+        const tmp = join(env.MEDIA_DIR, "tmp", `${randomUUID()}.upload`);
+        await mkdir(dirname(tmp), { recursive: true });
+        try {
+          await pipeline(Buffer.isBuffer(body) ? Readable.from(body) : body, createWriteStream(tmp));
+          if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
+          const full = await clamavScanFile(tmp);
+          if (!full.ok) return reply.status(422).send({ error: "infected", message: `Fichier refusé (antivirus) : ${full.reason}` });
+          const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data: createReadStream(tmp), createdById: req.principal?.id });
+          return reply.status(201).send({ data: asset });
+        } finally { await rm(tmp, { force: true }); }
       }
-      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data, createdById: req.principal?.id });
+      const asset = await createFromUpload({ filename: file.filename, mime: file.mimetype, data: body, createdById: req.principal?.id });
       if (file.file.truncated) return reply.status(413).send({ error: "too_large", message: "Fichier trop volumineux" });
       return reply.status(201).send({ data: asset });
     } catch (err) { return handle(reply, err); }

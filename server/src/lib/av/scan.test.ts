@@ -25,7 +25,7 @@ test("legitimate media/document headers pass", () => {
 
 // --- clamavScan contre un FAUX clamd TCP local (verdicts réels du protocole) ---
 import net from "node:net";
-import { clamavScan } from "./scan.js";
+import { clamavScan, clamavScanFile } from "./scan.js";
 
 /** Démarre un faux clamd qui répond `reply` puis `end` (ou détruit la socket). */
 function fakeClamd(reply: string, destroy = false): Promise<{ port: number; close: () => void }> {
@@ -65,4 +65,54 @@ test("clamavScan : démon injoignable → « indisponible », bloqué en mode st
   assert.match(strict.reason!, /indisponible/);
   const open = await clamavScan(Buffer.from("x"), { host: "127.0.0.1", port: closedPort, failOpen: true });
   assert.equal(open.ok, true);
+});
+
+test("clamavScanFile : fichier multi-morceaux envoyé en flux, cadrage INSTREAM exact, verdict OK", async () => {
+  // Faux clamd qui PARSE le protocole : taille totale annoncée par les
+  // en-têtes de morceaux == octets reçus == taille du fichier, terminateur nul.
+  const { mkdtemp, writeFile, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const dir = await mkdtemp(join(tmpdir(), "av-stream-"));
+  const path = join(dir, "media.bin");
+  const SIZE = 3 * 1024 * 1024 + 123; // > 1 Mio → plusieurs morceaux
+  await writeFile(path, Buffer.alloc(SIZE, 0x42));
+
+  let received = 0, sawTerminator = false, framesOk = true;
+  const srv = await new Promise<{ port: number; close: () => void }>((resolve) => {
+    const s = net.createServer((sock) => {
+      let pending = Buffer.alloc(0);
+      let awaiting = -1; // octets restants du morceau en cours (-1 = lire un en-tête)
+      let greeted = false;
+      sock.on("data", (d) => {
+        pending = Buffer.concat([pending, d]);
+        if (!greeted) {
+          const z = pending.indexOf(0);
+          if (z === -1) return;
+          if (pending.subarray(0, z).toString() !== "zINSTREAM") framesOk = false;
+          pending = pending.subarray(z + 1); greeted = true;
+        }
+        for (;;) {
+          if (awaiting === -1) {
+            if (pending.length < 4) return;
+            awaiting = pending.readUInt32BE(0); pending = pending.subarray(4);
+            if (awaiting === 0) { sawTerminator = true; sock.write("stream: OK\0"); sock.end(); return; }
+          }
+          const take = Math.min(awaiting, pending.length);
+          received += take; awaiting -= take; pending = pending.subarray(take);
+          if (awaiting > 0) return;
+          awaiting = -1;
+        }
+      });
+    });
+    s.listen(0, "127.0.0.1", () => resolve({ port: (s.address() as net.AddressInfo).port, close: () => s.close() }));
+  });
+
+  const r = await clamavScanFile(path, { host: "127.0.0.1", port: srv.port, failOpen: false });
+  srv.close();
+  await rm(dir, { recursive: true, force: true });
+  assert.equal(r.ok, true, r.reason);
+  assert.equal(received, SIZE, "tous les octets du fichier transmis");
+  assert.equal(sawTerminator, true, "terminateur de flux envoyé");
+  assert.equal(framesOk, true, "salutation zINSTREAM correcte");
 });

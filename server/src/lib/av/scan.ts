@@ -6,6 +6,7 @@
  * full; large media is scanned by streaming head (memory-safe on the API box).
  */
 import net from "node:net";
+import { createReadStream } from "node:fs";
 import { Readable } from "node:stream";
 import { env } from "../../config/env.js";
 
@@ -29,10 +30,11 @@ export function scanBytes(buf: Buffer, _opts: { filename?: string; mime?: string
   return { ok: true, engine: "heuristic" };
 }
 
-/** Stream the buffer to clamd (INSTREAM) and interpret the verdict.
- *  Exporté pour les tests (un faux clamd TCP local) ; les options par défaut
- *  viennent de l'env. */
-export function clamavScan(buf: Buffer, opts: { host?: string; port?: number; timeoutMs?: number; failOpen?: boolean } = {}): Promise<ScanResult> {
+export type ClamavOpts = { host?: string; port?: number; timeoutMs?: number; failOpen?: boolean };
+
+/** Session INSTREAM générique : connexion, verdict, erreurs — l'appelant ne
+ *  fournit que l'envoi des données (tampon ou flux). */
+function clamavSession(feed: (sock: net.Socket) => void, opts: ClamavOpts): Promise<ScanResult> {
   const failOpen = opts.failOpen ?? !env.AV_FAIL_CLOSED; // if clamd is unreachable, allow (heuristic already passed) unless told otherwise
   return new Promise((resolve) => {
     const sock = net.createConnection({ host: opts.host ?? env.CLAMAV_HOST!, port: opts.port ?? env.CLAMAV_PORT });
@@ -49,8 +51,7 @@ export function clamavScan(buf: Buffer, opts: { host?: string; port?: number; ti
     sock.setTimeout(opts.timeoutMs ?? env.AV_TIMEOUT_MS);
     sock.on("connect", () => {
       sock.write("zINSTREAM\0");
-      const len = Buffer.alloc(4); len.writeUInt32BE(buf.length, 0);
-      sock.write(Buffer.concat([len, buf, Buffer.from([0, 0, 0, 0])])); // chunk + zero-length terminator
+      feed(sock);
     });
     sock.on("data", (d) => { reply += d.toString(); });
     sock.on("timeout", () => settle({ ok: failOpen, reason: "ClamAV: délai dépassé", engine: "clamav" }));
@@ -61,6 +62,39 @@ export function clamavScan(buf: Buffer, opts: { host?: string; port?: number; ti
       else resolve(sizeLimited() ?? { ok: failOpen, reason: reply.trim() || "ClamAV: réponse inconnue", engine: "clamav" });
     });
   });
+}
+
+const INSTREAM_END = Buffer.from([0, 0, 0, 0]); // zero-length terminator
+
+/** Stream the buffer to clamd (INSTREAM) and interpret the verdict.
+ *  Exporté pour les tests (un faux clamd TCP local) ; les options par défaut
+ *  viennent de l'env. Trois écritures séparées : pas de copie du tampon
+ *  (l'ancien Buffer.concat doublait la mémoire d'un gros média). */
+export function clamavScan(buf: Buffer, opts: ClamavOpts = {}): Promise<ScanResult> {
+  return clamavSession((sock) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(buf.length, 0);
+    sock.write(len); sock.write(buf); sock.write(INSTREAM_END);
+  }, opts);
+}
+
+/** Scan d'un FICHIER sur disque, en INSTREAM par morceaux de 1 Mio : la
+ *  mémoire reste constante quelle que soit la taille du média — un fichier de
+ *  744 Mo bufferisé (x2 avec la copie d'envoi) faisait tuer l'API par sa
+ *  limite mémoire conteneur (mem_limit 1536m), vécu en production le
+ *  03/10/2026. Contre-pression respectée (pause/reprise sur drain). */
+export function clamavScanFile(path: string, opts: ClamavOpts = {}): Promise<ScanResult> {
+  return clamavSession((sock) => {
+    const rs = createReadStream(path, { highWaterMark: 1 << 20 });
+    rs.on("data", (c) => {
+      const chunk = c as Buffer;
+      const len = Buffer.alloc(4); len.writeUInt32BE(chunk.length, 0);
+      sock.write(len);
+      if (!sock.write(chunk)) { rs.pause(); sock.once("drain", () => rs.resume()); }
+    });
+    rs.on("end", () => sock.write(INSTREAM_END));
+    rs.on("error", () => sock.destroy(new Error("lecture du fichier à scanner impossible")));
+    sock.on("close", () => rs.destroy());
+  }, opts);
 }
 
 /** Full scan of an in-memory upload (documents/packages). */
