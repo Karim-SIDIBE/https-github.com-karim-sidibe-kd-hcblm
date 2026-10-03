@@ -134,8 +134,12 @@ export function Tarifs() {
     if (!prod) return;
     setBusy(true); setNote(null);
     try {
-      await api.payGift(prod.type === "COURSE" ? { productId: prod.id, email: gEmail.trim() } : { productId: prod.id, organizationId: gOrg });
-      setNote("✓ Accès offert (journalisé dans l'audit)."); setGEmail(""); await load();
+      const g = await api.payGift(prod.type === "COURSE" ? { productId: prod.id, email: gEmail.trim() } : { productId: prod.id, organizationId: gOrg });
+      // Le bénéficiaire est prévenu par e-mail (lien magique si compte sans mot de passe) — dire si l'envoi a échoué.
+      const mail = prod.type === "COURSE"
+        ? (g.emailSent ? " E-mail envoyé au bénéficiaire." : " ⚠ L'e-mail au bénéficiaire n'a pas pu partir (voir réglages SMTP) — l'accès est bien actif.")
+        : (g.adminsNotified && g.adminsNotified > 0 ? ` ${g.adminsNotified} administrateur(s) prévenu(s) par e-mail.` : " ⚠ Aucun administrateur n'a pu être prévenu par e-mail — les sièges sont bien crédités.");
+      setNote(`✓ Accès offert (journalisé dans l'audit).${mail}`); setGEmail(""); await load();
     } catch (e) { setNote(`✗ ${e instanceof ApiError ? e.message : "Cadeau impossible"}`); }
     finally { setBusy(false); }
   }
