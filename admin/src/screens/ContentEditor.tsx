@@ -646,7 +646,16 @@ function BlockEditor({ block, ri, media, set, note, onClearNote }: { block: Bloc
           )}
           {tv && (
             <Card title="🎬 Vidéo déclencheur" action={<MediaPicker media={media} onPick={(m) => set((c) => { const v = c.blocks[ri].payload.triggerVideo; v.mediaId = m.id; if (m.durationSec) v.durationSec = m.durationSec; if (!v.title || v.title === "Vidéo") v.title = m.filename ?? v.title; })} />}>
-              <div className="row between"><span className="muted" style={{ fontSize: 12 }}>{tv.mediaId ? `Liée : ${media.find((m) => m.id === tv.mediaId)?.filename ?? tv.mediaId}` : "Aucune vidéo liée"}</span>{tv.mediaId && <button className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.triggerVideo.mediaId = undefined; })}>Délier</button>}</div>
+              {/* Même langage visuel que les micro-sessions : pastille VERTE
+                  bien visible à la liaison — la ligne grise discrète faisait
+                  croire que le clic n'avait eu « aucune réaction » (recette
+                  du 03/10/2026, vidéo déclencheur du Bloc 0). */}
+              <div className="row between">
+                {tv.mediaId
+                  ? <span className="pill pill--green">Liée : {media.find((m) => m.id === tv.mediaId)?.filename ?? tv.mediaId}</span>
+                  : <span className="pill pill--soft">Aucune vidéo liée</span>}
+                {tv.mediaId && <button className="btn btn--sm" onClick={() => set((c) => { c.blocks[ri].payload.triggerVideo.mediaId = undefined; })}>Délier</button>}
+              </div>
               <div className="row" style={{ gap: 10 }}>
                 <div style={{ flex: 1 }}><label style={lbl}>Titre</label><input style={field} value={tv.title ?? ""} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.title = e.target.value; })} /></div>
                 <div style={{ width: 120 }}><label style={lbl}>Durée (sec)</label><input style={field} type="number" min={1} value={tv.durationSec ?? 0} onChange={(e) => set((c) => { c.blocks[ri].payload.triggerVideo.durationSec = Number(e.target.value); })} /></div>

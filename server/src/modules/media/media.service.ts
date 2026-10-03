@@ -522,3 +522,22 @@ export async function deleteMedia(assetId: string) {
   await prisma.mediaAsset.delete({ where: { id: assetId } }); // cascades to renditions
   return { id: assetId, removedObjects: keys.size };
 }
+
+/** Balai des médias BLOQUÉS « en traitement » : un crash de l'API (OOM,
+ *  redéploiement) en plein téléversement/transcodage laisse la fiche figée à
+ *  UPLOADED/PROCESSING pour toujours — vécu en production le 03/10/2026 (la
+ *  « Vidéo 1 » fantôme). Au-delà du délai, la fiche passe en ÉCHEC avec un
+ *  message actionnable ; le Super Admin la supprime et retéléverse. Le délai
+ *  est large : un transcodage réel de 800 Mo prend quelques minutes, jamais
+ *  deux heures. Idempotent — relancer ne touche que de nouvelles fiches. */
+export async function reapStuckMedia(now = new Date(), staleMinutes = 120) {
+  const threshold = new Date(now.getTime() - staleMinutes * 60_000);
+  const { count } = await prisma.mediaAsset.updateMany({
+    where: { status: { in: ["UPLOADED", "PROCESSING"] }, updatedAt: { lt: threshold } },
+    data: {
+      status: "FAILED",
+      error: "Traitement interrompu (arrêt du serveur pendant le téléversement ou le transcodage) — supprimez cette entrée puis retéléversez le fichier.",
+    },
+  });
+  return { reaped: count };
+}

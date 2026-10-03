@@ -309,6 +309,7 @@ export const JOB_CATALOG = [
   { key: "scheduled-reports", label: "Rapports programmés", description: "Envoi des rapports de parcours programmés (hebdo/mensuel).", cadence: "toutes les heures" },
   { key: "retention", label: "Purge RGPD", description: "Exécute les effacements arrivés à échéance, purge tokens/journaux/codes expirés.", cadence: "toutes les heures" },
   { key: "lrs-retention", label: "Rétention xAPI", description: "Archive (NDJSON.gz) puis purge les traces granulaires au-delà de la fenêtre de rétention.", cadence: "toutes les heures" },
+  { key: "media-janitor", label: "Balai Médiathèque", description: "Passe en Échec (message actionnable) les médias restés « en traitement » plus de 2 h — fiche orpheline d'un arrêt du serveur en plein téléversement/transcodage.", cadence: "toutes les heures" },
 ] as const;
 export type JobKey = (typeof JOB_CATALOG)[number]["key"];
 
