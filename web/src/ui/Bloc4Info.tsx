@@ -24,8 +24,14 @@ function useCertBlock(eid: string): { blk: CertBlock | null | undefined; names: 
   useEffect(() => {
     let alive = true;
     (async () => {
-      const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid).catch(() => null));
-      if (alive) setBundle(b ?? null);
+      // Cache d'abord (hors-ligne), puis revalidation réseau : un patch de
+      // contenu côté serveur (ex. grille officielle) doit apparaître même quand
+      // l'app rouvre directement sur cette page (recette du 07/10/2026 — seul
+      // l'Accueil revalidait, la grille restait figée sur la copie locale).
+      const cached = await store.getBundle<any>(eid);
+      if (alive && cached) setBundle(cached);
+      const fresh = await engine.cacheBundle(eid).catch(() => null);
+      if (alive) setBundle(fresh ?? cached ?? null);
     })();
     return () => { alive = false; };
   }, [eid]);
