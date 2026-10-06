@@ -13,7 +13,7 @@ type Rubric = { criteria: { label: string; weightPoints: number; minPoints?: num
 // côté serveur) : en dessous, ni preuve citable ni bande haute possibles.
 const SECTION_MIN_WORDS = 30;
 const wordsOf = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
-import { RubricCard, critLabel } from "./RubricCard";
+import { RubricCard, competencyNames, critLabel, humanizeCodes } from "./RubricCard";
 type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
 type ProjectState = {
   sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[];
@@ -90,7 +90,9 @@ export function Project({ eid }: { eid: string }) {
   const spec = useMemo(() => {
     const blk = bundle?.content?.blocks?.find((x: any) => x.type === "CERTIFICATION");
     if (!blk) return null;
-    return { blockIndex: blk.index as number, brief: blk.payload.projectBrief as string, rubric: blk.payload.rubric as Rubric };
+    // Libellés des compétences du parcours : traduire les codes embarqués dans
+    // les textes importés (tâche #27, recette 06/10/2026).
+    return { blockIndex: blk.index as number, brief: blk.payload.projectBrief as string, rubric: blk.payload.rubric as Rubric, names: competencyNames(bundle?.content) };
   }, [bundle]);
 
   async function saveAncrageNote() {
@@ -207,11 +209,11 @@ export function Project({ eid }: { eid: string }) {
       <div><div className="eyebrow">{t("pj.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("pj.title")}</h1></div>
 
       <div className="hf-card hf-card--stripe-orange stack">
-        <div className="hf-pam"><span className="tag">{t("mission")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
+        <div className="hf-pam"><span className="tag">{t("mission")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{humanizeCodes(spec.brief, spec.names)}</div></div>
       </div>
 
       {/* Carte partagée avec la page « Grille d'évaluation du projet » du menu. */}
-      <RubricCard rubric={spec.rubric} />
+      <RubricCard rubric={spec.rubric} names={spec.names} />
 
       {(state?.sections ?? []).map((s, i) => {
         const isFinal = s.key === state?.finalSectionKey;
@@ -223,7 +225,7 @@ export function Project({ eid }: { eid: string }) {
               <strong className="h4">{i + 1}. {s.title}</strong>
               {s.done && <span className="hf-pill hf-pill--mint hf-pill--sm">{t("pj.sectionDone")}</span>}
             </div>
-            {s.helpText && <p className="meta" style={{ margin: 0 }}>{s.helpText}</p>}
+            {s.helpText && <p className="meta" style={{ margin: 0 }}>{humanizeCodes(s.helpText, spec.names)}</p>}
 
             {s.auto ? (
               // Section 4 : greyed — auto-composed from the journal entries.
