@@ -165,6 +165,7 @@ const fr: UiDict = {
   "home.progress": "Progression", "home.blocksCount": "{done} / {total} blocs",
   "home.prodScore": "Score de productivité", "home.prodDesc": "Monte à chaque exercice complété",
   "home.yourPath": "Votre parcours", "home.peer": "Pair de progression", "home.notified": "✓ Notifié",
+  "home.method": "📖 Comment cette formation fonctionne", "mt.back": "← Retour au cours",
   // course
   "course.state.done": "Terminé", "course.state.locked": "🔒 Verrouillé", "course.state.inProgress": "En cours",
   "course.title": "Le parcours", "course.unavailable": "Parcours indisponible (hors-ligne et non rendu disponible).",
@@ -280,6 +281,9 @@ const fr: UiDict = {
   "act.openAnswerPh": "Votre réponse…",
   "ex.aiTitle": "Retour personnalisé sur votre réponse", "ex.aiLoading": "Analyse de votre réponse en cours…",
   "badge.unlocked": "Badge débloqué !", "badge.peerNotified": "🤝 Votre pair de progression est prévenu",
+  // Rattrapage du consentement (06/10/2026) : case proposée quand le partage
+  // n'avait pas été coché à la désignation du pair.
+  "badge.peerConsentAsk": "Partager avec mon pair de progression — il recevra une notification pour ce badge.",
   // journal
   "jr.eyebrow": "Journal de bord", "jr.title": "Ancrer mes acquis",
   "jr.intro": "Une micro-entrée à des intervalles clés, ancrée dans votre situation réelle (votre Moment d'Ancrage). Ces entrées composent la Section 4 de votre projet et comptent dans la notation : la régularité de la pratique est un critère de la grille, avec un minimum exigé.",
@@ -288,6 +292,10 @@ const fr: UiDict = {
   "bd.eyebrow": "Vos badges", "bd.title": "Progression certifiante", "bd.obtained": "Obtenu",
   "bd.entry": "Badge Entrée", "bd.comprehension": "Badge Compréhension", "bd.practice": "Badge Pratique", "bd.anchoring": "Badge Ancrage",
   "bd.addLinkedIn": "Ajouter à LinkedIn", "bd.verify": "Vérifier", "bd.certOf": "Certification de {level}",
+  // 06/10/2026 : un badge de bloc se partage avec le pair (LinkedIn est réservé
+  // au certificat final) ; le dépôt du projet s'ouvre après le Badge Ancrage.
+  "bd.sharePeer": "🤝 Partager avec mon pair", "bd.peerShared": "🤝 Pair prévenu",
+  "bd.projectLocked": "Disponible après le Badge Ancrage — terminez d'abord le Bloc 3.",
   "bd.publicVerify": "Vérification publique", "bd.submitProject": "Déposer mon projet du Bloc 4 →",
   "bd.blockBadges": "Badges de fin de bloc", "bd.finalCert": "Certification finale",
   "bd.certNote": "Les badges jalonnent la progression — seule la certification finale, validée par un évaluateur, vaut certification.",
@@ -515,6 +523,7 @@ const en: UiDict = {
   "home.progress": "Progress", "home.blocksCount": "{done} / {total} blocks",
   "home.prodScore": "Productivity score", "home.prodDesc": "Rises with each completed exercise",
   "home.yourPath": "Your path", "home.peer": "Progress peer", "home.notified": "✓ Notified",
+  "home.method": "📖 How this course works", "mt.back": "← Back to the course",
   "course.state.done": "Completed", "course.state.locked": "🔒 Locked", "course.state.inProgress": "In progress",
   "course.title": "The course", "course.unavailable": "Course unavailable (offline and not made available).",
   "course.priorities": "🎯 Your learning priorities",
@@ -618,12 +627,15 @@ const en: UiDict = {
   "act.caseAnswer": "Your analysis (transfer to your situation)",
   "ex.aiTitle": "Personalised feedback on your answer", "ex.aiLoading": "Analysing your answer…",
   "badge.unlocked": "Badge unlocked!", "badge.peerNotified": "🤝 Your progress peer has been notified",
+  "badge.peerConsentAsk": "Share with my progress peer — they will receive a notification for this badge.",
   "jr.eyebrow": "Logbook", "jr.title": "Anchor my learning",
   "jr.intro": "A micro-entry at key intervals, grounded in your real situation (your Anchor Moment). These entries compose Section 4 of your project and count toward the mark: regularity of practice is a rubric criterion with a required minimum.",
   "jr.day": "Day D+{n}",
   "bd.eyebrow": "Your badges", "bd.title": "Certification progress", "bd.obtained": "Earned",
   "bd.entry": "Entry badge", "bd.comprehension": "Comprehension badge", "bd.practice": "Practice badge", "bd.anchoring": "Anchoring badge",
   "bd.addLinkedIn": "Add to LinkedIn", "bd.verify": "Verify", "bd.certOf": "Certification — {level}",
+  "bd.sharePeer": "🤝 Share with my peer", "bd.peerShared": "🤝 Peer notified",
+  "bd.projectLocked": "Available after the Anchoring Badge — finish Block 3 first.",
   "bd.publicVerify": "Public verification", "bd.submitProject": "Submit my Block 4 project →",
   "bd.blockBadges": "End-of-block badges", "bd.finalCert": "Final certification",
   "bd.certNote": "Badges are progression milestones — only the final, evaluator-validated certification counts as certification.",

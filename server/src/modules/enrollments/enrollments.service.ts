@@ -297,6 +297,45 @@ export async function designatePeer(enrollmentId: string, name: string, email: s
   return reconcile(enrollmentId);
 }
 
+/** Partage d'un badge avec le pair (consigne du 06/10/2026) : le bouton
+ *  « Partager avec mon pair » remplace LinkedIn pour les badges de bloc, et la
+ *  fenêtre de célébration offre une seconde occasion de cocher le consentement
+ *  quand il n'avait pas été donné à la désignation (Pilier 6.3 — le
+ *  consentement reste un geste explicite : la case, jamais un simple clic). */
+export async function sharePeerBadge(enrollmentId: string, badgeType: string, consent?: boolean) {
+  const enrollment = await prisma.enrollment.findUnique({
+    where: { id: enrollmentId },
+    include: { user: { select: { name: true } }, badges: true, courseVersion: { select: { title: true, content: true } } },
+  });
+  if (!enrollment) throw new EngineError(404, "not_found", "Inscription introuvable");
+  const badge = enrollment.badges.find((b) => b.type === badgeType);
+  if (!badge) throw new EngineError(404, "badge_not_found", "Ce badge n'est pas encore obtenu");
+  if (!enrollment.peerEmail && !enrollment.peerPhone) throw new EngineError(422, "no_peer", "Aucun pair de progression n'est désigné sur cette inscription");
+  if (consent === true && !enrollment.peerConsent) {
+    await prisma.enrollment.update({ where: { id: enrollmentId }, data: { peerConsent: true } });
+    enrollment.peerConsent = true;
+  }
+  if (!enrollment.peerConsent) throw new EngineError(422, "consent_required", "Cochez d'abord le partage avec votre pair de progression");
+  // Idempotent : un badge déjà partagé ne renvoie pas de notification (pas de spam du pair).
+  if (badge.peerNotified) return { shared: true, already: true, peerName: enrollment.peerName };
+  // Libellé du badge depuis le contenu du parcours — même source qu'à l'émission.
+  const content = enrollment.courseVersion.content as { blocks?: { type: string; badge?: { label?: string } }[] } | null;
+  const block = content?.blocks?.find((b) => badgeTypeForBlock(b.type as never) === badgeType);
+  const label = block?.badge?.label ?? badgeType;
+  const body = peerNotificationText(enrollment.peerName, enrollment.user.name, label, enrollment.courseVersion.title);
+  if (enrollment.peerEmail) {
+    await enqueueNotification({
+      enrollmentId, recipientKind: "PEER", recipient: enrollment.peerEmail, channel: "EMAIL",
+      subject: `${enrollment.user.name} a obtenu un badge 🏅`, body, provider: "engine",
+    });
+  }
+  if (enrollment.peerPhone) {
+    await enqueueNotification({ enrollmentId, recipientKind: "PEER", recipient: enrollment.peerPhone, channel: "WHATSAPP", body, provider: "engine" });
+  }
+  await prisma.badge.update({ where: { id: badge.id }, data: { peerNotified: true } });
+  return { shared: true, already: false, peerName: enrollment.peerName };
+}
+
 // --- cohort board (Pilier 6.3) ----------------------------------------------
 
 /** Tableau de progression de cohorte ANONYMISÉ (K-HCBLM v2.2, Pilier 6.3) :
@@ -1226,7 +1265,7 @@ export async function reconcile(enrollmentId: string) {
     // by mobile messaging (§7.1: e-mail alone underreaches African peers).
     // Sous réserve du consentement recueilli à la désignation (Pilier 6.3).
     if (enrollment.peerConsent && (enrollment.peerEmail || enrollment.peerPhone)) {
-      const peerBody = peerNotificationText(enrollment.peerName, enrollment.user.name, block.badge.label);
+      const peerBody = peerNotificationText(enrollment.peerName, enrollment.user.name, block.badge.label, enrollment.courseVersion.title);
       if (enrollment.peerEmail) {
         await enqueueNotification({
           enrollmentId, recipientKind: "PEER", recipient: enrollment.peerEmail, channel: "EMAIL",
