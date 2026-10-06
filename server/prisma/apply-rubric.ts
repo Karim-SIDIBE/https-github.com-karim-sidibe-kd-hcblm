@@ -38,17 +38,31 @@ export async function applyRubricToCourse(slug: string, rubric: Rubric, summary:
       continue;
     }
 
+    // Un vieux BROUILLON peut porter des erreurs de contenu préexistantes,
+    // étrangères à la grille (recette du 07/10/2026 : un brouillon v24 avec un
+    // audit de durées A2 en échec a stoppé le script AVANT la version publiée).
+    // Règle : si le contenu était DÉJÀ invalide avant patch, on l'ignore avec
+    // un avertissement — la grille y sera posée quand le brouillon sera réparé
+    // dans la console. On n'abandonne que si c'est LE PATCH qui casse une
+    // version jusque-là valide (la grille ne doit jamais publier d'invalide).
+    const preShape = validateShape(JSON.parse(JSON.stringify(content)));
+    const preInvalid = !preShape.ok || !validatePolicy(preShape.content).publishable;
+
     cert.payload.rubric = JSON.parse(JSON.stringify(rubric));
     const shape = validateShape(content);
-    if (!shape.ok) {
-      console.error(`✗ v${v.version} (${v.status}) : le contenu patché échoue la validation de SHAPE :`);
-      for (const i of shape.issues.slice(0, 10)) console.error(`   - ${i.path}: ${i.message}`);
-      process.exit(1);
-    }
-    const policy = validatePolicy(shape.content);
-    if (!policy.publishable) {
-      console.error(`✗ v${v.version} (${v.status}) : le contenu patché n'est pas publiable :`);
-      for (const e of policy.issues.filter((i) => i.level === "error")) console.error(`   ✗ ${e.rule} (${e.path}) — ${e.message}`);
+    const policy = shape.ok ? validatePolicy(shape.content) : null;
+    if (!shape.ok || !policy?.publishable) {
+      const issues = !shape.ok
+        ? shape.issues.slice(0, 5).map((i) => `${i.path}: ${i.message}`)
+        : policy!.issues.filter((i) => i.level === "error").slice(0, 5).map((e) => `${e.rule} (${e.path}) — ${e.message}`);
+      if (preInvalid) {
+        console.log(`⚠ v${v.version} (${v.status}) : contenu invalide AVANT patch (erreur préexistante, étrangère à la grille) — version ignorée :`);
+        for (const i of issues) console.log(`   - ${i}`);
+        skipped++;
+        continue;
+      }
+      console.error(`✗ v${v.version} (${v.status}) : le patch rend invalide une version jusque-là valide — abandon :`);
+      for (const i of issues) console.error(`   ✗ ${i}`);
       process.exit(1);
     }
     for (const w of policy.issues.filter((i) => i.level === "warning")) console.log(`   ⚠ v${v.version} : ${w.rule} — ${w.message}`);
