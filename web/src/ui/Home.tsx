@@ -190,9 +190,13 @@ export function Home({ eid }: { eid: string }) {
         </div>
       )}
 
-      {/* La méthode reste consultable à tout moment (06/10/2026) — plus
-          seulement à la première entrée dans le Bloc 0. */}
-      <button className="hf-btn hf-btn--ghost hf-btn--block" onClick={() => navigate(routes.method(eid))}>{t("home.method")}</button>
+      {/* Mobile uniquement (le menu latéral n'existe qu'en desktop) : les trois
+          liens de transparence permanente — méthode, Bloc 4, grille (06/10/2026). */}
+      <div className="stack only-mobile" style={{ gap: 6 }}>
+        <button className="hf-btn hf-btn--ghost hf-btn--block" onClick={() => navigate(routes.method(eid))}>{t("nav.method")}</button>
+        <button className="hf-btn hf-btn--ghost hf-btn--block" onClick={() => navigate(routes.bloc4(eid))}>{t("nav.bloc4")}</button>
+        <button className="hf-btn hf-btn--ghost hf-btn--block" onClick={() => navigate(routes.grille(eid))}>{t("nav.grille")}</button>
+      </div>
     </div>
   );
 }

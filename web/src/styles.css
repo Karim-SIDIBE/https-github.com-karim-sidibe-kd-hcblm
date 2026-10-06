@@ -245,6 +245,10 @@ button.block { width:100%; }
   .sidebar .navitem svg { width:20px; height:20px; }
   .sidebar .navitem.on { background:var(--orange-50); color:var(--orange-600); }
   .sidebar .navitem:hover { background:var(--bg-tint); }
+  /* Liens d'information permanents sous « Badges » (06/10/2026). */
+  .navsep { height:1px; background:var(--line); margin:8px 10px; flex:0 0 auto; }
+  .sidebar .navitem--info { font-weight:600; font-size:12.5px; padding:9px 14px; line-height:1.35; text-align:left; }
+  .only-mobile { display:none; }         /* le menu latéral porte déjà ces liens */
   .appbar { display:none; }              /* desktop uses the sidebar instead */
   .appbar.appbar--standalone { display:flex; border-radius:var(--r-lg) var(--r-lg) 0 0; }  /* …except the enrolments screen, which has no sidebar */
   .tabbar { display:none; }

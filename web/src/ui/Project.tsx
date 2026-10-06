@@ -13,10 +13,7 @@ type Rubric = { criteria: { label: string; weightPoints: number; minPoints?: num
 // côté serveur) : en dessous, ni preuve citable ni bande haute possibles.
 const SECTION_MIN_WORDS = 30;
 const wordsOf = (s: string) => s.trim().split(/\s+/).filter(Boolean).length;
-// Affichage apprenant (P7 + règle UX) : les codes du référentiel (S1, S2…,
-// D1.C1…) en tête des libellés de critères sont retirés — la compétence
-// elle-même suffit ; les codes restent un usage interne / SIRH.
-const critLabel = (l: string) => l.replace(/^(?:S\d+|D\d+\.C\d+)\s*[—:-]\s*/, "");
+import { RubricCard, critLabel } from "./RubricCard";
 type SectionState = { key: string; title: string; helpText?: string; auto: boolean; done: boolean; text: string; locked: boolean; prefill?: string };
 type ProjectState = {
   sections: SectionState[]; journal: { day: number; done: boolean; unlocksAt: string | null; unlocked: boolean }[];
@@ -213,40 +210,8 @@ export function Project({ eid }: { eid: string }) {
         <div className="hf-pam"><span className="tag">{t("mission")}</span><div className="quote" style={{ whiteSpace: "pre-wrap" }}>{spec.brief}</div></div>
       </div>
 
-      <div className="hf-card hf-card--icy stack">
-        <strong className="h4">{t("pj.rubricTitle")} <span className="meta" style={{ fontWeight: 400 }}>{t("pj.rubricNote")}</span></strong>
-        <div className="stack" style={{ gap: 8 }}>
-          {spec.rubric.criteria.map((c) => (
-            <details key={c.label}>
-              <summary className="row between" style={{ cursor: "pointer", listStyle: "none", gap: 8 }}>
-                <span className="body">{critLabel(c.label)}</span>
-                <span className="row" style={{ gap: 6 }}>
-                  {c.minPoints != null && <span className="hf-pill hf-pill--orange hf-pill--sm">{t("pj.rubricMin", { min: c.minPoints })}</span>}
-                  <span className="hf-pill hf-pill--soft hf-pill--sm">{t("pj.pts", { n: c.weightPoints })}</span>
-                </span>
-              </summary>
-              <div className="stack" style={{ gap: 6, margin: "8px 0 4px 10px" }}>
-                {(c.bands ?? []).slice().sort((a, b) => b.band - a.band).map((b) => (
-                  <p key={b.band} className="meta" style={{ margin: 0 }}>
-                    <strong>{t("pj.band", { band: b.band, lo: b.scoreRange[0], hi: b.scoreRange[1] })}</strong>{b.descriptor ? ` — ${b.descriptor}` : ""}
-                  </p>
-                ))}
-                {c.whereToLook && <p className="meta" style={{ margin: 0, fontStyle: "italic" }}>{t("pj.whereToLook", { text: c.whereToLook })}</p>}
-              </div>
-            </details>
-          ))}
-        </div>
-        <p className="meta" style={{ margin: 0 }}>{t("pj.passThreshold", { threshold: spec.rubric.threshold })}</p>
-        {/* Décision ternaire du socle §6, énoncée AVANT de soumettre — la
-            non-compensation (minimum par critère) surprend sinon. */}
-        <div className="stack" style={{ gap: 4 }}>
-          <strong className="h4" style={{ fontSize: 14 }}>{t("pj.decisionTitle")}</strong>
-          <p className="meta" style={{ margin: 0 }}>✅ {t("pj.decisionCertified", { threshold: spec.rubric.threshold })}</p>
-          <p className="meta" style={{ margin: 0 }}>🔁 {t("pj.decisionResubmit")}</p>
-          <p className="meta" style={{ margin: 0 }}>⛔ {t("pj.decisionNotCertified")}</p>
-        </div>
-        <p className="meta" style={{ margin: 0 }}>{t("pj.writeTip")}</p>
-      </div>
+      {/* Carte partagée avec la page « Grille d'évaluation du projet » du menu. */}
+      <RubricCard rubric={spec.rubric} />
 
       {(state?.sections ?? []).map((s, i) => {
         const isFinal = s.key === state?.finalSectionKey;
@@ -268,7 +233,8 @@ export function Project({ eid }: { eid: string }) {
                   style={{ minHeight: 110, background: "var(--bg-soft)", color: "var(--fg-2)" }} />
               </>
             ) : s.locked ? (
-              <p className="meta" style={{ margin: 0 }}>{t("pj.sectionLocked")}</p>
+              /* Règle d'assemblage de la Section 5 — EN GRAS (consigne 06/10/2026). */
+              <p className="meta" style={{ margin: 0 }}><strong>{t("pj.sectionLocked")}</strong></p>
             ) : (
               <>
                 <textarea className="hf-field" spellCheck lang="fr" value={text} onChange={(e) => setValues((v) => ({ ...v, [s.key]: e.target.value }))} style={{ minHeight: 110 }}

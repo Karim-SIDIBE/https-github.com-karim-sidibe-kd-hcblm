@@ -24,6 +24,8 @@ const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Proj
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
 const Method = lazy(() => import("./ui/HowItWorks").then((m) => ({ default: m.Method })));
+const Bloc4Info = lazy(() => import("./ui/Bloc4Info").then((m) => ({ default: m.Bloc4Info })));
+const GrillePage = lazy(() => import("./ui/Bloc4Info").then((m) => ({ default: m.GrillePage })));
 const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Account })));
 const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Revision })));
 const Purchase = lazy(() => import("./ui/Purchase").then((m) => ({ default: m.Purchase })));
@@ -38,7 +40,7 @@ function eidOf(route: Route): string | null {
 /** Which bottom tab is active for the current route. */
 function activeTab(route: Route): "home" | "cours" | "journal" | "badges" | null {
   switch (route.name) {
-    case "course": case "onboarding": case "method": return "home";
+    case "course": case "onboarding": case "method": case "bloc4": case "grille": return "home";
     case "cours": case "session": case "quiz": case "deliverable": case "activity": case "project": return "cours";
     case "journal": return "journal";
     case "badges": return "badges";
@@ -64,6 +66,8 @@ function Screen({ route }: { route: Route }) {
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
     case "method": return <Method eid={route.eid} />;
+    case "bloc4": return <Bloc4Info eid={route.eid} />;
+    case "grille": return <GrillePage eid={route.eid} />;
     case "purchase": return <Purchase key={`buy:${route.courseId}`} courseId={route.courseId} />;
     case "order": return <OrderStatus key={`ord:${route.orderId}`} orderId={route.orderId} />;
     case "catalogue": return <GuestCatalog />;
@@ -79,6 +83,16 @@ const TABS = [
   { key: "cours", label: "nav.cours", Icon: IconBook, href: routes.cours },
   { key: "journal", label: "nav.journal", Icon: IconJournal, href: routes.journal },
   { key: "badges", label: "nav.badges", Icon: IconBadge, href: routes.badges },
+] as const;
+
+/** Liens d'information permanents, SOUS « Badges » dans le menu latéral
+ *  (consigne du 06/10/2026 : « pour ne pas être raté par qui que ce soit ») —
+ *  la méthode, ce qui attend l'apprenant au Bloc 4, et la grille d'évaluation.
+ *  En mobile (pas de menu latéral), le même trio vit en bas de l'Accueil. */
+export const INFO_LINKS = [
+  { key: "method", label: "nav.method", href: routes.method },
+  { key: "bloc4", label: "nav.bloc4", href: routes.bloc4 },
+  { key: "grille", label: "nav.grille", href: routes.grille },
 ] as const;
 
 function Brand() {
@@ -196,6 +210,9 @@ export function App() {
 
   const eid = eidOf(route);
   const tab = activeTab(route);
+  // Sur une page d'information, c'est SON lien qui s'allume dans le menu
+  // latéral (pas « Accueil ») — la barre mobile, elle, garde l'onglet Accueil.
+  const isInfo = route.name === "method" || route.name === "bloc4" || route.name === "grille";
   const onLogout = () => { logout(); setAuthed(false); };
 
   // Enrolments list (no course context) — simple centered layout.
@@ -216,8 +233,16 @@ export function App() {
       <aside className="sidebar">
         <Brand />
         {TABS.map(({ key, label, Icon, href }) => (
-          <button key={key} className={`navitem ${tab === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
+          <button key={key} className={`navitem ${tab === key && !isInfo ? "on" : ""}`} onClick={() => navigate(href(eid))}>
             <Icon /> {t(label)}
+          </button>
+        ))}
+        {/* Transparence permanente (06/10/2026) : méthode, Bloc 4, grille —
+            juste sous « Badges » pour n'être ratés par personne. */}
+        <div className="navsep" />
+        {INFO_LINKS.map(({ key, label, href }) => (
+          <button key={key} className={`navitem navitem--info ${route.name === key ? "on" : ""}`} onClick={() => navigate(href(eid))}>
+            {t(label)}
           </button>
         ))}
         <div className="spacer" />
