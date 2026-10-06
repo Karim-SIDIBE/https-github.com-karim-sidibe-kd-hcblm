@@ -1094,45 +1094,62 @@ export const n1Full: CourseContent = {
           ],
         },
         rubric: {
-          // Grille certifiante officielle : annexe Gestion du Temps N1 v1.1
-          // (critères du domaine D4, 60 pts) + socle commun v1.1 (S1-S3, 40 pts).
-          // Pondérations INCHANGÉES par rapport à la grille v1.0 (correspondance
-          // consignée au §4 de l'annexe : D4.C4 → S1, transversaux → S2/S3).
+          // Grille certifiante officielle : annexe Gestion du Temps N1 v1.2
+          // (novembre 2026, remplace la v1.1 — Référentiel v3.0 + avenant n° 1
+          // au socle) : les QUATRE compétences D4 à 15 points chacune (min. 8),
+          // D4.C4 « Performance durable et charge mentale » RÉINTÉGRÉE comme
+          // critère 4 (l'avenant interdit qu'une compétence du domaine soit
+          // absorbée par un critère transversal — S1 ne la couvre plus), le
+          // critère 3 réécrit sur l'indicateur N1 v3.0 (délais courts, alerte
+          // avant l'échéance). + socle commun v1.1 (S1-S3, 40 pts).
           // Notation PAR BANDE : la bande la plus haute dont tous les éléments
           // sont satisfaits ; milieu de bande par défaut ; preuve obligatoire.
           criteria: [
             {
-              label: "Organisation personnelle", competencyCode: "D4.C1", weightPoints: 20, origin: "annexe", minPoints: 10,
+              label: "Organisation personnelle", competencyCode: "D4.C1", weightPoints: 15, origin: "annexe", minPoints: 8,
               whereToLook: "Section 2 (solution mise en œuvre) et journal de pratique",
               bands: [
-                { band: 4, scoreRange: [16, 20], descriptor: "Décrit un système de planification appliqué sur la période de pratique de 15 jours. Nomme au moins un créneau protégé avec son jour, son heure et sa durée. Cite au moins deux occasions datées où il l'a tenu. Le journal montre la planification initiale et au moins un ajustement en cours de route." },
-                { band: 3, scoreRange: [11, 15], descriptor: "Décrit un système de planification qu'il a appliqué. Nomme un créneau protégé avec son jour et sa durée. Cite une occasion où il l'a tenu, ou explique précisément pourquoi il n'a pas pu le tenir." },
-                { band: 2, scoreRange: [6, 10], descriptor: "Décrit une intention de planification ou un outil adopté, sans créneau daté ni preuve d'application. Le journal reste descriptif : il raconte les journées sans montrer de planification." },
+                { band: 4, scoreRange: [13, 15], descriptor: "Décrit un système de planification qu'il a appliqué sur la période de pratique de 15 jours. Nomme au moins un créneau protégé avec son jour, son heure et sa durée. Cite au moins deux occasions datées où il l'a tenu. Le journal montre la planification initiale et au moins un ajustement en cours de route." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Décrit un système de planification qu'il a appliqué. Nomme un créneau protégé avec son jour et sa durée. Cite une occasion où il l'a tenu, ou explique précisément pourquoi il n'a pas pu le tenir." },
+                { band: 2, scoreRange: [6, 8], descriptor: "Décrit une intention de planification ou un outil adopté, sans créneau daté ni preuve d'application. Le journal reste descriptif : il raconte les journées sans montrer de planification." },
                 { band: 1, scoreRange: [0, 5], descriptor: "Aucun système décrit, ou description générique reprenant le vocabulaire du parcours sans situation propre au candidat." },
               ],
             },
             {
-              label: "Gestion des priorités", competencyCode: "D4.C2", weightPoints: 20, origin: "annexe", minPoints: 10,
+              label: "Gestion des priorités", competencyCode: "D4.C2", weightPoints: 15, origin: "annexe", minPoints: 8,
               whereToLook: "Sections 1, 2 et 3",
               bands: [
-                { band: 4, scoreRange: [16, 20], descriptor: "Rapporte au moins deux arbitrages réels entre une demande urgente et une tâche importante. Nomme le critère qu'il a utilisé pour trancher. Indique explicitement ce qu'il a reporté, délégué ou refusé. Décrit ce qui s'est passé ensuite." },
-                { band: 3, scoreRange: [11, 15], descriptor: "Rapporte un arbitrage réel entre urgent et important. Nomme le critère utilisé. Indique ce qu'il a écarté et la conséquence, même sommairement." },
-                { band: 2, scoreRange: [6, 10], descriptor: "Distingue urgent et important sur un exemple issu de son travail, mais sans nommer de critère de décision, ou sans indiquer ce qui a été écarté." },
+                { band: 4, scoreRange: [13, 15], descriptor: "Rapporte au moins deux arbitrages réels entre une demande urgente et une tâche importante. Nomme le critère qu'il a utilisé pour trancher. Indique explicitement ce qu'il a reporté, délégué ou refusé. Décrit ce qui s'est passé ensuite." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Rapporte un arbitrage réel entre urgent et important. Nomme le critère utilisé. Indique ce qu'il a écarté et la conséquence, même sommairement." },
+                { band: 2, scoreRange: [6, 8], descriptor: "Distingue urgent et important sur un exemple issu de son travail, mais sans nommer de critère de décision, ou sans indiquer ce qui a été écarté." },
                 { band: 1, scoreRange: [0, 5], descriptor: "Reprend la distinction en termes théoriques ou cite un exemple du parcours, sans situation issue de sa propre période de pratique." },
               ],
             },
             {
-              label: "Gestion du temps et des interruptions", competencyCode: "D4.C3", weightPoints: 20, origin: "annexe", minPoints: 10,
-              whereToLook: "Sections 2 et 3, journal de pratique",
+              label: "Gestion du temps et des interruptions", competencyCode: "D4.C3", weightPoints: 15, origin: "annexe", minPoints: 8,
+              whereToLook: "Sections 2 et 3, et journal de pratique pour les dates",
               bands: [
-                { band: 4, scoreRange: [16, 20], descriptor: "Identifie ses trois principales sources d'interruption et donne leur fréquence approximative. Décrit une réponse concrète mise en place pour au moins deux d'entre elles. Rapporte l'effet observé sur la période. Traite explicitement au moins une sollicitation relationnelle, hiérarchique ou de messagerie professionnelle propre à son environnement." },
-                { band: 3, scoreRange: [11, 15], descriptor: "Identifie ses principales sources d'interruption. Décrit une réponse concrète mise en place et l'effet qu'elle a produit." },
-                { band: 2, scoreRange: [6, 10], descriptor: "Identifie ses interruptions sans décrire de réponse mise en place, ou décrit une réponse sans rapporter d'effet observé." },
-                { band: 1, scoreRange: [0, 5], descriptor: "Ne traite pas les interruptions, ou les cite de façon générale sans lien avec sa situation de travail." },
+                { band: 4, scoreRange: [13, 15], descriptor: "Rapporte au moins deux délais courts fixés pendant la période de pratique, avec leur échéance. Pour au moins l'un d'eux, indique le moment où il a vu le délai menacé et la date à laquelle il a prévenu, avant l'échéance. Nomme la personne prévenue et la solution proposée : nouvelle date ou arbitrage. Rapporte si le délai, initial ou renégocié, a été tenu." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Rapporte au moins un délai court menacé et le fait qu'il a prévenu avant l'échéance, sans préciser la solution proposée ni si le délai renégocié a été tenu." },
+                { band: 2, scoreRange: [6, 8], descriptor: "Rapporte des délais tenus ou manqués sans jamais mentionner d'alerte donnée avant l'échéance. Ou décrit l'alerte en termes généraux, sans date ni destinataire." },
+                { band: 1, scoreRange: [0, 5], descriptor: "Aucun délai rapporté, ou reprise générique du vocabulaire du parcours sans situation propre au candidat." },
               ],
             },
             {
-              label: "S1 — Régularité de la pratique et journal", competencyCode: "D4.C4", weightPoints: 15, origin: "socle", minPoints: 8,
+              label: "Performance durable et charge mentale", competencyCode: "D4.C4", weightPoints: 15, origin: "annexe", minPoints: 8,
+              // Non-chevauchement (annexe v1.2 §2.2) : D4.C4 lit la charge
+              // PROFESSIONNELLE dans les sections 2 et 3 ; S1 lit l'engagement
+              // dans le parcours (régularité des 6 micro-entrées) en section 4.
+              whereToLook: "Sections 2 et 3. Jamais la section 4, réservée au critère S1.",
+              bands: [
+                { band: 4, scoreRange: [13, 15], descriptor: "Nomme un signe précis de fatigue ou de surcharge repéré dans son travail pendant la période de pratique, avec la situation et la date. Décrit l'action concrète qu'il a prise en réponse. Indique si cette action a produit l'effet attendu." },
+                { band: 3, scoreRange: [9, 12], descriptor: "Nomme un signe précis et l'action prise en réponse, sans indiquer l'effet obtenu." },
+                { band: 2, scoreRange: [6, 8], descriptor: "Évoque sa charge ou sa fatigue sans nommer de signe précis. Ou nomme un signe sans décrire d'action." },
+                { band: 1, scoreRange: [0, 5], descriptor: "Aucune mention de fatigue ou de surcharge professionnelle dans les sections 2 et 3, ou reprise générique du vocabulaire du parcours." },
+              ],
+            },
+            {
+              label: "S1 — Régularité de la pratique et journal", competencyCode: "", weightPoints: 15, origin: "socle", minPoints: 8,
               whereToLook: "Journal de pratique (6 micro-entrées, J+2 à J+15) et section apprentissage personnel",
               bands: [
                 { band: 4, scoreRange: [13, 15], descriptor: "Les 6 entrées sont présentes et réparties sur les 15 jours, sans rattrapage groupé de plus de deux entrées le même jour. Le candidat décrit un signal de surcharge ou de décrochage qu'il a repéré chez lui et l'ajustement concret qu'il a fait en réponse." },
