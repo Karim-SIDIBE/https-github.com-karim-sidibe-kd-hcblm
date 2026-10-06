@@ -137,28 +137,29 @@ test("socle §2.3 : une répartition qui casse la non-compensation bloque la pub
   assert.ok(p.issues.some((i) => i.rule === "rubric.nonCompensation"));
 });
 
-test("la grille officielle annexe v1.1 + socle v1.1 du canonique est publiable", () => {
+test("la grille officielle annexe v1.2 + socle v1.1 du canonique est publiable", () => {
   const s = validateShape(n1Full);
   assert.ok(s.ok);
   const p = validatePolicy((s as any).content);
   assert.equal(p.publishable, true);
   const crits = (s as any).content.blocks[4].payload.rubric.criteria;
-  assert.equal(crits.length, 6);
+  // v1.2 : D4.C4 réintégrée comme critère 4 → 7 critères, domaine 4 × 15/min 8.
+  assert.equal(crits.length, 7);
   assert.ok(crits.every((cr: any) => cr.bands?.length === 4));
-  assert.deepEqual(crits.map((cr: any) => cr.minPoints ?? null), [10, 10, 10, 8, null, null]);
+  assert.deepEqual(crits.map((cr: any) => cr.minPoints ?? null), [8, 8, 8, 8, 8, null, null]);
 });
 
 // --- Socle v1.2 (avenant n°1, objets A et C) ---------------------------------
 
-test("v1.2 : le cours publié reste publiable, avec les avertissements référentiel v3.0 attendus", () => {
+test("annexe v1.2 : la cartographie référentiel v3.0 est complète — plus d'avertissements", () => {
   const s = validateShape(n1Full);
   assert.ok(s.ok);
   const p = validatePolicy((s as any).content);
   assert.equal(p.publishable, true);
-  // D4.C4 (Performance durable) n'a pas encore de critère dédié dans l'annexe
-  // v1.1, et S1 porte son code : exactement la zone de recouvrement C.2.
-  assert.ok(p.issues.some((i) => i.level === "warning" && i.rule === "rubric.refCoverage" && i.message.includes("D4.C4")));
-  assert.ok(p.issues.some((i) => i.level === "warning" && i.rule === "rubric.overlap"));
+  // v1.2 : D4.C4 a son critère dédié (couverture complète) et S1 ne porte
+  // plus de code de domaine (la zone de recouvrement C.2 est levée).
+  assert.ok(!p.issues.some((i) => i.rule === "rubric.refCoverage"));
+  assert.ok(!p.issues.some((i) => i.rule === "rubric.overlap"));
 });
 
 test("objet A.3 : une répartition inégale du bloc domaine bloque la publication", () => {
