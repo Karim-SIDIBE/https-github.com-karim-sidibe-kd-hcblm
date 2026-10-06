@@ -4,7 +4,7 @@ import { navigate, routes } from "../lib/router";
 import { brand } from "../lib/brand";
 import { useT, useI18n } from "../lib/i18n";
 
-type Credential = { id: string; achievementType: string; badgeLabel: string; issuedAt: string; expiresAt?: string | null; expired?: boolean; revoked: boolean; hostedUrl: string; verifyUrl: string };
+type Credential = { id: string; achievementType: string; badgeLabel: string; name?: string; issuer?: string; issuedAt: string; expiresAt?: string | null; expired?: boolean; revoked: boolean; hostedUrl: string; verifyUrl: string };
 type TranscriptRow = { key: string; label: string; scorePct: number | null; correct: number | null; total: number | null; scored: boolean; at: string };
 const ORG = brand.issuer;
 // Symbol of each block badge (consigne « Amélioration » — 2e point).
@@ -16,9 +16,24 @@ const TIERS = [
   { type: "ANCHORING", nameKey: "bd.anchoring", block: 3 },
 ];
 
+/** Préremplissage LinkedIn — RÉSERVÉ au certificat final (06/10/2026 : un badge
+ *  de bloc n'est pas un certificat, il se partage avec le pair). LinkedIn
+ *  n'accepte par URL QUE : nom, organisme, dates, ID, URL — les compétences et
+ *  l'image du certificat restent à ajouter à la main (limite de la plateforme). */
 function linkedInUrl(c: Credential) {
   const d = new Date(c.issuedAt);
-  const p = new URLSearchParams({ startTask: "CERTIFICATION_NAME", name: c.badgeLabel || c.achievementType, organizationName: ORG, issueYear: String(d.getFullYear()), issueMonth: String(d.getMonth() + 1), certUrl: c.hostedUrl, certId: c.id });
+  const p = new URLSearchParams({
+    startTask: "CERTIFICATION_NAME",
+    name: c.name || c.badgeLabel || c.achievementType,       // vrai nom du titre, jamais le code
+    organizationName: c.issuer || ORG,                        // KOMPETENCES SOFT SKILLS (émetteur réel)
+    issueYear: String(d.getFullYear()), issueMonth: String(d.getMonth() + 1),
+    certUrl: c.hostedUrl, certId: c.id,
+  });
+  if (c.expiresAt) {
+    const e = new Date(c.expiresAt);
+    p.set("expirationYear", String(e.getFullYear()));
+    p.set("expirationMonth", String(e.getMonth() + 1));
+  }
   return `https://www.linkedin.com/profile/add?${p.toString()}`;
 }
 
@@ -27,7 +42,10 @@ export function Badges({ eid }: { eid: string }) {
   const { lang } = useI18n();
   const levelLabel = (l: string) => { const n = l.replace(/\D/g, ""); return n === "1" || n === "2" || n === "3" ? t(`level.${n}`) : l; };
   const [creds, setCreds] = useState<Credential[]>([]);
-  const [badges, setBadges] = useState<{ type: string }[]>([]);
+  const [badges, setBadges] = useState<{ type: string; peerNotified?: boolean }[]>([]);
+  // Partage avec le pair (06/10/2026) : remplace LinkedIn pour les badges de
+  // bloc. "consent" = le consentement manque, la case à cocher s'affiche.
+  const [share, setShare] = useState<Record<string, "busy" | "done" | "consent">>({});
   const [transcript, setTranscript] = useState<TranscriptRow[]>([]);
   const [completed, setCompleted] = useState(false);
   const [level, setLevel] = useState("N1");
@@ -47,6 +65,10 @@ export function Badges({ eid }: { eid: string }) {
         ]);
         if (!alive) return;
         setCreds(c ?? []); setBadges(prog?.badges ?? []); setCompleted(Boolean(prog?.progress?.courseCompleted));
+        // Badge déjà partagé à l'émission (consentement donné à la désignation) → état « fait ».
+        const pre: Record<string, "done"> = {};
+        for (const bg of (prog?.badges ?? []) as { type: string; peerNotified?: boolean }[]) if (bg.peerNotified) pre[bg.type] = "done";
+        setShare((s) => ({ ...pre, ...s }));
         setTranscript(tr?.rows ?? []);
       } catch { /* offline */ }
       if (alive) setLoaded(true);
@@ -75,6 +97,23 @@ export function Badges({ eid }: { eid: string }) {
 
   const dateFmt = (s: string) => new Date(s).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR");
 
+  // « Partager avec mon pair » : notifie le pair de CE badge. Si le consentement
+  // n'a pas été donné à la désignation, le serveur répond consent_required et la
+  // case à cocher apparaît (le consentement reste un geste explicite).
+  async function sharePeer(type: string, consent?: boolean) {
+    setShare((s) => ({ ...s, [type]: "busy" }));
+    try {
+      const res = await api.raw("POST", `/enrollments/${eid}/peer/share`, { body: { badgeType: type, ...(consent ? { consent: true } : {}) } });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (j.error === "consent_required") setShare((s) => ({ ...s, [type]: "consent" }));
+        else setShare(({ [type]: _, ...rest }) => rest);
+        return;
+      }
+      setShare((s) => ({ ...s, [type]: "done" }));
+    } catch { setShare(({ [type]: _, ...rest }) => rest); }
+  }
+
   return (
     <div className="stack">
       <div><div className="eyebrow">{t("bd.eyebrow")}</div><h1 style={{ marginTop: 6 }}>{t("bd.title")}</h1></div>
@@ -93,9 +132,22 @@ export function Badges({ eid }: { eid: string }) {
               </div>
               {earned ? <span className="hf-pill hf-pill--mint hf-pill--sm">{t("bd.obtained")}</span> : <span className="hf-lock">{t("course.state.locked")}</span>}
             </div>
+            {/* 06/10/2026 : un badge de bloc se partage avec le PAIR, pas sur
+                LinkedIn (réservé au certificat final). « Vérifier » reste. */}
             {earned && c && !c.revoked && (
-              <div className="row" style={{ marginTop: 12, flexWrap: "wrap" }}>
-                <a href={linkedInUrl(c)} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--primary">{t("bd.addLinkedIn")}</button></a>
+              <div className="row" style={{ marginTop: 12, flexWrap: "wrap", alignItems: "center" }}>
+                {share[tier.type] === "done" ? (
+                  <span className="hf-pill hf-pill--mint hf-pill--sm">{t("bd.peerShared")}</span>
+                ) : share[tier.type] === "consent" ? (
+                  <label className="row" style={{ gap: 8, alignItems: "flex-start", cursor: "pointer", flex: 1, minWidth: 220 }}>
+                    <input type="checkbox" checked={false} onChange={() => void sharePeer(tier.type, true)} style={{ marginTop: 3 }} />
+                    <span className="meta">{t("badge.peerConsentAsk")}</span>
+                  </label>
+                ) : (
+                  <button className="hf-btn hf-btn--sm hf-btn--primary" disabled={share[tier.type] === "busy"} onClick={() => void sharePeer(tier.type)}>
+                    {share[tier.type] === "busy" ? "…" : t("bd.sharePeer")}
+                  </button>
+                )}
                 <a href={c.verifyUrl} target="_blank" rel="noreferrer"><button className="hf-btn hf-btn--sm hf-btn--outline">{t("bd.verify")}</button></a>
               </div>
             )}
@@ -121,8 +173,15 @@ export function Badges({ eid }: { eid: string }) {
               </p>
             )}
           </div>
-        ) : (
+        ) : has("ANCHORING") ? (
           <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} onClick={() => navigate(routes.project(eid))}>{t("bd.submitProject")}</button>
+        ) : (
+          /* 06/10/2026 : plus de brèche vers le projet du Bloc 4 dès le Bloc 0 —
+             le dépôt s'ouvre après le Badge Ancrage (fin du Bloc 3). */
+          <>
+            <button className="hf-btn hf-btn--outline" style={{ marginTop: 8 }} disabled>🔒 {t("bd.submitProject")}</button>
+            <p className="meta" style={{ margin: "8px 0 0" }}>{t("bd.projectLocked")}</p>
+          </>
         )}
       </div>
 

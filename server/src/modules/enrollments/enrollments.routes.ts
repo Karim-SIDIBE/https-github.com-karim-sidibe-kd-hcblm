@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import {
-  EngineError, assignEvaluator, captureMomentAncrage, cohortBoard, completeItem, designatePeer, enroll, getEnrollment,
+  EngineError, assignEvaluator, captureMomentAncrage, cohortBoard, completeItem, designatePeer, enroll, getEnrollment, sharePeerBadge,
   getPosition, getProjectSubmission, getResume, listAnswers, listEnrollmentsForUser, listEvaluationQueue, listXapi, recordRubricEvaluation, renderBlock, savePosition, saveRubricDraft,
   selfEnroll, resetEnrollment, submitDiagnosticQuiz, submitFinalQuiz, submitInterBlockQuiz, submitTriggerQuiz,
   projectState, setAncrageChangeNote, checkAncrageAlignment,
@@ -178,6 +178,16 @@ export async function enrollmentRoutes(app: FastifyInstance) {
     const { id } = idParam.parse(req.params);
     const { name, email, phone, consent } = z.object({ name: z.string().trim().min(1), email: z.string().email(), phone: z.string().trim().min(1).optional(), consent: z.boolean().optional() }).parse(req.body);
     try { return { data: await designatePeer(id, name, email, phone, consent) }; } catch (err) { return handle(reply, err); }
+  });
+
+  // Partage d'un badge avec le pair + rattrapage du consentement (06/10/2026).
+  app.post("/enrollments/:id/peer/share", { preHandler: owned }, async (req, reply) => {
+    const { id } = idParam.parse(req.params);
+    const { badgeType, consent } = z.object({
+      badgeType: z.enum(["ENTRY", "COMPREHENSION", "PRACTICE", "ANCHORING", "CERTIFICATE"]),
+      consent: z.boolean().optional(),
+    }).parse(req.body);
+    try { return { data: await sharePeerBadge(id, badgeType, consent) }; } catch (err) { return handle(reply, err); }
   });
 
   // Generic item completion

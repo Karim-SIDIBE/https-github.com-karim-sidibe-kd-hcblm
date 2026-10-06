@@ -23,6 +23,7 @@ const Activity = lazy(() => import("./ui/Activity").then((m) => ({ default: m.Ac
 const Project = lazy(() => import("./ui/Project").then((m) => ({ default: m.Project })));
 const Badges = lazy(() => import("./ui/Badges").then((m) => ({ default: m.Badges })));
 const Onboarding = lazy(() => import("./ui/Onboarding").then((m) => ({ default: m.Onboarding })));
+const Method = lazy(() => import("./ui/HowItWorks").then((m) => ({ default: m.Method })));
 const Account = lazy(() => import("./ui/Account").then((m) => ({ default: m.Account })));
 const Revision = lazy(() => import("./ui/Revision").then((m) => ({ default: m.Revision })));
 const Purchase = lazy(() => import("./ui/Purchase").then((m) => ({ default: m.Purchase })));
@@ -37,7 +38,7 @@ function eidOf(route: Route): string | null {
 /** Which bottom tab is active for the current route. */
 function activeTab(route: Route): "home" | "cours" | "journal" | "badges" | null {
   switch (route.name) {
-    case "course": case "onboarding": return "home";
+    case "course": case "onboarding": case "method": return "home";
     case "cours": case "session": case "quiz": case "deliverable": case "activity": case "project": return "cours";
     case "journal": return "journal";
     case "badges": return "badges";
@@ -62,6 +63,7 @@ function Screen({ route }: { route: Route }) {
     case "project": return <Project eid={route.eid} />;
     case "badges": return <Badges eid={route.eid} />;
     case "onboarding": return <Onboarding eid={route.eid} />;
+    case "method": return <Method eid={route.eid} />;
     case "purchase": return <Purchase key={`buy:${route.courseId}`} courseId={route.courseId} />;
     case "order": return <OrderStatus key={`ord:${route.orderId}`} orderId={route.orderId} />;
     case "catalogue": return <GuestCatalog />;
@@ -98,13 +100,24 @@ export const BADGE_SYMBOL: Record<string, string> = { ENTRY: "🔑", COMPREHENSI
 function BadgeCelebration() {
   const t = useT();
   const [party, setParty] = useState<{ eid: string; badges: BadgeSnapshot[] } | null>(null);
+  // Rattrapage du consentement (06/10/2026) : si le pair n'a pas été prévenu
+  // (case non cochée à la désignation), la fenêtre offre l'occasion de la
+  // cocher — le pair reçoit alors CE badge. États par type de badge.
+  const [shared, setShared] = useState<Record<string, "busy" | "done">>({});
   useEffect(() => onBadges((eid, badges) => {
     const fresh = unseenBadges(eid, badges);
-    if (fresh.length > 0) setParty({ eid, badges: fresh });
+    if (fresh.length > 0) { setShared({}); setParty({ eid, badges: fresh }); }
   }), []);
   if (!party) return null;
   const NAME: Record<string, string> = { ENTRY: "bd.entry", COMPREHENSION: "bd.comprehension", PRACTICE: "bd.practice", ANCHORING: "bd.anchoring" };
   const close = () => { markBadgesSeen(party.eid, party.badges.map((b) => b.type)); setParty(null); };
+  const shareWithPeer = async (type: string) => {
+    setShared((s) => ({ ...s, [type]: "busy" }));
+    try {
+      await api.postChecked(`/enrollments/${party.eid}/peer/share`, { badgeType: type, consent: true });
+      setShared((s) => ({ ...s, [type]: "done" }));
+    } catch { setShared(({ [type]: _, ...rest }) => rest); }
+  };
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.55)", display: "grid", placeItems: "center", zIndex: 1000, padding: 16 }} onClick={close} role="dialog" aria-modal="true">
       <div className="hf-card center stack pt-reveal" style={{ maxWidth: 430, width: "100%" }} onClick={(e) => e.stopPropagation()}>
@@ -116,7 +129,15 @@ function BadgeCelebration() {
           <div key={b.type} className="hf-card hf-card--peach stack" style={{ gap: 6 }}>
             <strong className="h4">{NAME[b.type] ? t(NAME[b.type]!) : b.type}</strong>
             {b.message && <p className="body" style={{ margin: 0 }}>{b.message.replace(/^🏅\s*/, "")}</p>}
-            {b.peerNotified && <span className="hf-pill hf-pill--mint hf-pill--sm" style={{ alignSelf: "center" }}>{t("badge.peerNotified")}</span>}
+            {b.peerNotified || shared[b.type] === "done" ? (
+              <span className="hf-pill hf-pill--mint hf-pill--sm" style={{ alignSelf: "center" }}>{t("badge.peerNotified")}</span>
+            ) : (
+              <label className="row" style={{ gap: 8, alignItems: "flex-start", cursor: "pointer", textAlign: "left" }}>
+                <input type="checkbox" checked={false} disabled={shared[b.type] === "busy"}
+                  onChange={() => void shareWithPeer(b.type)} style={{ marginTop: 3 }} />
+                <span className="meta">{shared[b.type] === "busy" ? "…" : t("badge.peerConsentAsk")}</span>
+              </label>
+            )}
           </div>
         ))}
         <button className="hf-btn hf-btn--primary hf-btn--block" onClick={close}>{t("common.continue")}</button>

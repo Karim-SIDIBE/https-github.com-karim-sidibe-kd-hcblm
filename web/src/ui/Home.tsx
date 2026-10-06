@@ -189,6 +189,10 @@ export function Home({ eid }: { eid: string }) {
           {peer.notified && <span className="hf-pill hf-pill--mint hf-pill--sm">{t("home.notified")}</span>}
         </div>
       )}
+
+      {/* La méthode reste consultable à tout moment (06/10/2026) — plus
+          seulement à la première entrée dans le Bloc 0. */}
+      <button className="hf-btn hf-btn--ghost hf-btn--block" onClick={() => navigate(routes.method(eid))}>{t("home.method")}</button>
     </div>
   );
 }

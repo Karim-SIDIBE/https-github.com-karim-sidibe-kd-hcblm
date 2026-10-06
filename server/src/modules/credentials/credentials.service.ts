@@ -222,11 +222,18 @@ export async function unrevoke(id: string) {
 
 export async function listForEnrollment(enrollmentId: string) {
   const creds = await prisma.credential.findMany({ where: { enrollmentId }, orderBy: { issuedAt: "asc" }, include: { badge: true } });
-  return creds.map((c) => ({
-    id: c.id, achievementType: c.achievementType, issuedAt: c.issuedAt, revoked: Boolean(c.revokedAt),
-    expiresAt: c.expiresAt, expired: isExpired(c.expiresAt),
-    badgeLabel: c.badge.type, hostedUrl: credentialUrl(c.id), verifyUrl: `${credentialUrl(c.id)}/verify`,
-  }));
+  return creds.map((c) => {
+    const a = c.assertion as { badge?: { name?: string } };
+    return {
+      id: c.id, achievementType: c.achievementType, issuedAt: c.issuedAt, revoked: Boolean(c.revokedAt),
+      expiresAt: c.expiresAt, expired: isExpired(c.expiresAt),
+      badgeLabel: c.badge.type, hostedUrl: credentialUrl(c.id), verifyUrl: `${credentialUrl(c.id)}/verify`,
+      // Préremplissage LinkedIn du certificat (06/10/2026) : le vrai nom du titre
+      // (jamais le code ENTRY/CERTIFICATE) + l'émetteur réel (KOMPETENCES SOFT SKILLS).
+      name: a.badge?.name ?? c.achievementType,
+      issuer: issuerName(),
+    };
+  });
 }
 
 /** All issued credentials, with learner + course (admin console list).
@@ -309,6 +316,7 @@ export async function verificationData(id: string) {
     const v = await verify({ credentialId: id });
     return {
       id: f.id,
+      kind: "certificate" as const, // les titres FACE2FACE sont des certifications de module
       brand: pageBrand(),
       issuerName: issuerName(),
       holderName: f.participant.user.name,
@@ -327,8 +335,14 @@ export async function verificationData(id: string) {
   const content = c.enrollment.courseVersion.content as { level?: 1 | 2 | 3 } | null;
   const level = content?.level ?? (({ L1: 1, L2: 2, L3: 3 } as const)[c.enrollment.courseVersion.level] ?? 1);
   const v = await verify({ credentialId: id });
+  // Un badge de bloc n'est PAS un certificat (06/10/2026) : la page publique le
+  // nomme badge (parcours en cours) et affiche son type en clair.
+  const BADGE_FR: Record<string, string> = { ENTRY: "Entrée", COMPREHENSION: "Compréhension", PRACTICE: "Pratique", ANCHORING: "Ancrage" };
+  const isCert = c.achievementType === "CERTIFICATE";
   return {
     id: c.id,
+    kind: (isCert ? "certificate" : "badge") as "certificate" | "badge",
+    badgeTypeLabel: isCert ? undefined : BADGE_FR[c.achievementType] ?? c.achievementType,
     brand: pageBrand(),
     issuerName: issuerName(),
     holderName: c.enrollment.user.name,

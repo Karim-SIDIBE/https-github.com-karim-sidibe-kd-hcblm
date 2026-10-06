@@ -51,8 +51,11 @@ export function badgeMessage(
   return `${badgeLabel} débloqué ! ${anchor}${profile} ${tail[badgeType]}`;
 }
 
-/** Peer notification text (Pilier 6.3). */
-export function peerNotificationText(peerName: string | null | undefined, learnerName: string, badgeLabel: string): string {
+/** Peer notification text (Pilier 6.3). Le titre du parcours est cité quand il
+ *  est connu — la plateforme héberge désormais plusieurs parcours, le texte ne
+ *  peut plus présumer « gestion du temps ». */
+export function peerNotificationText(peerName: string | null | undefined, learnerName: string, badgeLabel: string, courseTitle?: string | null): string {
   const who = peerName?.trim() || "Cher pair de progression";
-  return `${who}, ${learnerName} vient d'obtenir le « ${badgeLabel} » dans son parcours de gestion du temps. Un mot d'encouragement ferait la différence.`;
+  const course = courseTitle?.trim() ? `son parcours « ${courseTitle.trim()} »` : "son parcours";
+  return `${who}, ${learnerName} vient d'obtenir le « ${badgeLabel} » dans ${course}. Un mot d'encouragement ferait la différence.`;
 }

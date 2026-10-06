@@ -8,6 +8,7 @@ import { formatDuration } from "../lib/format";
 import { navigate, routes } from "../lib/router";
 import { useT } from "../lib/i18n";
 import { FieldMeter } from "../lib/composition";
+import { HowItWorks } from "./HowItWorks";
 
 type Onboarding = {
   momentAncrage: { promptText: string; minChars: number; placeholderExample?: string };
@@ -101,19 +102,10 @@ export function Onboarding({ eid }: { eid: string }) {
       {step !== "done" && step !== "how" && <div className="hf-prog"><i style={{ width: `${(stepNo / 3) * 100}%` }} /></div>}
 
       {/* Écran méthode (A5) : l'apprenant découvre tout pour la première fois —
-          la mécanique du parcours est énoncée avant la première saisie. */}
-      {step === "how" && (
-        <div className="hf-card stack">
-          <h1>{t("ob.howTitle")}</h1>
-          <p className="body" style={{ margin: 0 }}>{t("ob.howIntro")}</p>
-          {(["ob.how1", "ob.how2", "ob.how3", "ob.how4", "ob.how5"] as const).map((k) => (
-            <div key={k} className="hf-card hf-card--icy" style={{ padding: "10px 14px" }}>
-              <p className="body" style={{ margin: 0 }}>{t(k)}</p>
-            </div>
-          ))}
-          <button className="hf-btn hf-btn--primary hf-btn--block" onClick={() => setStep("pam")}>{t("ob.howCta")}</button>
-        </div>
-      )}
+          la mécanique du parcours est énoncée avant la première saisie.
+          (Composant partagé : la même page reste consultable à tout moment
+          depuis la page du cours — route « méthode », 06/10/2026.) */}
+      {step === "how" && <HowItWorks ctaLabel={t("ob.howCta")} onCta={() => setStep("pam")} />}
 
       {step === "pam" && (
         <div className="hf-card stack">

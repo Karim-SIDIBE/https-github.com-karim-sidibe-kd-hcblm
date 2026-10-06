@@ -21,6 +21,13 @@ export type PageBrand = {
 
 export type CredentialPageData = {
   id: string;
+  /** Un badge de bloc n'est PAS un certificat (06/10/2026) : la page le nomme
+   *  « badge » partout — le parcours est encore en cours — et réserve le mot
+   *  « certificat » au titre de fin de parcours. */
+  kind: "certificate" | "badge";
+  /** Type du badge en clair (Entrée, Compréhension, Pratique, Ancrage) —
+   *  affiché en face de la ligne « Badge ». Absent pour un certificat. */
+  badgeTypeLabel?: string;
   brand: PageBrand;
   /** Certificate issuer (CREDENTIAL_ISSUER_NAME — same name as in the Open
    *  Badge issuer document, e.g. "KOMPETENCES SOFT SKILLS"). The certification
@@ -77,24 +84,29 @@ function brandHeader(b: PageBrand, subtitle: string): string {
 type Status = { badge: string; color: string; bg: string; note: string };
 
 function status(d: CredentialPageData): Status {
+  // Tout le vocabulaire de la page suit la nature du titre (06/10/2026) :
+  // « badge » pour un jalon de bloc (parcours en cours), « certificat » sinon.
+  const noun = d.kind === "badge" ? "badge" : "certificat";
+  const Noun = d.kind === "badge" ? "Badge" : "Certificat";
   if (d.revoked) {
     return {
-      badge: "❌ Certificat révoqué",
+      badge: `❌ ${Noun} révoqué`,
       color: "#b3261e", bg: "#fdecea",
       note: d.revocationReason && d.revocationReason !== "revoked"
-        ? `Ce certificat a été révoqué par l'émetteur. Motif : ${d.revocationReason}.`
-        : "Ce certificat a été révoqué par l'émetteur et n'est plus valable.",
+        ? `Ce ${noun} a été révoqué par l'émetteur. Motif : ${d.revocationReason}.`
+        : `Ce ${noun} a été révoqué par l'émetteur et n'est plus valable.`,
     };
   }
   if (!d.signatureValid) {
     return {
       badge: "⚠️ Signature non vérifiable",
       color: "#8a6d00", bg: "#fff8e1",
-      note: "L'authenticité de ce certificat n'a pas pu être confirmée cryptographiquement. Contactez l'émetteur avant de vous y fier.",
+      note: `L'authenticité de ce ${noun} n'a pas pu être confirmée cryptographiquement. Contactez l'émetteur avant de vous y fier.`,
     };
   }
   // A3 / objet E : la certification atteste une démonstration à une date, pas
   // une acquisition définitive — après 3 ans le titre est authentique mais échu.
+  // (Un badge de bloc n'a pas d'échéance : cette branche est propre au certificat.)
   if (d.expired) {
     return {
       badge: "⏳ Certificat expiré",
@@ -103,15 +115,17 @@ function status(d: CredentialPageData): Status {
     };
   }
   return {
-    badge: "✅ Certificat valide",
+    badge: `✅ ${Noun} valide`,
     color: "#1e7e34", bg: "#e8f5e9",
-    note: `Ce certificat a été émis par ${d.issuerName} et sa signature électronique a été vérifiée à l'instant.`,
+    note: `Ce ${noun} a été émis par ${d.issuerName} et sa signature électronique a été vérifiée à l'instant.`,
   };
 }
 
 /** Full HTML page (self-contained: inline styles, no assets). */
 export function renderCredentialPage(d: CredentialPageData): string {
   const s = status(d);
+  const isBadge = d.kind === "badge";
+  const subtitle = isBadge ? "Vérification de badge" : "Vérification de certificat";
   const date = d.issuedOn.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
   const row = (k: string, v: string) =>
     `<tr><td style="padding:8px 12px 8px 0;color:#666;white-space:nowrap;vertical-align:top">${k}</td>` +
@@ -122,11 +136,11 @@ export function renderCredentialPage(d: CredentialPageData): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Vérification de certificat — ${esc(d.brand.name)}</title>
+<title>${subtitle} — ${esc(d.brand.name)}</title>
 </head>
 <body style="margin:0;background:#f4f6f9;font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;color:#1b1b1b">
 <div style="max-width:640px;margin:0 auto;padding:24px 16px">
-  ${brandHeader(d.brand, "Vérification de certificat")}
+  ${brandHeader(d.brand, subtitle)}
   <div style="background:#fff;border-radius:14px;box-shadow:0 2px 12px rgba(20,40,80,.08);overflow:hidden">
     <div style="background:${s.bg};padding:18px 22px;border-bottom:1px solid rgba(0,0,0,.05)">
       <div style="font-size:19px;font-weight:800;color:${s.color}">${s.badge}</div>
@@ -135,9 +149,13 @@ export function renderCredentialPage(d: CredentialPageData): string {
     <div style="padding:20px 22px">
       <table style="border-collapse:collapse;width:100%;font-size:15px">
         ${row("Titulaire", esc(d.holderName))}
-        ${row("Certification", esc(d.achievementName))}
+        ${isBadge
+          ? row("Badge", esc(d.badgeTypeLabel ?? d.achievementName))
+          : row("Certification", esc(d.achievementName))}
         ${row("Parcours", esc(d.courseTitle))}
-        ${d.competencies?.length ? row("Compétences attestées", d.competencies.map((c) => esc(c)).join("<br>")) : ""}
+        ${d.competencies?.length
+          ? row(isBadge ? "Compétences attestées à la fin du parcours" : "Compétences attestées", d.competencies.map((c) => esc(c)).join("<br>"))
+          : ""}
         ${row("Niveau", `Niveau ${d.level}`)}
         ${row("Délivré le", esc(date))}
         ${d.expiresOn ? row("Valable jusqu'au", esc(d.expiresOn.toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" }))) : ""}
@@ -151,7 +169,7 @@ export function renderCredentialPage(d: CredentialPageData): string {
     </div>
   </div>
   <div style="text-align:center;font-size:11.5px;color:#9aa3ad;padding:16px 0">
-    Cette page reflète le statut du certificat en temps réel — une révocation y apparaît immédiatement.
+    Cette page reflète le statut du ${isBadge ? "badge" : "certificat"} en temps réel — une révocation y apparaît immédiatement.
   </div>
 </div>
 </body>
