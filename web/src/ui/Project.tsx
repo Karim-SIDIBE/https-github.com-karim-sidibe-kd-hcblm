@@ -80,8 +80,12 @@ export function Project({ eid }: { eid: string }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
-      if (alive) setBundle(b);
+      // Cache puis revalidation : la grille et la mission affichées ici doivent
+      // suivre un patch de contenu serveur sans repasser par l'Accueil.
+      const cached = await store.getBundle<any>(eid);
+      if (alive && cached) setBundle(cached);
+      const fresh = await engine.cacheBundle(eid).catch(() => null);
+      if (alive && (fresh ?? cached)) setBundle(fresh ?? cached);
       if (alive) await refresh();
     })();
     return () => { alive = false; };

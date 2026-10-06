@@ -55,8 +55,12 @@ export function Badges({ eid }: { eid: string }) {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const b = (await store.getBundle<any>(eid)) ?? (await engine.cacheBundle(eid));
-      if (alive && b?.course?.level) setLevel(b.course.level);
+      // Cache puis revalidation (même règle que l'Accueil) : le niveau affiché
+      // suit le contenu réellement servi par l'API, pas une copie locale figée.
+      const cached = await store.getBundle<any>(eid);
+      if (alive && cached?.course?.level) setLevel(cached.course.level);
+      const fresh = await engine.cacheBundle(eid).catch(() => null);
+      if (alive && fresh?.course?.level) setLevel(fresh.course.level);
       try {
         const [c, prog, tr] = await Promise.all([
           api.get<Credential[]>(`/enrollments/${eid}/credentials`),
