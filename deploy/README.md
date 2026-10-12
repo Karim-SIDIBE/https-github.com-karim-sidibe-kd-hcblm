@@ -244,7 +244,20 @@ docker run --rm -v "$PWD":/app -w /app node:22-slim sh -c \
 Le script **`deploy/backup.sh`** sauvegarde la base (`pg_dump -Fc`), le volume
 **médias** et le **`.env`** (mot de passe DB + clés JWT), avec rotation, et une
 copie **hors-site** optionnelle via `rclone` (recommandée — survit à la perte
-totale du VPS). Variables dans `deploy/.env` : `BACKUP_RETENTION_DAYS`,
+totale du VPS).
+
+**Cadences** (dimensionnées après l'incident disque plein du 12/10/2026) : la
+**base** (légère, change tous les jours) est sauvegardée à chaque exécution et
+conservée `BACKUP_RETENTION_DAYS` (14 j) ; le volume **médias** (plusieurs Go de
+vidéos incompressibles, change rarement) n'est archivé en entier qu'au plus une
+fois par `BACKUP_MEDIA_EVERY_DAYS` (7 j) et conservé
+`BACKUP_MEDIA_RETENTION_DAYS` (21 j) — soit ~3 archives au lieu de 14. Un
+**garde-fou d'espace libre** saute l'archive médias (avec un avertissement dans
+le journal) plutôt que de remplir le disque et coucher la plateforme. Lors d'une
+restauration, prendre le `media-*.tgz` le plus récent : il peut dater de
+quelques jours, les vidéos manquantes se re-téléversent depuis la Médiathèque.
+Variables dans `deploy/.env` : `BACKUP_RETENTION_DAYS`,
+`BACKUP_MEDIA_EVERY_DAYS`, `BACKUP_MEDIA_RETENTION_DAYS`,
 `BACKUP_RCLONE_REMOTE`.
 
 ```bash
