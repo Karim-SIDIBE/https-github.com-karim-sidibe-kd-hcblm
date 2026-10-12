@@ -12,7 +12,7 @@
  *   situations are `guidedScenarios`; the field application is `fieldApplication`.
  *   (The non-scored 6-question inter-block quiz has no slot in the current model
  *   — see README "next steps"; it is intentionally omitted here.)
- * - Bloc 4 rubric uses the updated KOMPETENCES AFRICA D4 referential (6 criteria,
+ * - Bloc 4 rubric uses the updated KOMPETENCES SOFT SKILLS D4 referential (6 criteria,
  *   /100, threshold 70) — the final state agreed in the design chat and rendered
  *   in prototype.html.
  */

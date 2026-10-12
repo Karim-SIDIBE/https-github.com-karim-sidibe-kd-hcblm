@@ -1,4 +1,4 @@
-// Référentiel officiel des compétences — KOMPETENCES AFRICA (v2.0).
+// Référentiel officiel des compétences — KOMPETENCES SOFT SKILLS (v2.0).
 // 12 domaines (D1…D12) et leurs compétences clés (codées D{n}.C{m}).
 export type Competency = { code: string; label: string };
 export type Domain = { code: string; label: string; competencies: Competency[] };
