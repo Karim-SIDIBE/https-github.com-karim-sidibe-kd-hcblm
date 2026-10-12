@@ -227,7 +227,7 @@ export function CourseEditor({ initial, courseId, isNew, onClose, onSaved, initi
               <div><label style={lbl}>Titre du certificat <span className="muted" style={{ fontWeight: 400 }}>(imprimé sur le certificat et le badge)</span></label>
                 <input style={field} value={(content as any).certificate?.title ?? ""} onChange={(e) => set((c) => { ((c as any).certificate ??= { title: "", openBadges2: true }).title = e.target.value; })} /></div>
               <div>
-                <label style={lbl}>Domaine de compétence <span className="muted" style={{ fontWeight: 400 }}>(référentiel KOMPETENCES AFRICA)</span></label>
+                <label style={lbl}>Domaine de compétence <span className="muted" style={{ fontWeight: 400 }}>(référentiel KOMPETENCES SOFT SKILLS)</span></label>
                 <select style={field} value={content.domain?.code ?? ""} onChange={(e) => set((c) => {
                   const d = DOMAINS.find((x) => x.code === e.target.value);
                   if (!c.domain) c.domain = { code: "", label: "" };
