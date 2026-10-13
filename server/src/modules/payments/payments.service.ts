@@ -748,15 +748,26 @@ export async function giftAccess(principal: Principal, input: { productId: strin
 
   if (product.type === "COURSE") {
     if (!input.email) throw new PaymentError(422, "email_required", "Un accès cours s'offre à un apprenant (e-mail requis)");
-    const user = await prisma.user.findUnique({ where: { email: input.email.trim().toLowerCase() } });
-    if (!user) throw new PaymentError(404, "user_not_found", "Aucun compte avec cet e-mail");
+    const email = input.email.trim().toLowerCase();
+    let user = await prisma.user.findUnique({ where: { email } });
+    let userCreated = false;
+    if (!user) {
+      // Outil commercial : un cadeau doit pouvoir partir vers un prospect qui
+      // n'a PAS encore de compte (recette du 13/10/2026 — « Aucun compte avec
+      // cet e-mail » refusait l'offre). Même règle que le tunnel d'achat
+      // invité : le compte LEARNER naît de l'e-mail seul, et l'e-mail de
+      // bienvenue ci-dessous portera le lien magique (compte sans mot de passe).
+      user = await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
+      userCreated = true;
+      await audit({ actorId: principal.id, action: "user.created.gift", targetType: "User", targetId: user.id, meta: { email } });
+    }
     if (await hasCourseEntitlement(user.id, product.courseId!)) throw new PaymentError(409, "already_entitled", "Cet apprenant a déjà un droit d'accès valide pour ce cours");
     const ent = await prisma.entitlement.create({
       data: { holderUserId: user.id, scope: "COURSE_ACCESS", courseId: product.courseId, source: "GIFT", grantedById: principal.id },
     });
-    await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId } });
+    await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId, userCreated } });
     const emailSent = await notifyGiftCourse(user, product.title);
-    return { ...ent, holderEmail: user.email, emailSent };
+    return { ...ent, holderEmail: user.email, emailSent, userCreated };
   }
 
   // SEATS → une organisation, sièges crédités immédiatement.
