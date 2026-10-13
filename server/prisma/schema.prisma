@@ -1599,10 +1599,17 @@ model Entitlement {
   grantedAt    DateTime          @default(now())
   revokedAt    DateTime?
   revokedById  String?
+  /// GIFT offert à un e-mail SANS compte : invitation en attente (RGPD — le
+  /// compte n'est jamais créé à la place du bénéficiaire). Le droit n'a pas
+  /// encore de titulaire ; quand la personne s'inscrit elle-même avec cet
+  /// e-mail (consentements CGU/confidentialité + vérification OTP), le droit
+  /// lui est rattaché et pendingEmail est effacé. Révocable comme les autres.
+  pendingEmail String?
 
   @@index([holderUserId, scope])
   @@index([holderOrgId, scope])
   @@index([courseId])
+  @@index([pendingEmail])
 }
 
 /// Remboursement — création réservée au staff ; confirmé → révoque le droit.

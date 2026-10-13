@@ -139,12 +139,19 @@ export function Tarifs() {
     setBusy(true); setGNote(null);
     try {
       const g = await api.payGift(prod.type === "COURSE" ? { productId: prod.id, email: gEmail.trim() } : { productId: prod.id, organizationId: gOrg });
+      // E-mail sans compte → INVITATION (RGPD : la personne crée son compte
+      // elle-même, consentements compris, et l'accès s'active alors tout seul).
+      if (g.invited) {
+        setGNote(g.emailSent
+          ? "✓ Invitation envoyée : le bénéficiaire crée son compte avec cette adresse (consentements validés à l'inscription) et le parcours s'activera automatiquement. Révocable ci-dessous tant qu'il n'est pas inscrit."
+          : "⚠ Invitation enregistrée, mais l'e-mail n'a pas pu partir (voir réglages SMTP) — le parcours s'activera si la personne s'inscrit avec cette adresse.");
+        setGEmail(""); await load(); return;
+      }
       // Le bénéficiaire est prévenu par e-mail (lien magique si compte sans mot de passe) — dire si l'envoi a échoué.
-      const created = g.userCreated ? " Compte apprenant créé pour cet e-mail." : "";
       const mail = prod.type === "COURSE"
         ? (g.emailSent ? " E-mail envoyé au bénéficiaire." : " ⚠ L'e-mail au bénéficiaire n'a pas pu partir (voir réglages SMTP) — l'accès est bien actif.")
         : (g.adminsNotified && g.adminsNotified > 0 ? ` ${g.adminsNotified} administrateur(s) prévenu(s) par e-mail.` : " ⚠ Aucun administrateur n'a pu être prévenu par e-mail — les sièges sont bien crédités.");
-      setGNote(`✓ Accès offert (journalisé dans l'audit).${created}${mail}`); setGEmail(""); await load();
+      setGNote(`✓ Accès offert (journalisé dans l'audit).${mail}`); setGEmail(""); await load();
     } catch (e) { setGNote(`✗ ${e instanceof ApiError ? e.message : "Cadeau impossible"}`); }
     finally { setBusy(false); }
   }
@@ -275,8 +282,9 @@ export function Tarifs() {
               <div style={{ marginTop: 12 }}>
                 {gifts.map((g) => (
                   <div key={g.id} className="row between" style={{ borderTop: "1px solid var(--border, #e3e6ec)", padding: "6px 0", fontSize: 13 }}>
-                    <span>{g.scope === "SEATS" ? `🏢 ${g.holderOrg?.name} (+${g.seats} sièges)` : `🎓 ${g.holderUser?.email}`}
+                    <span>{g.scope === "SEATS" ? `🏢 ${g.holderOrg?.name} (+${g.seats} sièges)` : `🎓 ${g.holderUser?.email ?? g.pendingEmail}`}
                       {g.course?.slug ? ` · ${g.course.slug}` : ""} · {new Date(g.grantedAt).toLocaleDateString("fr-FR")}
+                      {!g.revokedAt && g.pendingEmail && <span className="pill" style={{ marginLeft: 6 }} title="Le bénéficiaire n'a pas encore créé son compte — l'accès s'activera à son inscription (RGPD : jamais de compte créé à sa place).">invitation en attente</span>}
                       {g.revokedAt && <span className="pill pill--red" style={{ marginLeft: 6 }}>révoqué</span>}</span>
                     {!g.revokedAt && <button className="btn btn--sm" onClick={() => void revoke(g)}>✕ Révoquer</button>}
                   </div>

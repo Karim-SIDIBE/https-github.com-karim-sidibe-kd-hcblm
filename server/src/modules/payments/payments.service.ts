@@ -25,6 +25,7 @@ import { receiptPdf } from "../../lib/payments/receipt.js";
 import { signOrderToken, verifyOrderToken } from "../../lib/auth/jwt.js";
 import { sendEmail } from "../../lib/notify/send.js";
 import { magicLinkFor } from "../auth/auth.service.js";
+import { claimGiftInvites } from "./gift-claim.js";
 import { getSetting } from "../settings/settings.routes.js";
 import { PROVIDER_CONFIG_FIELDS, integrationSource, integrationValue, setIntegrationSecrets } from "../../lib/runtime-config.js";
 
@@ -685,6 +686,32 @@ export async function orderReceipt(principal: Principal, orderId: string): Promi
  *  son cadeau. Même mécanique que l'e-mail post-paiement : lien magique 72 h pour
  *  les comptes sans mot de passe. Meilleur-effort — l'offre réussit même si
  *  l'envoi échoue (le retour `emailSent` l'indique à la console). */
+/** Invitation « parcours offert » à un e-mail SANS compte : on invite la
+ *  personne à créer son compte ELLE-MÊME (consentements RGPD recueillis à
+ *  l'inscription) — jamais de compte créé à sa place. L'accès s'activera
+ *  automatiquement à l'inscription (claimGiftInvites). */
+async function notifyGiftInvite(email: string, productTitle: string): Promise<boolean> {
+  try {
+    const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
+    const body = [
+      "Bonjour,", "",
+      `Bonne nouvelle : un accès au parcours « ${productTitle} » vous a été offert.`, "",
+      "Pour en profiter, créez votre compte (gratuit, 2 minutes) avec CETTE adresse e-mail :",
+      `${appUrl} — bouton « Créer un compte »`, "",
+      "Lors de l'inscription, vous validerez les conditions d'utilisation et la politique de confidentialité, puis confirmerez votre adresse ; votre parcours offert sera alors automatiquement actif sur votre compte — aucune démarche, aucun paiement.", "",
+      "Si ce message est arrivé dans vos courriers indésirables (spams), marquez-le « non spam » pour bien recevoir les prochains.",
+      `— ${env.BRAND_NAME}`,
+    ].join("\n");
+    const r = await sendEmail(email, `Un accès vous a été offert — ${productTitle}`, body);
+    if (!r.ok) { console.warn(`[payments] e-mail invitation cadeau ${email} — échec : ${r.error ?? r.provider}`); return false; }
+    await audit({ action: "gift.invite.sent", targetType: "User", meta: { to: email, product: productTitle } });
+    return true;
+  } catch (e) {
+    console.warn(`[payments] e-mail invitation cadeau ${email} — échec : ${e instanceof Error ? e.message : String(e)}`);
+    return false;
+  }
+}
+
 async function notifyGiftCourse(user: { id: string; email: string; name: string; passwordHash: string | null }, productTitle: string): Promise<boolean> {
   try {
     const appUrl = env.APP_BASE_URL ?? env.PUBLIC_BASE_URL;
@@ -749,25 +776,34 @@ export async function giftAccess(principal: Principal, input: { productId: strin
   if (product.type === "COURSE") {
     if (!input.email) throw new PaymentError(422, "email_required", "Un accès cours s'offre à un apprenant (e-mail requis)");
     const email = input.email.trim().toLowerCase();
-    let user = await prisma.user.findUnique({ where: { email } });
-    let userCreated = false;
+    const user = await prisma.user.findUnique({ where: { email } });
+
+    // E-mail SANS compte (recette du 13/10/2026) : on ne crée JAMAIS le compte
+    // à la place du bénéficiaire (RGPD — il n'a encore rien consenti). On pose
+    // une INVITATION : droit GIFT en attente (pendingEmail, sans titulaire),
+    // e-mail l'invitant à créer son compte lui-même — l'inscription standard
+    // recueille les consentements CGU/confidentialité et vérifie l'e-mail,
+    // puis claimGiftInvites lui rattache automatiquement ce droit.
     if (!user) {
-      // Outil commercial : un cadeau doit pouvoir partir vers un prospect qui
-      // n'a PAS encore de compte (recette du 13/10/2026 — « Aucun compte avec
-      // cet e-mail » refusait l'offre). Même règle que le tunnel d'achat
-      // invité : le compte LEARNER naît de l'e-mail seul, et l'e-mail de
-      // bienvenue ci-dessous portera le lien magique (compte sans mot de passe).
-      user = await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
-      userCreated = true;
-      await audit({ actorId: principal.id, action: "user.created.gift", targetType: "User", targetId: user.id, meta: { email } });
+      const pending = await prisma.entitlement.findFirst({
+        where: { pendingEmail: email, courseId: product.courseId, revokedAt: null },
+      });
+      if (pending) throw new PaymentError(409, "invite_pending", "Une invitation pour ce cours est déjà en attente pour cet e-mail (le bénéficiaire n'a pas encore créé son compte)");
+      const ent = await prisma.entitlement.create({
+        data: { scope: "COURSE_ACCESS", courseId: product.courseId, source: "GIFT", grantedById: principal.id, pendingEmail: email },
+      });
+      await audit({ actorId: principal.id, action: "entitlement.gift.invited", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, pendingEmail: email, courseId: product.courseId } });
+      const emailSent = await notifyGiftInvite(email, product.title);
+      return { ...ent, holderEmail: email, invited: true, emailSent };
     }
+
     if (await hasCourseEntitlement(user.id, product.courseId!)) throw new PaymentError(409, "already_entitled", "Cet apprenant a déjà un droit d'accès valide pour ce cours");
     const ent = await prisma.entitlement.create({
       data: { holderUserId: user.id, scope: "COURSE_ACCESS", courseId: product.courseId, source: "GIFT", grantedById: principal.id },
     });
-    await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId, userCreated } });
+    await audit({ actorId: principal.id, action: "entitlement.gift", targetType: "Entitlement", targetId: ent.id, meta: { productId: product.id, holderUserId: user.id, courseId: product.courseId } });
     const emailSent = await notifyGiftCourse(user, product.title);
-    return { ...ent, holderEmail: user.email, emailSent, userCreated };
+    return { ...ent, holderEmail: user.email, emailSent };
   }
 
   // SEATS → une organisation, sièges crédités immédiatement.
@@ -892,6 +928,9 @@ export async function guestCheckout(input: { courseId: string; currency: string;
   const email = input.email.trim().toLowerCase();
   const user = await prisma.user.findUnique({ where: { email } })
     ?? await prisma.user.create({ data: { email, name: nameFromEmail(email), role: "LEARNER" } });
+  // Invitations GIFT en attente sur cet e-mail : les rattacher AVANT le
+  // contrôle de droit — on ne fait pas payer un parcours déjà offert.
+  await claimGiftInvites(user.id, email).catch(() => {});
 
   if (await hasCourseEntitlement(user.id, courseId)) {
     // Déjà titulaire : pas de double vente — on (re)envoie un lien de connexion.
