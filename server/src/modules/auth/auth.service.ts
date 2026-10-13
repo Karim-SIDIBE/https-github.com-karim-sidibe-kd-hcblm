@@ -19,6 +19,7 @@ import { audit } from "../../lib/audit.js";
 import { summarizeSessions } from "../../domain/rgpd.js";
 import { recordRegistrationConsents } from "../consent/consent.service.js";
 import { getSetting, POLICY_2FA_ROLES } from "../settings/settings.routes.js";
+import { claimGiftInvites } from "../payments/gift-claim.js";
 import { sendMultichannel } from "../../lib/notify/send.js";
 import { otpMessage } from "../../lib/notify/templates.js";
 
@@ -360,6 +361,9 @@ export async function registerLearner(params: { name: string; email: string; pas
   });
   // RGPD: record the terms + privacy acceptance (required) and optional marketing opt-in.
   await recordRegistrationConsents(user.id, !!params.marketingOptIn, ip);
+  // Parcours offerts en attente (invitation GIFT) : maintenant que la personne
+  // a créé son compte elle-même, consentements compris, ses droits s'activent.
+  await claimGiftInvites(user.id, user.email).catch(() => {});
   await issueOtpAndSend(user);
   await audit({ actorId: user.id, action: "auth.register", ip, meta: { email: user.email, marketingOptIn: !!params.marketingOptIn, compositionExempt: !!params.compositionExempt } });
   return { verificationRequired: true as const, email: user.email };
