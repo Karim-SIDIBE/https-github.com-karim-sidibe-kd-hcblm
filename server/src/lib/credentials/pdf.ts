@@ -174,11 +174,14 @@ export async function certificatePdf(d: CertificateData): Promise<Buffer> {
     doc.font(f.bold).fontSize(licSize);
     doc.text(lic, W * 0.5 - doc.widthOfString(lic) / 2, H * 0.765, { lineBreak: false });
 
-    // Échéance (A3) : ligne discrète centrée sous la rangée date/licence.
+    // Échéance (A3) : ligne discrète centrée SOUS le libellé « N° de Licence »
+    // imprimé dans le gabarit (recette du 19/10/2026 : à 0.815 H elle le
+    // chevauchait). La bande libre du gabarit N1 va de ≈0.835 H (bas du
+    // libellé) à ≈0.87 H (haut de la rangée de logos).
     if (d.expiresOn) {
       const exp = `Valable jusqu'au ${d.expiresOn.toLocaleDateString("fr-FR")}`;
       doc.font(f.regular).fontSize(8.5).fillColor("#555");
-      doc.text(exp, W * 0.5 - doc.widthOfString(exp) / 2, H * 0.815, { lineBreak: false });
+      doc.text(exp, W * 0.5 - doc.widthOfString(exp) / 2, H * 0.845, { lineBreak: false });
     }
 
     // Discreet verification QR (white pad keeps it scannable on any corner art).
