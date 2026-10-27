@@ -12,3 +12,4 @@ deploy/backups/
 
 # monitoring overlay secrets
 deploy/monitoring/secrets/metrics_token
+releases-pi/
