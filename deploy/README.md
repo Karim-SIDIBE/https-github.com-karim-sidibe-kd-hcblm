@@ -298,6 +298,25 @@ Voir `scripts/keygen.ts` : déplace l’ancienne clé publique dans
 
 ---
 
+## 9. Dépôt de propriété intellectuelle par version
+
+À chaque version majeure, figer une preuve datée du code et des référentiels
+(e-Soleau INPI, dépôt APP, BURIDA…) :
+
+```bash
+bash deploy/release-pi.sh v1.0.0        # tag (créé s'il n'existe pas) + pièces dans ./releases-pi/
+```
+
+Le script produit l'archive du code source au tag, l'archive du corpus
+K-HCBLM (`docs/referentiels`), leurs empreintes SHA-256 et une fiche
+d'identification (commit, dates, volumes) prête à joindre au dépôt. Les
+archives se déposent **telles quelles** (sans les renommer) ; conserver la
+fiche avec l'accusé de dépôt. Le tag n'est pas poussé automatiquement :
+`git push origin v1.0.0`. Le dossier `releases-pi/` est ignoré par Git —
+en garder une copie hors site avec les sauvegardes.
+
+---
+
 ## Capacité & dimensionnement (VPS 2 vCore / 4 Go / 100 Go NVMe)
 
 Cible de lancement : **300 apprenants actifs sur 30 jours**. Avec le modèle
