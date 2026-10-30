@@ -98,10 +98,18 @@ export const INFO_LINKS = [
 function Brand() {
   const t = useT();
   const wm = brandWordmark();
+  // Marque par défaut : le wordmark vectoriel officiel (K au mortier et à la
+  // flèche). Une marque blanche (VITE_BRAND_NAME) garde le rendu texte.
+  const officialWordmark = brand.name === "DECLICK DIGITAL";
   return (
     <div className="brand" style={{ cursor: "pointer" }} onClick={() => navigate(routes.enrollments())} title={t("brand.myCourses")}>
       <img className="mark" src="/logo-icon.svg" alt={brand.operator} />
-      <span className="wm">{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}<span className="sub">{t("brand.operatedBy", { operator: brand.operator })}</span></span>
+      <span className="wm">
+        {officialWordmark
+          ? <img src="/logo-wordmark.svg" alt={brand.name} style={{ height: 15, display: "block", objectFit: "contain" }} />
+          : <>{wm.head}{wm.accent ? <> <b>{wm.accent}</b></> : null}</>}
+        <span className="sub">{t("brand.operatedBy", { operator: brand.operator })}</span>
+      </span>
     </div>
   );
 }

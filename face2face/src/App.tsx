@@ -8,14 +8,18 @@ import {
 } from "./api";
 
 /* ------------------------------------------------------------------ Marque - */
-/** Lockup texte « KOMPETENCES FACE2FACE » (version chartée validée, sans logo). */
+/** Lockup officiel : monogramme DD (logo du groupe, commun aux quatre consoles)
+ *  + nom charté « KOMPETENCES FACE2FACE ». */
 function Lockup({ dark = false, tagline = false, size = 13 }: { dark?: boolean; tagline?: boolean; size?: number }) {
   return (
-    <div>
-      <div className={`lockup${dark ? " lockup--dark" : ""}`} style={{ fontSize: size }}>
-        <span className="k">KOMPETENCES</span> <span className="f2f">FACE2FACE</span>
+    <div style={{ display: "flex", alignItems: "center", gap: Math.round(size * 0.7) }}>
+      <img src="/logo-icon.svg" alt="" style={{ width: Math.round(size * 2.4), height: Math.round(size * 2.4), objectFit: "contain", flexShrink: 0 }} />
+      <div>
+        <div className={`lockup${dark ? " lockup--dark" : ""}`} style={{ fontSize: size }}>
+          <span className="k">KOMPETENCES</span> <span className="f2f">FACE2FACE</span>
+        </div>
+        {tagline && <div className="tagline" style={dark ? { color: "var(--grey)" } : undefined}>L'apprentissage par l'échange et l'immersion totale</div>}
       </div>
-      {tagline && <div className="tagline" style={dark ? { color: "var(--grey)" } : undefined}>L'apprentissage par l'échange et l'immersion totale</div>}
     </div>
   );
 }

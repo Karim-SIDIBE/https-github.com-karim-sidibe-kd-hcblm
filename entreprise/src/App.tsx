@@ -655,7 +655,7 @@ function Console({ user, onLogout }: { user: Principal; onLogout: () => void }) 
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brandline" style={{ display: "flex", alignItems: "center", gap: 8 }}><img src="/logo-icon.svg" alt="DECLICK DIGITAL" style={{ width: 30, height: 30, objectFit: "contain" }} /><span><b>DECLICK</b> <span className="accent">DIGITAL</span> <span className="topbar-sub">Espace entreprise</span></span></div>
+        <div className="brandline" style={{ display: "flex", alignItems: "center", gap: 8 }}><img src="/logo-lockup.svg" alt="DECLICK DIGITAL" style={{ height: 32, maxWidth: 240, objectFit: "contain" }} /><span className="topbar-sub">Espace entreprise</span></div>
         <div className="row" style={{ gap: 12 }}>
           {orgs && orgs.length > 1 && (
             <select className="select" value={orgId} onChange={(e) => setOrgId(e.target.value)}>
