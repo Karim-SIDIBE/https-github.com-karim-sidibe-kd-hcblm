@@ -43,9 +43,10 @@ jobs:
         env:
           VITE_API_URL: https://api.declick.digital/api/v1
 
-  # Dé-risquage (ADR 0001/0003) : visibilité continue sur les vulnérabilités de
-  # dépendances. N'échoue pas le build tant que la montée fastify v5 /
-  # fast-xml-parser v5 n'est pas planifiée — sert d'alerte, pas de blocage.
+  # Dé-risquage (ADR 0001/0003) : vulnérabilités de dépendances. BLOQUANT
+  # depuis la purge du 30/10/2026 (0 vulnérabilité de production) : échoue si
+  # une vulnérabilité high/critical touche les dépendances de production.
+  # Les niveaux low/moderate restent visibles dans le journal sans bloquer.
   audit:
     runs-on: ubuntu-latest
     steps:
@@ -56,4 +57,4 @@ jobs:
           cache: npm
       - run: npm ci
       - name: npm audit (prod dependencies)
-        run: npm audit --omit=dev || true
+        run: npm audit --omit=dev --audit-level=high
