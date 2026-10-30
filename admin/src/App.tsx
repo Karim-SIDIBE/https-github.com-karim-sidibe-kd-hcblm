@@ -89,7 +89,8 @@ function Brand({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => vo
   return (
     <div className="brand">
       <img src="/logo-icon.svg" alt="DECLICK DIGITAL" onError={(e) => (e.currentTarget.style.display = "none")} />
-      <span className="wm">DECLICK <b>DIGITAL</b><span className="sub">ADMINISTRATION</span></span>
+      {/* width/background/radius/padding neutralisés : la règle .sidebar .brand img (pensée pour le monogramme) imposerait un carré blanc 34×34. */}
+      <span className="wm"><img src="/logo-wordmark-blanc.svg" alt="DECLICK DIGITAL" style={{ width: "auto", height: 14, display: "block", objectFit: "contain", background: "transparent", borderRadius: 0, padding: 0 }} onError={(e) => (e.currentTarget.style.display = "none")} /><span className="sub">ADMINISTRATION</span></span>
       <button className="navtoggle" title={collapsed ? "Déployer le menu" : "Réduire le menu"} onClick={onToggle}>{collapsed ? "»" : "«"}</button>
     </div>
   );
