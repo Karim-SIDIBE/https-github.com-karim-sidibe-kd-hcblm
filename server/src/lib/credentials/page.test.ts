@@ -105,6 +105,21 @@ test("missing logo falls back to the text wordmark", () => {
   assert.match(html, /DECLICK <span/);
 });
 
+test("official wordmark image replaces the text for the default brand", () => {
+  const html = renderCredentialPage({ ...base, brand: { ...base.brand, wordmarkDataUri: "data:image/svg+xml;base64,BBBB" } });
+  assert.match(html, /<img src="data:image\/svg\+xml;base64,BBBB" alt="DECLICK DIGITAL"/);
+  assert.doesNotMatch(html, /DECLICK <span/);
+});
+
+test("a white-label brand keeps the text wordmark even with a wordmark asset", () => {
+  const html = renderCredentialPage({
+    ...base,
+    brand: { ...base.brand, name: "ACADEMIE X", wordmarkDataUri: "data:image/svg+xml;base64,BBBB" },
+  });
+  assert.doesNotMatch(html, /base64,BBBB/);
+  assert.match(html, /ACADEMIE <span/);
+});
+
 test("not-found page is standalone French HTML with the brand header", () => {
   const html = renderNotFoundPage(base.brand);
   assert.match(html, /Certificat introuvable/);
