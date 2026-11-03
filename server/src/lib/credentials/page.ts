@@ -17,6 +17,9 @@ export type PageBrand = {
   operator: string;
   /** Logo icon as a data: URI (page must stay self-contained), or null. */
   logoDataUri: string | null;
+  /** Official wordmark (stylised K) as a data: URI, or null. Only rendered
+   *  for the default brand — a white-label name keeps the text wordmark. */
+  wordmarkDataUri?: string | null;
 };
 
 export type CredentialPageData = {
@@ -68,9 +71,15 @@ function brandHeader(b: PageBrand, subtitle: string): string {
   const words = b.name.trim().split(/\s+/);
   const head = esc(words[0] ?? b.name);
   const accent = esc(words.slice(1).join(" "));
+  // Marque par défaut : le wordmark vectoriel officiel (K au mortier et à la
+  // flèche), comme dans les en-têtes des consoles. Marque blanche : texte.
+  const nameLine =
+    b.wordmarkDataUri && b.name === "DECLICK DIGITAL"
+      ? `<img src="${b.wordmarkDataUri}" alt="${esc(b.name)}" style="height:20px;display:block">`
+      : `<div style="font-weight:800;font-size:19px;letter-spacing:.3px;color:${NAVY};text-transform:uppercase;line-height:1">` +
+        `${head}${accent ? ` <span style="color:${GREEN}">${accent}</span>` : ""}</div>`;
   const wordmark =
-    `<div style="font-weight:800;font-size:19px;letter-spacing:.3px;color:${NAVY};text-transform:uppercase;line-height:1">` +
-    `${head}${accent ? ` <span style="color:${GREEN}">${accent}</span>` : ""}</div>` +
+    nameLine +
     `<div style="font-size:11px;color:${MUTED};font-weight:700;margin-top:3px">Opéré par ${esc(b.operator)}</div>`;
   const logo = b.logoDataUri
     ? `<img src="${b.logoDataUri}" alt="${esc(b.operator)}" style="width:44px;height:44px;object-fit:contain;flex:0 0 auto">`

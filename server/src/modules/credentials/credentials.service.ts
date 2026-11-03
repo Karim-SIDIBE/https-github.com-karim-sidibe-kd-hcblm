@@ -286,8 +286,8 @@ export async function listAllCredentials(opts: { q?: string; status?: "valid" | 
   return { rows, total, valid, revoked, certificates, badges: blockBadges };
 }
 
-// Header logo for the verification page, inlined so the page stays
-// self-contained. Read once (or null when the asset is absent).
+// Header logo + wordmark for the verification page, inlined so the page
+// stays self-contained. Read once (or null when the asset is absent).
 let logoCache: string | null | undefined;
 function logoDataUri(): string | null {
   if (logoCache === undefined) {
@@ -296,10 +296,18 @@ function logoDataUri(): string | null {
   }
   return logoCache;
 }
+let wordmarkCache: string | null | undefined;
+function wordmarkDataUri(): string | null {
+  if (wordmarkCache === undefined) {
+    const p = resolve("assets/brand/logo-wordmark.svg");
+    wordmarkCache = existsSync(p) ? `data:image/svg+xml;base64,${readFileSync(p).toString("base64")}` : null;
+  }
+  return wordmarkCache;
+}
 
 /** Platform branding for the public pages (same model as the PWA appbar). */
 export function pageBrand(): PageBrand {
-  return { name: env.BRAND_NAME, operator: env.BRAND_OPERATOR, logoDataUri: logoDataUri() };
+  return { name: env.BRAND_NAME, operator: env.BRAND_OPERATOR, logoDataUri: logoDataUri(), wordmarkDataUri: wordmarkDataUri() };
 }
 
 /** Data for the human verification page (the URL the certificate QR encodes).
