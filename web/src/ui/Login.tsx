@@ -85,7 +85,7 @@ export function Login({ onLogin }: { onLogin: () => void }) {
         <input value={website} onChange={(e) => setWebsite(e.target.value)} name="website" tabIndex={-1} autoComplete="off" aria-hidden style={{ position: "absolute", left: "-9999px", width: 1, height: 1 }} />
         <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
           <input type="checkbox" checked={acceptTerms} onChange={(e) => setAcceptTerms(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
-          <span>{t("signup.acceptPre")}<a href="/legal/cgu" target="_blank" rel="noreferrer">{t("signup.terms")}</a>{t("signup.and")}<a href="/legal/confidentialite" target="_blank" rel="noreferrer">{t("signup.privacy")}</a>. <span style={{ color: "var(--ko, #c0392b)" }}>*</span></span>
+          <span>{t("signup.acceptPre")}<a href="/legal/cgu.html" target="_blank" rel="noreferrer">{t("signup.terms")}</a>{t("signup.and")}<a href="/legal/confidentialite.html" target="_blank" rel="noreferrer">{t("signup.privacy")}</a>. <span style={{ color: "var(--ko, #c0392b)" }}>*</span></span>
         </label>
         <label style={{ display: "flex", gap: 9, alignItems: "flex-start", fontSize: 13.5, fontWeight: 400, cursor: "pointer" }}>
           <input type="checkbox" checked={marketingOptIn} onChange={(e) => setMarketingOptIn(e.target.checked)} style={{ width: "auto", marginTop: 3 }} />
