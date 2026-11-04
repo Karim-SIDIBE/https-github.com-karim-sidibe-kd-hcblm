@@ -32,3 +32,13 @@ test("on-topic offline → extractive grounded answer with citations", async () 
   assert.equal(r.provider, "extractive");
   assert.ok(r.citations.length > 0);
 });
+
+test("sans consentement IA (allowRemote=false) : réponse extractive, provider explicite", async () => {
+  const onTopic = [
+    { score: 0.8, blockIndex: 1, path: "b1", text: "Pour gérer les interruptions, bloquez des plages de concentration." },
+  ];
+  const r = await answer("Comment gérer les interruptions ?", onTopic, [], "Ma situation réelle.", false);
+  assert.equal(r.aiGenerated, false);
+  assert.match(r.provider, /sans consentement IA/);
+  assert.ok(r.text.length > 0);
+});

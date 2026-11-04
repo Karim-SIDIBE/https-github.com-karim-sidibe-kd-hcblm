@@ -9,6 +9,11 @@ export const CONSENT_POLICIES = {
   terms: { version: "2026-06", required: true, label: "Conditions générales d'utilisation" },
   privacy: { version: "2026-06", required: true, label: "Politique de confidentialité" },
   marketing: { version: "2026-06", required: false, label: "Communications (offres, nouveautés)" },
+  /// Assistance IA personnalisée (feedback formatif, tuteur, relances
+  /// personnalisées). OPT-IN : sans consentement, les textes de l'apprenant ne
+  /// quittent jamais le serveur et les replis déterministes s'appliquent. Même
+  /// consenti, tout envoi passe par le sas de pseudonymisation (lib/ai/pseudo).
+  ai_assist: { version: "2026-11", required: false, label: "Assistance IA personnalisée (feedback, tuteur, relances) — textes pseudonymisés avant tout envoi au modèle" },
 } as const;
 
 export type ConsentType = keyof typeof CONSENT_POLICIES;

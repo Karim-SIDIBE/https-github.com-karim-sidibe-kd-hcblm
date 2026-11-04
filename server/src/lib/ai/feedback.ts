@@ -102,8 +102,12 @@ function fallbackFormative(input: FormativeInput): string {
   return lines.join("\n");
 }
 
-export async function generateFormativeFeedback(input: FormativeInput): Promise<FormativeResult> {
-  if (!aiAvailable()) return { feedback: fallbackFormative(input), aiGenerated: false, provider: "heuristic" };
+/** `allowRemote=false` (apprenant sans consentement « ai_assist ») : sa réponse
+ *  ne quitte pas le serveur — feedback heuristique déterministe. */
+export async function generateFormativeFeedback(input: FormativeInput, allowRemote = true): Promise<FormativeResult> {
+  if (!aiAvailable() || !allowRemote) {
+    return { feedback: fallbackFormative(input), aiGenerated: false, provider: allowRemote ? "heuristic" : "heuristic (sans consentement IA)" };
+  }
   try {
     const text = stripMarkdown(await callClaudeText(buildFormativeRequest(input)));
     return { feedback: text, aiGenerated: true, provider: env.AI_MODEL };

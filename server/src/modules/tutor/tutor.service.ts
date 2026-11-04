@@ -8,6 +8,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../db/prisma.js";
 import { search } from "../search/search.service.js";
 import { answer, type Turn, type RetrievedChunk } from "../../lib/ai/tutor.js";
+import { aiAssistConsented } from "../consent/consent.service.js";
 
 export class TutorError extends Error {
   constructor(public statusCode: number, public code: string, message: string) { super(message); }
@@ -36,7 +37,11 @@ export async function ask(enrollmentId: string, question: string, sessionId?: st
   const hits = await search(question, { courseId: enrollment.courseId, k: 5 });
   const chunks: RetrievedChunk[] = hits.map((h) => ({ score: h.score, blockIndex: h.blockIndex, path: h.path, text: h.text }));
 
-  const result = await answer(question, chunks, history, enrollment.momentAncrage);
+  // Débrayage par apprenant (consentement « ai_assist », opt-in) : sans
+  // consentement, la question et le Moment d'Ancrage ne quittent pas le
+  // serveur — réponse extractive déterministe.
+  const allowRemote = await aiAssistConsented(enrollment.userId);
+  const result = await answer(question, chunks, history, enrollment.momentAncrage, allowRemote);
 
   // Persist the exchange.
   await prisma.tutorMessage.create({ data: { sessionId: session.id, role: "USER", content: question } });
