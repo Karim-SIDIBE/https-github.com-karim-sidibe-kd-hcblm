@@ -6,8 +6,12 @@
 /** The policies we ask consent for, with their current version. Bump `version`
  * when the underlying document changes — users are then re-prompted. */
 export const CONSENT_POLICIES = {
-  terms: { version: "2026-06", required: true, label: "Conditions générales d'utilisation" },
-  privacy: { version: "2026-06", required: true, label: "Politique de confidentialité" },
+  /// 2026-11 : les CGU et la politique de confidentialité décrivent désormais le
+  /// traitement « Assistance IA personnalisée » (pseudonymisation, double
+  /// débrayage) — textes publiés sous web/public/legal/*.html. Le bump force la
+  /// re-sollicitation des comptes existants (bandeau web/src/App.tsx).
+  terms: { version: "2026-11", required: true, label: "Conditions générales d'utilisation" },
+  privacy: { version: "2026-11", required: true, label: "Politique de confidentialité" },
   marketing: { version: "2026-06", required: false, label: "Communications (offres, nouveautés)" },
   /// Assistance IA personnalisée (feedback formatif, tuteur, relances
   /// personnalisées). OPT-IN : sans consentement, les textes de l'apprenant ne
