@@ -13,6 +13,7 @@ import { audit } from "../../lib/audit.js";
 import { env } from "../../config/env.js";
 import { aiAvailable, callClaudeText } from "../../lib/ai/client.js";
 import { setIssuerOverride } from "../../lib/runtime-config.js";
+import { aiRuntimeEnabled, setAiRuntimeEnabled } from "../../lib/ai-switch.js";
 
 /** Whitelisted keys and their value schema — no free-form writes. */
 const KNOWN = {
@@ -36,6 +37,11 @@ const KNOWN = {
   /// CREDENTIAL_ISSUER_NAME/URL reste le repli tant que rien n'est saisi.
   credential_issuer_name: z.string().trim().min(1).max(200),
   credential_issuer_url: z.string().trim().url().max(300),
+  /// Interrupteur GLOBAL des appels IA distants (débrayage à chaud, sans
+  /// redéploiement). Coupé : toutes les fonctions IA retombent sur leurs
+  /// replis déterministes hors-ligne. La pseudonymisation, elle, est
+  /// systématique et non débrayable.
+  ai_assist_enabled: z.boolean(),
 } as const;
 type SettingKey = keyof typeof KNOWN;
 const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
@@ -43,6 +49,7 @@ const keyEnum = z.enum(Object.keys(KNOWN) as [SettingKey, ...SettingKey[]]);
 const DEFAULTS: Record<SettingKey, unknown> = {
   require_staff_2fa: false, payment_provider: "manual", receipt_legal: "", b2c_online_cap: 150_000,
   credential_issuer_name: env.CREDENTIAL_ISSUER_NAME, credential_issuer_url: env.CREDENTIAL_ISSUER_URL,
+  ai_assist_enabled: true,
 };
 
 export async function getSetting<T>(key: SettingKey): Promise<T> {
@@ -79,6 +86,9 @@ export async function settingsRoutes(app: FastifyInstance) {
     // L'émetteur des certificats est lu en synchrone (badges, VC, PDF) via un
     // cache mémoire — on le rafraîchit immédiatement dans ce processus.
     if (key === "credential_issuer_name" || key === "credential_issuer_url") setIssuerOverride(key, String(parsed));
+    // L'interrupteur IA est lu en synchrone par lib/ai — répercussion immédiate
+    // dans ce processus (les autres workers suivent via le rafraîchissement 60 s).
+    if (key === "ai_assist_enabled") setAiRuntimeEnabled(Boolean(parsed));
     return { data: { key, value: parsed } };
   });
 
@@ -87,7 +97,8 @@ export async function settingsRoutes(app: FastifyInstance) {
   // tuteur, brouillons) retombent sur des replis déterministes hors-ligne.
   app.get("/settings/ai-status", { preHandler: guard("user:manage") }, async () => ({
     data: {
-      configured: aiAvailable(),
+      configured: Boolean(env.ANTHROPIC_API_KEY),
+      enabled: aiRuntimeEnabled(),
       model: env.AI_MODEL,
       gradingModel: env.AI_GRADING_MODEL ?? null,
       embeddings: Boolean(env.VOYAGE_API_KEY), // recherche sémantique (sinon repli lexical)
@@ -100,8 +111,11 @@ export async function settingsRoutes(app: FastifyInstance) {
     if (req.principal!.role !== "SUPER_ADMIN") {
       return reply.status(403).send({ error: "forbidden", message: "Réservé au super-administrateur" });
     }
-    if (!aiAvailable()) {
+    if (!env.ANTHROPIC_API_KEY) {
       return reply.status(409).send({ error: "ai_unconfigured", message: "ANTHROPIC_API_KEY absente : ajoutez-la dans deploy/.env puis relancez l'API (up -d api)." });
+    }
+    if (!aiAvailable()) {
+      return reply.status(409).send({ error: "ai_disabled", message: "Assistance IA désactivée (réglage ai_assist_enabled) : réactivez-la pour tester la connexion." });
     }
     const t0 = Date.now();
     try {

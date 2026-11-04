@@ -22,6 +22,7 @@ import { availableParallelism, tmpdir } from "node:os";
 import { extname, join } from "node:path";
 import { env } from "../../config/env.js";
 import { aiAvailable, callClaudeText } from "./client.js";
+import { aiRuntimeEnabled } from "../ai-switch.js";
 import { ffmpegAvailable } from "../media/transcode.js";
 
 export class SubtitleError extends Error {
@@ -87,7 +88,7 @@ export function transcriptionIsLocal(): boolean {
   return !env.OPENAI_API_KEY && localWhisperAvailable();
 }
 export function translationAvailable(): boolean {
-  return aiAvailable() || Boolean(env.OPENAI_API_KEY);
+  return aiAvailable() || (Boolean(env.OPENAI_API_KEY) && aiRuntimeEnabled());
 }
 
 /** spawn asynchrone (la transcription locale dure des minutes — ne jamais

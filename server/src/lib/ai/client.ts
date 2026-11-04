@@ -6,9 +6,13 @@
  * headers, model selection and prompt caching.
  */
 import { env } from "../../config/env.js";
+import { aiRuntimeEnabled } from "../ai-switch.js";
+import { createSas } from "./pseudo.js";
 
+/** Clé configurée ET interrupteur console ouvert — sinon, chaque fonction IA
+ *  retombe sur son repli déterministe (débrayage global sans redéploiement). */
 export function aiAvailable(): boolean {
-  return Boolean(env.ANTHROPIC_API_KEY);
+  return Boolean(env.ANTHROPIC_API_KEY) && aiRuntimeEnabled();
 }
 
 export type Effort = "low" | "medium" | "high";
@@ -26,7 +30,24 @@ export type ClaudeRequest = {
   };
   system: { type: "text"; text: string; cache_control?: { type: "ephemeral" } }[];
   messages: { role: "user" | "assistant"; content: string }[];
+  /** Identifiants CONNUS à pseudonymiser en plus des motifs structurés
+   *  (ex. le nom de l'apprenant) — retiré de la requête avant l'envoi. */
+  piiKnown?: string[];
 };
+
+/** Sas de pseudonymisation : masque tous les textes sortants de la requête
+ *  (identifiants structurés + `piiKnown`) et rend la fonction de restitution
+ *  à appliquer sur la réponse. Exporté pur pour être testé sans réseau. */
+export function applySas(request: ClaudeRequest): { outbound: Omit<ClaudeRequest, "piiKnown">; reinject: (text: string) => string } {
+  const sas = createSas(request.piiKnown ?? []);
+  const { piiKnown: _piiKnown, ...rest } = request;
+  const outbound = {
+    ...rest,
+    system: rest.system.map((s) => ({ ...s, text: sas.mask(s.text) })),
+    messages: rest.messages.map((m) => ({ ...m, content: sas.mask(m.content) })),
+  };
+  return { outbound, reinject: sas.reinject };
+}
 
 /** Modèles qui acceptent `output_config` (effort, format) — l'envoyer à
  *  claude-haiku-4-5 (ou plus ancien) provoque un 400 et ferait tout basculer
@@ -47,7 +68,11 @@ export function effortFor(model: string, effort: Effort): { effort: Effort } | u
 
 /** Call Claude and return the concatenated text. Throws on any failure. */
 export async function callClaudeText(request: ClaudeRequest): Promise<string> {
-  if (!aiAvailable()) throw new Error("ANTHROPIC_API_KEY non configurée");
+  if (!aiAvailable()) throw new Error("ANTHROPIC_API_KEY non configurée ou assistance IA désactivée");
+  // Pseudonymisation systématique : aucun identifiant structuré (courriel,
+  // téléphone, URL, long numéro) ni identifiant connu ne part au fournisseur ;
+  // la table de correspondance reste en mémoire et la réponse est restituée.
+  const { outbound, reinject } = applySas(request);
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -55,7 +80,7 @@ export async function callClaudeText(request: ClaudeRequest): Promise<string> {
       "x-api-key": env.ANTHROPIC_API_KEY!,
       "anthropic-version": "2023-06-01",
     },
-    body: JSON.stringify(request),
+    body: JSON.stringify(outbound),
   });
   if (!res.ok) {
     // Le statut seul ne permet aucun diagnostic (clé invalide ? modèle
@@ -72,7 +97,9 @@ export async function callClaudeText(request: ClaudeRequest): Promise<string> {
   if (json.stop_reason === "max_tokens") {
     throw new Error(`réponse tronquée à ${request.max_tokens} tokens (stop_reason=max_tokens)`);
   }
-  return text;
+  // Restitution : les jetons de pseudonymisation redeviennent les valeurs
+  // d'origine — le texte rendu à l'apprenant reste naturel.
+  return reinject(text);
 }
 
 /**

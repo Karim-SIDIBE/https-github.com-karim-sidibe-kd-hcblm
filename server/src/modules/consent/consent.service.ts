@@ -29,6 +29,15 @@ export async function setConsent(userId: string, type: ConsentType, granted: boo
   return { type, granted };
 }
 
+/** L'apprenant a-t-il consenti à l'assistance IA personnalisée ? OPT-IN :
+ *  aucune ligne active = refus (ses textes restent sur le serveur, replis
+ *  déterministes). Un consentement actif d'une version antérieure reste
+ *  valable tant que la politique n'exige pas une re-sollicitation. */
+export async function aiAssistConsented(userId: string): Promise<boolean> {
+  const row = await prisma.consent.findFirst({ where: { userId, type: "ai_assist", revokedAt: null }, select: { id: true } });
+  return Boolean(row);
+}
+
 /** Capture consents at B2C registration: terms + privacy are required, marketing optional. */
 export async function recordRegistrationConsents(userId: string, marketingOptIn: boolean, ip?: string) {
   const types: ConsentType[] = marketingOptIn ? ["terms", "privacy", "marketing"] : ["terms", "privacy"];

@@ -19,6 +19,7 @@
 import { prisma } from "../db/prisma.js";
 import { env } from "../config/env.js";
 import { decryptField, encryptField } from "./crypto/field.js";
+import { setAiRuntimeEnabled } from "./ai-switch.js";
 
 export type ProviderFieldDef = { key: string; label: string; secret: boolean };
 
@@ -69,7 +70,7 @@ let loading: Promise<void> | null = null;
 export async function loadRuntimeConfig(): Promise<void> {
   const [rows, settings] = await Promise.all([
     prisma.integrationSecret.findMany(),
-    prisma.setting.findMany({ where: { key: { in: [...ISSUER_KEYS] } } }),
+    prisma.setting.findMany({ where: { key: { in: [...ISSUER_KEYS, "ai_assist_enabled"] } } }),
   ]);
   secrets.clear();
   for (const r of rows) {
@@ -81,6 +82,10 @@ export async function loadRuntimeConfig(): Promise<void> {
   for (const s of settings) {
     if (typeof s.value === "string" && s.value.trim()) issuer.set(s.key, s.value.trim());
   }
+  // Interrupteur IA global (lecture SYNCHRONE partout via lib/ai-switch) :
+  // activé par défaut, coupé uniquement si le réglage vaut explicitement false.
+  const aiRow = settings.find((s) => s.key === "ai_assist_enabled");
+  setAiRuntimeEnabled(aiRow?.value !== false);
   lastLoad = Date.now();
 }
 

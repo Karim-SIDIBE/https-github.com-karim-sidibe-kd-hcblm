@@ -9,6 +9,7 @@ import { dueStage, daysInactive, type Stage } from "../../domain/engine/reengage
 import { injectMomentAncrage } from "../../domain/engine/injection.js";
 import { businessDaysBetween, dueReminderStage, SLA_REMINDER_STAGES, SLA_TURNAROUND_BUSINESS_DAYS } from "../../domain/engine/sla.js";
 import { generateNudge } from "../../lib/ai/nudge.js";
+import { aiAssistConsented } from "../consent/consent.service.js";
 import { dispatchEvent } from "../../lib/webhooks/webhooks.js";
 import { enqueueNotification } from "../notifications/notifications.service.js";
 import { journalMessage, reengagementMessage } from "../../lib/notify/templates.js";
@@ -157,13 +158,15 @@ export async function runReEngagement(now: Date = new Date()): Promise<ReEngagem
     const blockDurationEstimate = resume ? content.blocks[resume.blockIndex]?.durationEstimate ?? "" : "";
 
     // AI-personalized nudge (adaptive nudging); deterministic template fallback.
+    // Débrayage par apprenant : sans consentement « ai_assist », gabarit
+    // déterministe (nom et Moment d'Ancrage jamais envoyés au modèle).
     const { channel, body, aiGenerated, provider } = await generateNudge(stage, {
       learnerName: e.user.name,
       momentAncrage: e.momentAncrage,
       isEnterprise: e.isEnterprise,
       resume,
       blockDurationEstimate,
-    });
+    }, await aiAssistConsented(e.userId));
 
     await prisma.reEngagementMessage.create({ data: { enrollmentId: e.id, stage, channel, body } });
 
@@ -234,7 +237,7 @@ export async function nudgeOne(enrollmentId: string) {
   const blockDurationEstimate = resume ? content.blocks[resume.blockIndex]?.durationEstimate ?? "" : "";
   const { channel, body, aiGenerated, provider } = await generateNudge(stage, {
     learnerName: e.user.name, momentAncrage: e.momentAncrage, isEnterprise: e.isEnterprise, resume, blockDurationEstimate,
-  });
+  }, await aiAssistConsented(e.userId));
   await prisma.reEngagementMessage.create({ data: { enrollmentId: e.id, stage, channel, body } });
   const msg = reengagementMessage({ stage, learnerName: e.user.name, nudge: body });
   await enqueueNotification({

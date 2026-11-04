@@ -17,6 +17,7 @@ import { projectSectionKey } from "../../domain/engine/progress.js";
 import { env } from "../../config/env.js";
 import { aiAvailable } from "../../lib/ai/client.js";
 import { generateFormativeFeedback, gradingModel, suggestRubricScores, toEvidenceAssist } from "../../lib/ai/feedback.js";
+import { aiAssistConsented } from "../consent/consent.service.js";
 import type { Principal } from "../../lib/auth.js";
 
 export class FeedbackError extends Error {
@@ -82,6 +83,9 @@ export async function requestFormativeFeedback(enrollmentId: string, blockIndex:
   const { itemLabel, promptContext, fieldLabels } = resolveItemContext(block, itemKey);
   const text = submissionText(completion.data, fieldLabels);
   if (!text) throw new FeedbackError(422, "empty_submission", "La soumission ne contient pas de texte à évaluer");
+  // Débrayage par apprenant (consentement « ai_assist », opt-in) : sans
+  // consentement, sa réponse ne quitte pas le serveur — repli heuristique.
+  const allowRemote = await aiAssistConsented(enrollment.userId);
   const result = await generateFormativeFeedback({
     submissionText: text,
     itemLabel: itemLabel || (block?.title ? `${block.title} — ${itemKey}` : itemKey),
@@ -90,7 +94,7 @@ export async function requestFormativeFeedback(enrollmentId: string, blockIndex:
     courseTitle: content.title,
     blockLabel: block ? `Bloc ${blockIndex} — ${block.title}` : undefined,
     promptContext: injectMomentAncrage(promptContext, enrollment.momentAncrage) || undefined,
-  });
+  }, allowRemote);
 
   return prisma.aiAssessment.create({
     data: {

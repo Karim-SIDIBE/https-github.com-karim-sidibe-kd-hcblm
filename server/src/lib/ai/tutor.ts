@@ -69,13 +69,15 @@ function extractiveAnswer(chunks: RetrievedChunk[]): string {
 
 const OUT_OF_SCOPE = "Je n'ai pas trouvé d'élément dans ce parcours pour répondre précisément à cette question. Reformulez, ou consultez le bloc concerné — je ne réponds qu'à partir du contenu du cours.";
 
-export async function answer(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null): Promise<TutorAnswer> {
+/** `allowRemote=false` (apprenant sans consentement « ai_assist ») : ses textes
+ *  ne quittent pas le serveur — réponse extractive déterministe. */
+export async function answer(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null, allowRemote = true): Promise<TutorAnswer> {
   if (!isGrounded(question, chunks)) {
     return { text: OUT_OF_SCOPE, grounded: false, aiGenerated: false, provider: "guardrail", citations: [] };
   }
   const citations = citationsOf(chunks);
-  if (!aiAvailable()) {
-    return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: "extractive", citations };
+  if (!aiAvailable() || !allowRemote) {
+    return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: allowRemote ? "extractive" : "extractive (sans consentement IA)", citations };
   }
   try {
     const text = stripMarkdown(await callClaudeText(buildTutorRequest(question, chunks, history, momentAncrage)));

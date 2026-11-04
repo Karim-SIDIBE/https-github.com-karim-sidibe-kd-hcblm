@@ -6,12 +6,16 @@
  * tests. Cosine similarity ranks results either way.
  */
 import { env } from "../../config/env.js";
+import { aiRuntimeEnabled } from "../ai-switch.js";
+import { maskOnce } from "./pseudo.js";
 
 const LOCAL_DIM = 256;
 
 export type EmbeddingResult = { vectors: number[][]; model: string; aiGenerated: boolean };
 
 export function embeddingsProvider(): "voyage" | "openai" | "local" {
+  // Interrupteur global coupé → embarqué local, comme sans clé.
+  if (!aiRuntimeEnabled()) return "local";
   if (env.VOYAGE_API_KEY) return "voyage";
   if (env.OPENAI_API_KEY) return "openai";
   return "local";
@@ -65,13 +69,17 @@ export async function embed(texts: string[]): Promise<EmbeddingResult> {
   if (texts.length === 0) return { vectors: [], model: "none", aiGenerated: false };
   const provider = embeddingsProvider();
   try {
+    // Pseudonymisation avant tout envoi distant (sans restitution : seuls des
+    // vecteurs reviennent). Les questions du tuteur peuvent contenir des
+    // identifiants ; le masquage de quelques jetons ne change pas la recherche.
+    const masked = provider === "local" ? texts : texts.map((t) => maskOnce(t));
     if (provider === "voyage") {
       const model = env.EMBEDDING_MODEL ?? "voyage-3";
-      return { vectors: await remoteEmbed("https://api.voyageai.com/v1/embeddings", env.VOYAGE_API_KEY!, model, texts), model, aiGenerated: true };
+      return { vectors: await remoteEmbed("https://api.voyageai.com/v1/embeddings", env.VOYAGE_API_KEY!, model, masked), model, aiGenerated: true };
     }
     if (provider === "openai") {
       const model = env.EMBEDDING_MODEL ?? "text-embedding-3-small";
-      return { vectors: await remoteEmbed("https://api.openai.com/v1/embeddings", env.OPENAI_API_KEY!, model, texts), model, aiGenerated: true };
+      return { vectors: await remoteEmbed("https://api.openai.com/v1/embeddings", env.OPENAI_API_KEY!, model, masked), model, aiGenerated: true };
     }
   } catch {
     // fall through to local on any provider failure

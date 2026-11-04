@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 // La clé est neutralisée AVANT l'import du module (config/env est parsé à
 // l'import) : ces tests couvrent le comportement hors-ligne et le mode strict.
 process.env.ANTHROPIC_API_KEY = "";
-const { buildFormativeRequest, buildRubricRequest, normalize, rubricOutputConfig, suggestRubricScores, toEvidenceAssist } = await import("./feedback.js");
+const { buildFormativeRequest, buildRubricRequest, generateFormativeFeedback, normalize, rubricOutputConfig, suggestRubricScores, toEvidenceAssist } = await import("./feedback.js");
 const { effortFor } = await import("./client.js");
 
 const criteria = [
@@ -114,4 +114,15 @@ test("normalize : citations vide et absence vide (sortie structurée) valent omi
   ]);
   assert.equal(out[0]!.citations, undefined);
   assert.equal(out[0]!.absence, undefined);
+});
+
+test("sans consentement IA (allowRemote=false) : repli heuristique, provider explicite", async () => {
+  const r = await generateFormativeFeedback({
+    submissionText: "Ma réponse décrit mon plan de la semaine.",
+    itemLabel: "Application terrain",
+    competencies: [{ code: "D1.C1", label: "Prioriser" }],
+  }, false);
+  assert.equal(r.aiGenerated, false);
+  assert.match(r.provider, /sans consentement IA/);
+  assert.ok(r.feedback.length > 0);
 });

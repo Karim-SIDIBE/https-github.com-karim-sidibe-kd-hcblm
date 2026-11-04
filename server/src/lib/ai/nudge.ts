@@ -43,15 +43,20 @@ export function buildAnthropicRequest(stage: Stage, input: MessageInput): Claude
       { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     ],
     messages: [{ role: "user", content: userText }],
+    // Le nom du titulaire est un identifiant direct : le sas le remplace par
+    // un jeton avant l'envoi et le restitue dans le message produit.
+    piiKnown: input.learnerName ? [input.learnerName] : undefined,
   };
 }
 
-/** Produce a nudge — AI when configured, deterministic template otherwise. */
-export async function generateNudge(stage: Stage, input: MessageInput): Promise<NudgeResult> {
+/** Produce a nudge — AI when configured, deterministic template otherwise.
+ *  `allowRemote=false` (apprenant sans consentement « ai_assist ») : son Moment
+ *  d'Ancrage et son nom ne quittent pas le serveur — gabarit déterministe. */
+export async function generateNudge(stage: Stage, input: MessageInput, allowRemote = true): Promise<NudgeResult> {
   const template = buildMessage(stage, input);
 
-  if (!aiAvailable()) {
-    return { body: template.body, channel: template.channel, aiGenerated: false, provider: "template" };
+  if (!aiAvailable() || !allowRemote) {
+    return { body: template.body, channel: template.channel, aiGenerated: false, provider: allowRemote ? "template" : "template (sans consentement IA)" };
   }
 
   try {

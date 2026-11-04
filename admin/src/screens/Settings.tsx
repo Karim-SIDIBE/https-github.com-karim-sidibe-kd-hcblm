@@ -54,7 +54,17 @@ export function Settings() {
   const isSuperAdmin = auth.user()?.role === "SUPER_ADMIN";
   const [staff2fa, setStaff2fa] = useState<boolean | null>(null);
   const [policyBusy, setPolicyBusy] = useState(false);
-  useEffect(() => { api.settings().then((s) => setStaff2fa(s["require_staff_2fa"] === true)).catch(() => setStaff2fa(false)); }, []);
+  // Interrupteur global de l'assistance IA (débrayage à chaud, SUPER_ADMIN).
+  const [aiOn, setAiOn] = useState<boolean | null>(null);
+  const [aiSwitchBusy, setAiSwitchBusy] = useState(false);
+  useEffect(() => { api.settings().then((s) => { setStaff2fa(s["require_staff_2fa"] === true); setAiOn(s["ai_assist_enabled"] !== false); }).catch(() => { setStaff2fa(false); setAiOn(true); }); }, []);
+  async function toggleAi(on: boolean) {
+    if (!on && !(await modal.confirm({ title: "Désactiver l'assistance IA ?", body: "Toutes les fonctions IA (feedback formatif, tuteur, relances personnalisées, suggestion de notation, brouillons, recherche sémantique) basculeront immédiatement sur leurs replis déterministes hors-ligne. Aucune donnée ne sera plus envoyée au fournisseur de modèle. Réversible à tout moment.", okLabel: "Désactiver" }))) return;
+    setAiSwitchBusy(true);
+    try { await api.setSetting("ai_assist_enabled", on); setAiOn(on); }
+    catch (e) { await modal.alert({ title: "Modification impossible", body: e instanceof Error ? e.message : "Erreur" }); }
+    finally { setAiSwitchBusy(false); }
+  }
   async function togglePolicy(on: boolean) {
     if (on && !(await modal.confirm({ title: "Exiger la 2FA pour les administrateurs ?", body: "Les comptes SUPER_ADMIN et COURSE_ADMIN sans double authentification seront invités à l'activer dès leur prochaine connexion (bandeau + redirection vers Sécurité). Chaque connexion sans 2FA est journalisée.", okLabel: "Activer la politique" }))) return;
     setPolicyBusy(true);
@@ -175,6 +185,15 @@ export function Settings() {
                   🔐 Exiger la 2FA pour les administrateurs
                 </label>
                 <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0" }}>S'applique aux rôles SUPER_ADMIN et COURSE_ADMIN : sans 2FA active, la console les redirige vers l'activation à chaque connexion (et la connexion « en grâce » est journalisée dans l'audit).</p>
+              </div>
+              <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
+                <label className="row" style={{ gap: 8, fontSize: 13, fontWeight: 600, cursor: isSuperAdmin ? "pointer" : "default" }}
+                  title={isSuperAdmin ? "Interrupteur global des appels IA distants" : "Réservé au super-administrateur"}>
+                  <input type="checkbox" checked={aiOn === true} disabled={!isSuperAdmin || aiSwitchBusy || aiOn === null}
+                    onChange={(e) => void toggleAi(e.target.checked)} />
+                  🤖 Assistance IA activée (débrayage global)
+                </label>
+                <p className="muted" style={{ fontSize: 11.5, margin: "6px 0 0" }}>Coupée, toutes les fonctions IA basculent à chaud sur leurs replis déterministes hors-ligne — aucune donnée ne part au fournisseur de modèle. Indépendamment de cet interrupteur, chaque apprenant choisit dans « Mon compte » si ses textes peuvent être envoyés (consentement opt-in), et tout envoi est pseudonymisé (courriels, téléphones, liens, noms masqués avant l'appel).</p>
               </div>
               <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px solid var(--line)" }}>
                 <button className="btn btn--sm" disabled={purgeBusy} onClick={runPurge}>{purgeBusy ? "…" : "🧹 Lancer la purge RGPD"}</button>
