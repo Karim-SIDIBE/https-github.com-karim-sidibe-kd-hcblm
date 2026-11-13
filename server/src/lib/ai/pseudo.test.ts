@@ -54,3 +54,30 @@ test("maskOnce : masquage sans restitution (embeddings)", () => {
   assert.doesNotMatch(out, /test@exemple\.ci/);
   assert.match(out, /\[\[courriel-1\]\]/);
 });
+
+test("nom du titulaire : prénom ou nom isolé masqués, y compris en CAPITALES", () => {
+  const sas = createSas(["Aya Koné"]);
+  const masked = sas.mask("Moi, Aya, cheffe de projet. Signé : KONÉ Aya — dossier de Mme Koné.");
+  assert.doesNotMatch(masked, /Aya|Koné|KONÉ/);
+});
+
+test("mot entier : un nom n'est jamais masqué à l'intérieur d'un autre mot", () => {
+  const sas = createSas(["Aya Koné"]);
+  const text = "En ayant relu la playa et le konévi, rien ne change.";
+  assert.equal(sas.mask(text), text);
+  assert.equal(sas.count(), 0);
+});
+
+test("prénom-mot courant : seule la forme du compte est masquée, pas le mot ordinaire", () => {
+  const sas = createSas(["Parfait Kouadio"]);
+  const masked = sas.mask("Un résultat parfait selon Parfait.");
+  assert.match(masked, /^Un résultat parfait selon \[\[nom-1\]\]\.$/);
+});
+
+test("restitution au caractère près : la casse écrite par l'apprenant est rendue telle quelle", () => {
+  const sas = createSas(["Aya Koné"]);
+  const original = "Rapport de aya koné, relu par Aya Koné puis signé KONÉ.";
+  const masked = sas.mask(original);
+  assert.doesNotMatch(masked, /aya|koné/i);
+  assert.equal(sas.reinject(masked), original);
+});
