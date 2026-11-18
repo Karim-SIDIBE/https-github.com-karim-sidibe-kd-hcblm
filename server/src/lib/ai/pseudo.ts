@@ -12,10 +12,12 @@
  * reste naturel.
  *
  * Limite assumée (documentée au dossier PI / annexe C du contrat SaaS) : les
- * noms propres ou raisons sociales que l'apprenant écrit librement dans ses
- * textes ne sont pas détectés — une reconnaissance d'entités ajouterait des
- * faux positifs qui dégraderaient la pédagogie. Le nom du titulaire du compte,
- * lui, est toujours masqué (passé en identifiant connu par les appelants).
+ * noms propres de TIERS ou raisons sociales que l'apprenant écrit librement
+ * dans ses textes ne sont pas détectés — une reconnaissance d'entités
+ * ajouterait des faux positifs qui dégraderaient la pédagogie. Le nom du
+ * titulaire du compte, lui, est toujours masqué : chaque appel portant un
+ * texte d'apprenant le déclare en identifiant connu (`piiKnown`), et le sas en
+ * déduit aussi le prénom et le nom pris isolément.
  */
 
 export type Sas = {
@@ -53,10 +55,27 @@ export function createSas(knownValues: string[] = []): Sas {
     return token;
   };
 
-  // Identifiants connus (nom du titulaire…) : masqués où qu'ils apparaissent,
-  // insensible à la casse, ignorés en deçà de 3 caractères (bruit).
-  const known = [...new Set(knownValues.map((v) => v.trim()).filter((v) => v.length >= 3))]
-    .sort((a, b) => b.length - a.length); // le plus long d'abord (« Aya Koné » avant « Aya »)
+  // Identifiants connus (nom du titulaire…) : masqués en MOT ENTIER (« Aya »
+  // ne doit pas mordre « ayant »), insensible à la casse, ignorés en deçà de
+  // 3 caractères (bruit).
+  const known = [...new Set(knownValues.map((v) => v.trim()).filter((v) => v.length >= 3))];
+  const knownLower = new Set(known.map((v) => v.toLocaleLowerCase("fr")));
+  // Composants d'un nom complet (« Koné », « Aya ») : l'apprenant signe souvent
+  // d'un seul. Sensibles à la casse — forme du compte ou CAPITALES — car bien
+  // des prénoms sont aussi des mots courants (Parfait, Grâce, Prince…) qu'il
+  // ne faut pas retirer d'une phrase ordinaire.
+  const parts = new Set<string>();
+  for (const value of known) {
+    const words = value.split(/\s+/);
+    if (words.length < 2) continue;
+    for (const w of words) if (w.length >= 3) { parts.add(w); parts.add(w.toLocaleUpperCase("fr")); }
+  }
+  // Une seule passe, le plus long d'abord (« Aya Koné » avant « Aya ») : un
+  // jeton déjà posé n'est jamais re-parcouru.
+  const candidates = [...new Set([...known, ...parts])].sort((a, b) => b.length - a.length);
+  const KNOWN_RE = candidates.length
+    ? new RegExp(`(?<![\\p{L}\\p{N}])(?:${candidates.map((v) => v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\p{N}])`, "giu")
+    : null;
 
   const mask = (text: string): string => {
     // La ponctuation de fin de phrase collée à l'URL n'en fait pas partie.
@@ -66,9 +85,13 @@ export function createSas(knownValues: string[] = []): Sas {
     });
     out = out.replace(EMAIL_RE, (m) => tokenFor(m, "email"));
     out = out.replace(PHONE_RE, (m) => tokenFor(m, "phone"));
-    for (const value of known) {
-      const re = new RegExp(value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-      out = out.replace(re, (m) => tokenFor(m.toLowerCase() === value.toLowerCase() ? value : m, "known"));
+    // Le jeton garde la forme EXACTE écrite (« aya koné » ≠ « Aya Koné ») : la
+    // restitution rend le texte d'origine au caractère près — la proposition
+    // d'appréciation cite le livrable mot pour mot, et ses citations sont
+    // vérifiées contre lui.
+    if (KNOWN_RE) {
+      out = out.replace(KNOWN_RE, (m) =>
+        knownLower.has(m.toLocaleLowerCase("fr")) || parts.has(m) ? tokenFor(m, "known") : m);
     }
     return out;
   };

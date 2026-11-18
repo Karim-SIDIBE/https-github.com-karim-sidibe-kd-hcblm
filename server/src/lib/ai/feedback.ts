@@ -29,6 +29,9 @@ export type FormativeInput = {
   blockLabel?: string;
   /** The exact prompt/consigne the learner answered (PAM already injected). */
   promptContext?: string;
+  /** Nom du titulaire du compte : jamais écrit dans le prompt, seulement
+   *  déclaré au sas pour être masqué s'il figure dans la production. */
+  learnerName?: string | null;
 };
 
 export type FormativeResult = { feedback: string; aiGenerated: boolean; provider: string };
@@ -68,6 +71,7 @@ export function buildFormativeRequest(input: FormativeInput): ClaudeRequest {
     output_config: effortFor(env.AI_MODEL, "low"),
     system: [{ type: "text", text: FORMATIVE_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
+    piiKnown: input.learnerName ? [input.learnerName] : undefined,
   };
 }
 
@@ -139,6 +143,9 @@ export type RubricInput = {
   projectText: string;
   criteria: RubricCriterion[];
   threshold: number;
+  /** Nom du candidat : déclaré au sas (masqué dans le livrable transmis, puis
+   *  restitué à l'identique dans les citations) — jamais écrit dans le prompt. */
+  learnerName?: string | null;
 };
 
 export type SuggestedCriterionScore = {
@@ -266,6 +273,7 @@ export function buildRubricRequest(input: RubricInput): ClaudeRequest {
     output_config: rubricOutputConfig(gradingModel()),
     system: [{ type: "text", text: RUBRIC_SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
+    piiKnown: input.learnerName ? [input.learnerName] : undefined,
   };
 }
 

@@ -15,7 +15,7 @@ export class TutorError extends Error {
 }
 
 async function loadEnrollment(enrollmentId: string) {
-  const e = await prisma.enrollment.findUnique({ where: { id: enrollmentId } });
+  const e = await prisma.enrollment.findUnique({ where: { id: enrollmentId }, include: { user: { select: { name: true } } } });
   if (!e) throw new TutorError(404, "not_found", "Inscription introuvable");
   return e;
 }
@@ -41,7 +41,7 @@ export async function ask(enrollmentId: string, question: string, sessionId?: st
   // consentement, la question et le Moment d'Ancrage ne quittent pas le
   // serveur — réponse extractive déterministe.
   const allowRemote = await aiAssistConsented(enrollment.userId);
-  const result = await answer(question, chunks, history, enrollment.momentAncrage, allowRemote);
+  const result = await answer(question, chunks, history, enrollment.momentAncrage, allowRemote, enrollment.user.name);
 
   // Persist the exchange.
   await prisma.tutorMessage.create({ data: { sessionId: session.id, role: "USER", content: question } });

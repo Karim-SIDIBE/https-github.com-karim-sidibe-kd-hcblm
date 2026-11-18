@@ -181,6 +181,46 @@ function Banner({ sync }: { sync: SyncState }) {
   return null;
 }
 
+/** Re-sollicitation du consentement (RGPD art. 7) : quand la version d'un
+ *  document légal REQUIS (CGU, politique de confidentialité) est incrémentée
+ *  côté serveur, les comptes existants repassent à « non accepté » — cette
+ *  carte les invite à relire puis confirmer. Hors-ligne ou API indisponible :
+ *  silence, le parcours n'est jamais bloqué. */
+function ConsentRefresh() {
+  const t = useT();
+  const [missing, setMissing] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api.consents()
+      .then((states) => { if (alive) setMissing(states.filter((c) => c.required && !c.granted).map((c) => c.type)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+  if (missing.length === 0) return null;
+  const accept = async () => {
+    setBusy(true); setError(false);
+    try {
+      for (const type of missing) await api.setConsent(type, true);
+      setMissing([]);
+    } catch { setError(true); } finally { setBusy(false); }
+  };
+  return (
+    <div className="hf-card stack" style={{ borderLeft: "4px solid var(--warning, #E8A93B)", gap: 8, marginBottom: 12 }}>
+      <strong>{t("consent.updateTitle")}</strong>
+      <p className="meta" style={{ margin: 0 }}>{t("consent.updateBody")}</p>
+      <p style={{ margin: 0, fontSize: 13.5 }}>
+        <a href="/legal/cgu.html" target="_blank" rel="noreferrer">{t("consent.readTerms")}</a>
+        {" · "}
+        <a href="/legal/confidentialite.html" target="_blank" rel="noreferrer">{t("consent.readPrivacy")}</a>
+      </p>
+      {error && <p className="ko" style={{ margin: 0 }}>{t("consent.error")}</p>}
+      <button className="hf-btn hf-btn--primary" disabled={busy} onClick={() => void accept()} style={{ alignSelf: "flex-start" }}>{busy ? "…" : t("consent.accept")}</button>
+    </div>
+  );
+}
+
 export function App() {
   const t = useT();
   const [authed, setAuthed] = useState(isLoggedIn());
@@ -229,7 +269,7 @@ export function App() {
       <div className="shell">
         <div className="main">
           <div className="appbar appbar--standalone"><Brand /><div className="tools"><LanguageSwitcher /><button className="hf-btn hf-btn--ghost hf-btn--sm" onClick={() => navigate(routes.account())}>{t("nav.account")}</button><button className="hf-btn hf-btn--ghost" onClick={onLogout}>{t("nav.logout")}</button></div></div>
-          <main className="screen"><Banner sync={sync} /><BadgeCelebration />{!isNative() && <InstallPrompt />}<Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
+          <main className="screen"><Banner sync={sync} /><ConsentRefresh /><BadgeCelebration />{!isNative() && <InstallPrompt />}<Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense></main>
         </div>
       </div>
     );
@@ -273,6 +313,7 @@ export function App() {
 
         <main className="screen">
           <Banner sync={sync} />
+          <ConsentRefresh />
           <BadgeCelebration />
           {!isNative() && <InstallPrompt />}
           <Suspense fallback={<div className="skeleton card" />}><Screen route={route} /></Suspense>

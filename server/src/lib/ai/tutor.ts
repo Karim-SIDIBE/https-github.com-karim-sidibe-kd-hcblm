@@ -41,7 +41,7 @@ function contextBlock(chunks: RetrievedChunk[]): string {
   return chunks.map((c, i) => `[#${i + 1} · Bloc ${c.blockIndex ?? "—"} · ${c.path}]\n${c.text}`).join("\n\n");
 }
 
-export function buildTutorRequest(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null): ClaudeRequest {
+export function buildTutorRequest(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null, learnerName?: string | null): ClaudeRequest {
   const hist = history.slice(-6).map((t) => `${t.role === "USER" ? "Apprenant" : "Tuteur"}: ${t.content}`).join("\n");
   const user = [
     momentAncrage ? `Moment d'Ancrage de l'apprenant : « ${momentAncrage} ».` : "",
@@ -55,6 +55,9 @@ export function buildTutorRequest(question: string, chunks: RetrievedChunk[], hi
     max_tokens: 8000,
     system: [{ type: "text", text: SYSTEM, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: user }],
+    // La question, l'historique et le Moment d'Ancrage sont des textes libres :
+    // l'apprenant peut y avoir écrit son propre nom.
+    piiKnown: learnerName ? [learnerName] : undefined,
   };
 }
 
@@ -71,7 +74,7 @@ const OUT_OF_SCOPE = "Je n'ai pas trouvé d'élément dans ce parcours pour rép
 
 /** `allowRemote=false` (apprenant sans consentement « ai_assist ») : ses textes
  *  ne quittent pas le serveur — réponse extractive déterministe. */
-export async function answer(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null, allowRemote = true): Promise<TutorAnswer> {
+export async function answer(question: string, chunks: RetrievedChunk[], history: Turn[], momentAncrage: string | null, allowRemote = true, learnerName?: string | null): Promise<TutorAnswer> {
   if (!isGrounded(question, chunks)) {
     return { text: OUT_OF_SCOPE, grounded: false, aiGenerated: false, provider: "guardrail", citations: [] };
   }
@@ -80,7 +83,7 @@ export async function answer(question: string, chunks: RetrievedChunk[], history
     return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: allowRemote ? "extractive" : "extractive (sans consentement IA)", citations };
   }
   try {
-    const text = stripMarkdown(await callClaudeText(buildTutorRequest(question, chunks, history, momentAncrage)));
+    const text = stripMarkdown(await callClaudeText(buildTutorRequest(question, chunks, history, momentAncrage, learnerName)));
     return { text, grounded: true, aiGenerated: true, provider: env.AI_MODEL, citations };
   } catch {
     return { text: extractiveAnswer(chunks), grounded: true, aiGenerated: false, provider: "extractive (ai-fallback)", citations };

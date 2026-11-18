@@ -76,3 +76,40 @@ test("formative request keeps a wide token margin and a plain-text brief", () =>
   assert.ok(/250 mots/.test(sys));
   assert.ok(/Markdown/.test(sys));
 });
+
+test("retour formatif : le nom de l'apprenant est déclaré au sas, jamais écrit dans le prompt", () => {
+  const req = buildFormativeRequest({
+    submissionText: "Je m'appelle Aya Koné et je planifie mes semaines. Signé : Aya.",
+    itemLabel: "Application terrain",
+    competencies: [{ code: "D1.C1", label: "Prioriser" }],
+    learnerName: "Aya Koné",
+  });
+  assert.deepEqual(req.piiKnown, ["Aya Koné"]);
+  const { outbound, reinject } = applySas(req);
+  const sent = JSON.stringify(outbound);
+  assert.doesNotMatch(sent, /Aya|Koné/);
+  assert.equal(reinject("Bravo [[nom-1]] !"), "Bravo Aya Koné !");
+});
+
+test("tuteur : le nom écrit dans la question ou le Moment d'Ancrage ne part pas", async () => {
+  const { buildTutorRequest } = await import("./tutor.js");
+  const chunks = [{ score: 0.8, blockIndex: 1, path: "b1", text: "Bloquez des plages de concentration." }];
+  const req = buildTutorRequest("Je suis Aya Koné : comment gérer mes interruptions ?", chunks, [{ role: "USER", content: "Ici Aya." }], "Aya Koné, débordée le lundi.", "Aya Koné");
+  const sent = JSON.stringify(applySas(req).outbound);
+  assert.doesNotMatch(sent, /Aya|Koné/);
+  // Sans nom fourni, rien n'est déclaré (comportement inchangé).
+  assert.equal(buildTutorRequest("Question ?", chunks, [], null).piiKnown, undefined);
+});
+
+test("proposition d'appréciation : nom du candidat masqué dans le livrable, citations restituées à l'identique", async () => {
+  const { buildRubricRequest } = await import("./feedback.js");
+  const projectText = "Projet présenté par KONÉ Aya. Moi, aya koné, j'ai réduit mes réunions de moitié en trois semaines.";
+  const req = buildRubricRequest({ projectText, criteria: [{ label: "Résultats", weightPoints: 100 }], threshold: 70, learnerName: "Aya Koné" });
+  const { outbound, reinject } = applySas(req);
+  const sent = outbound.messages[0]!.content as string;
+  assert.doesNotMatch(sent, /aya|koné/i);
+  // Le modèle recopie un extrait masqué ; la restitution doit redonner le texte exact du livrable.
+  const start = sent.indexOf("Moi, ");
+  const quoted = sent.slice(start, sent.indexOf(" en trois semaines"));
+  assert.ok(projectText.includes(reinject(quoted)));
+});

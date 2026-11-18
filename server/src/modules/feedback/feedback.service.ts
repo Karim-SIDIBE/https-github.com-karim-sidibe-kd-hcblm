@@ -27,7 +27,7 @@ export class FeedbackError extends Error {
 async function load(enrollmentId: string) {
   const enrollment = await prisma.enrollment.findUnique({
     where: { id: enrollmentId },
-    include: { courseVersion: true, completions: true },
+    include: { courseVersion: true, completions: true, user: { select: { name: true } } },
   });
   if (!enrollment) throw new FeedbackError(404, "not_found", "Inscription introuvable");
   const content: CourseContentT = CourseContent.parse(enrollment.courseVersion.content);
@@ -94,6 +94,7 @@ export async function requestFormativeFeedback(enrollmentId: string, blockIndex:
     courseTitle: content.title,
     blockLabel: block ? `Bloc ${blockIndex} — ${block.title}` : undefined,
     promptContext: injectMomentAncrage(promptContext, enrollment.momentAncrage) || undefined,
+    learnerName: enrollment.user.name,
   }, allowRemote);
 
   return prisma.aiAssessment.create({
@@ -276,8 +277,10 @@ async function getOrCreateRubricAssessment(ctx: Awaited<ReturnType<typeof loadPr
   });
   if (Array.isArray(existing?.criteria) && existing.criteria.length === rubric.criteria.length) return existing;
 
-  // §8.3 : grille complète + livrable intégral — rien d'autre.
-  const suggestion = await suggestRubricScores({ projectText: text, criteria: rubric.criteria, threshold: rubric.threshold });
+  // §8.3 : grille complète + livrable intégral — rien d'autre. Le nom du
+  // candidat n'entre PAS dans le prompt : il est seulement déclaré au sas, qui
+  // le masque dans le livrable transmis et le restitue dans les citations.
+  const suggestion = await suggestRubricScores({ projectText: text, criteria: rubric.criteria, threshold: rubric.threshold, learnerName: enrollment.user.name });
 
   // §8.4 : la vérification de la preuve appartient à la plateforme.
   const verdict = verifyEvidence(rubric.criteria, suggestion.perCriterion, text);
